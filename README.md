@@ -30,14 +30,14 @@ Recommendations:
 
 If you want to build an infrastructure, please first install NAS launching:
 <UL>
-  <code>wget https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid1-nas-install.sh</code><BR>
+  <code>wget https://raw.githubusercontent.com/llevier/vigrid/v1.0/install/vigrid1-nas-install.sh</code><BR>
   <code>sudo sh vigrid1-nas-install.sh</code>, then provide the user password.<BR>
   Nota: all script input/output is logged to a file into /tmp.
 </UL>
 
 Else or to install Vigrid server(s) (standalone, scalable or cloning farm), launch:  
 <UL>
-  <code>wget https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid2-gns-install.sh</code><BR>
+  <code>wget https://raw.githubusercontent.com/llevier/vigrid/v1.0/install/vigrid2-gns-install.sh</code><BR>
   <code>sudo sh vigrid2-gns-install.sh</code>, then provide the user password.<BR>
   Nota: all script input/output is logged to a file into /tmp.
 </UL>

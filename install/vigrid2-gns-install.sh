@@ -956,7 +956,7 @@ if [ -d /home/gns3/vigrid ]
 then
   cd /home/gns3/vigrid && git config pull.rebase false && git pull || echo Vigrid update failed
 else
-  cd /home/gns3 && git clone https://github.com/llevier/vigrid.git || echo Vigrid update failed
+  cd /home/gns3 && git clone https://github.com/llevier/vigrid.git --branch v1.0 || echo Vigrid update failed
 fi
 
 echo "Resetting /home/gns3/vigrid permissions (need root privilege)..."

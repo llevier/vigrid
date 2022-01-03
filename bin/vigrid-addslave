@@ -1,0 +1,269 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+echo "Vigrid slave adder"
+echo
+
+CHK=`which ipcalc`
+[ "x$CHK" = "x" ] && echo "ipcalc is missing, installing it..." && sudo apt install -y ipcalc
+
+if [ $VIGRID_TYPE -ne 3 ]
+then
+  echo "I am sorry but this is not a Master Vigrid server. It cant control slaves. Exiting"
+  exit 1
+fi
+
+if [ "x$VIGRID_GNS_SLAVE_HOSTS" != "x" ]
+then
+  echo "Current Vigrid slaves for this host:"
+  for i in $VIGRID_GNS_SLAVE_HOSTS
+  do
+    SLAVE_HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $1;}'`
+    
+    SLAVE_IP=`echo $i | awk 'BEGIN { FS=":"; } { print $2;}'`
+    SLAVE_PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3;}'`
+    
+    echo "  $SLAVE_HOST		$SLAVE_IP:$SLAVE_PORT"
+  done
+  echo
+fi
+
+until false
+do
+  echo -n "Please provide IP address of the new slave: "
+  read SLAVE_IP
+  CHK=`ipcalc $SLAVE_IP|grep "INVALID ADDRESS"`
+  if [ "x$CHK" = "x" ]
+  then
+    CHK=`echo $VIGRID_GNS_SLAVE_HOSTS|grep "$SLAVE_IP:"`
+    [ "x$CHK" = "x" ]  && break
+    echo "I am sorry but that IP address is already present in Vigrid slaves list:"
+    echo $VIGRID_GNS_SLAVE_HOSTS
+    echo
+  fi
+  echo "  Not an IP address, try again"
+done
+
+until false
+do
+  echo -n "Please provide the GNS3 port of this slave: "
+  read SLAVE_PORT
+  if [ "x$SLAVE_PORT" != "x" ]
+  then
+    [ $SLAVE_PORT -gt 0 -a $SLAVE_PORT -lt 65536 ] && break
+  fi
+  echo "  Not a valid port number, try again"
+done
+
+until false
+do
+  echo -n "Please provide the hostname of this slave: "
+  read SLAVE_HOST
+  if [ "x$SLAVE_HOST" != "x" ]
+  then
+    CHK=`echo $VIGRID_GNS_SLAVE_HOSTS|grep "$SLAVE_HOST:"`
+    [ "x$CHK" = "x" ]  && break
+    echo "I am sorry but that hostname is already present in Vigrid slaves list:"
+    echo $VIGRID_GNS_SLAVE_HOSTS
+    echo
+  fi
+done
+
+until false
+do
+  echo -n "You requested to add the following slave to Vigrid infrastructure:
+  
+Host:           $SLAVE_HOST
+IP address:port $SLAVE_IP:$SLAVE_PORT
+
+Do you confirm this [y/N] ? "
+  read ANS
+  [ "x$ANS" = "x" -o "x$ANS" = "xn" -o "x$ANS" = "xN" ] && exit
+  [ "x$ANS" = "xy" -o "x$ANS" = "xY" ] && break
+done
+
+echo "Updating vigrid.conf..."
+
+T=`date +'+%Y-%m-%d_%H:%M:%S'`
+echo "  Sanity saving it to vigrid.conf.$T"
+cp $VIGRID_CONF $VIGRID_CONF.$T
+
+echo "  Updating file..."
+cat $VIGRID_CONF | grep -v "^VIGRID_GNS_SLAVE_HOSTS" >/tmp/temp$T
+
+VIGRID_GNS_SLAVE_HOSTS="$VIGRID_GNS_SLAVE_HOSTS $SLAVE_HOST:$SLAVE_IP:$SLAVE_PORT"
+echo "VIGRID_GNS_SLAVE_HOSTS=\"$VIGRID_GNS_SLAVE_HOSTS\"" >>/tmp/temp$T
+
+mv /tmp/temp$T $VIGRID_CONF
+[ $? -ne 0 ] && echo "Replacement of $VIGRID_CONF failed, no Slave added"
+
+# /etc/hosts to update
+# /etc/nginx/conf.d/CyberRange-443.conf: taking server {}, changing /v2 -> / + adding auth_basic
+
+echo "  Adding host to /etc/hosts..."
+CHK_IP=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_IP"`
+CHK_HOST=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_HOST"`
+if [ "x$CHK_IP" = "x" -a "x$CHK_HOST" = "x" ]
+then
+  echo "$SLAVE_IP $SLAVE_HOST" >>/etc/hosts
+else
+  echo "    Host or IP already defined, skipping:"
+  [ "x$CHK_IP" != "x" ] && echo "      $CHK_IP"
+  [ "x$CHK_HOST" != "x" ] && echo "      $CHK_HOST"
+fi
+
+echo "  Checking & updating /etc/nginx/conf.d/CyberRange-443.conf..."
+NGINX_CONFIG=`cat /etc/nginx/conf.d/CyberRange-443.conf`
+
+NGINX_SLAVE="
+server {
+  listen 127.0.0.1:443 ssl;
+  server_name %%SLAVE_HOST%%;
+
+  # Take fullchain here, not cert.pem
+  ssl_certificate      /etc/nginx/ssl/localhost.crt;
+  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
+
+  ssl_session_cache    builtin:1000 shared:SSL:1m;
+  ssl_session_timeout  5m;
+
+  ssl_protocols   TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers  on;
+
+  # hide version
+  server_tokens        off;
+
+  access_log /var/log/nginx/access.log;
+  error_log /var/log/nginx/error.log;
+
+  root   /home/gns3/vigrid/www/site;
+  index  index.html index.htm index.php;
+
+  # Vigrid auth + redirect to slave
+  location /
+  {
+    # Basic authentication
+    auth_basic \"Vigrid's access, who are you ?\";
+    auth_basic_user_file /home/gns3/etc/vigrid-passwd;
+
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
+
+    proxy_set_header Host \$host;
+    proxy_set_header Authorization \$auth_header;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \"Upgrade\";
+
+    proxy_pass http://%%SLAVE_IP%%:%%SLAVE_PORT%%;
+  }
+
+  location = /auth
+  {
+    internal;
+    
+    proxy_pass             http://localhost:8001;
+    proxy_pass_request_body off;
+    
+    proxy_set_header        Content-Length \"\";
+    proxy_set_header        X-Original-URI \$request_uri;
+    proxy_set_header        X-Original-Host \$host;
+    proxy_set_header        X-Real-IP \$remote_addr;
+    proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header        X-Forwarded-Host \$server_name;  
+  }
+}"
+
+for i in $VIGRID_GNS_SLAVE_HOSTS
+do
+  SLAVE_HOST=`echo $i|awk 'BEGIN {FS=":";} { print $1;}'`
+  SLAVE_IP=`echo $i|awk 'BEGIN {FS=":";} { print $2;}'`
+  SLAVE_PORT=`echo $i|awk 'BEGIN {FS=":";} { print $3;}'`
+  
+  CHK_SERVERNAME=`echo "$NGINX_CONFIG"|egrep -i "server_name\s+.*$SLAVE_HOST.*;"`
+  CHK_PROXYPASS=`echo "$NGINX_CONFIG"|egrep "proxy_pass\s+http:\/\/$SLAVE_IP:$SLAVE_PORT.*;"`
+
+  if [ "x$CHK_SERVERNAME" = "x" -o "x$CHK_PROXYPASS" = "x" ]
+  then
+    SLAVE_FROM_HOSTS=`cat /etc/hosts|egrep "^$SLAVE_IP\s*"|head -1`
+    
+    echo "    Vigrid slave '$i' not present in NGinx configuration, adding it..."
+    if [ "x$SLAVE_FROM_HOSTS" != "x" ]
+    then
+      SLAVE_HOST=`echo $SLAVE_FROM_HOSTS | sed "s/^$SLAVE_IP\s*//"`
+      echo "      Using '$SLAVE_HOST' as server names"
+    fi
+    echo "$NGINX_SLAVE" | sed "s/%%SLAVE_HOST%%/$SLAVE_HOST/" | sed "s/%%SLAVE_IP%%/$SLAVE_IP/" | sed "s/%%SLAVE_PORT%%/$SLAVE_PORT/" >>/etc/nginx/conf.d/CyberRange-443.conf
+  fi
+  
+  echo "Dont forget to have all Vigrid slaves hosts declared into your host file with Vigrid Master IP address."
+done
+
+echo "Adding slave SSH access"
+/home/gns3/vigrid/bin/vigrid-sshcheck -a -s /home/gns3/etc/id_GNS3 -u gns3 -h $SLAVE_IP
+
+echo "Vigrid NAS actions:"
+VIGRID_NAS_HOST=`echo $VIGRID_NAS_SERVER| awk 'BEGIN { FS=":"; } { print $1;}'`
+VIGRID_NAS_IP=`echo $VIGRID_NAS_SERVER| awk 'BEGIN { FS=":"; } { print $2;}'`
+
+echo "  Adding $SLAVE_HOST ($SLAVE_IP) host to /etc/hosts..."
+echo "$SLAVE_IP $SLAVE_HOST $SLAVE_HOST.GNS3" | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'cat >>/etc/hosts'
+
+echo "Creating datasets for slave..."
+if [ "x$VIGRID_STORAGE_MODE" = "xZFS" ]
+then
+  ZFS_ROOT=`echo $VIGRID_STORAGE_ROOT|sed 's/^\///'`
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "zfs create -p $ZFS_ROOT/NFS/$SLAVE_HOST/GNS3mount/GNS3/projects"
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "zfs create -p $ZFS_ROOT/NFS/$SLAVE_HOST/var-lib-docker"
+
+fi
+
+if [ "x$VIGRID_STORAGE_MODE" = "xBTRfs" ]
+then
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "btrfs sub create /$VIGRID_STORAGE_ROOT/NFS/$SLAVE_HOST/GNS3mount"
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "btrfs sub create /$VIGRID_STORAGE_ROOT/NFS/$SLAVE_HOST/GNS3mount/GNS3"
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "btrfs sub create /$VIGRID_STORAGE_ROOT/NFS/$SLAVE_HOST/GNS3mount/GNS3/projects"
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "btrfs sub create /$VIGRID_STORAGE_ROOT/NFS/$SLAVE_HOST/var-lib-docker"
+fi
+
+echo "  Adding Vigrid shares to /etc/exports..."
+echo "
+/Vstorage/NFS/$SLAVE_HOST/GNS3mount                $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
+/Vstorage/NFS/$SLAVE_HOST/GNS3mount/GNS3           $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
+/Vstorage/NFS/$SLAVE_HOST/GNS3mount/GNS3/projects  $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
+/Vstorage/NFS/$SLAVE_HOST/var-lib-docker           $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
+" | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'cat >>/etc/exports'
+
+echo "  Now reloading NFS exports.. Sometimes this operation might fail because of discrepencies between datasets & exports".
+echo "  Press [RETURN] when you are ready to launch the action"
+read ANS
+ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'exportfs -a'
+
+echo -n "New "
+showmount -e $VIGRID_NAS_IP

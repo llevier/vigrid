@@ -1,0 +1,122 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             vigrid
+# Required-Start:       $remote_fs $network $syslog
+# Required-Stop:        $remote_fs $network $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    Start vigrid (GNS3) at boot time
+# Description:          Vigrid is a CyberRange/Training extension to GNS3
+### END INIT INFO
+
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/home/gns3/vigrid/bin
+SCRIPT_NAME=vigrid
+NAME=Vigrid
+DESC="Vigrid@GNS3"
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+[ "x$PIDFile" = "x" ] && PIDFile="/run/gns3/gns3.pid"
+
+set -e
+
+case "$1" in
+  start)
+    echo "Vigrid service starting..."
+    # GNS3 prestart sanity actions
+    if [ ! -d "/run/gns3" ]
+    then
+      mkdir -p /run/gns3 >/dev/null 2>/dev/null
+      chown gns3:gns3 /run/gns3 >/dev/null 2>/dev/null
+    fi
+    
+    # Loading Vigrid configuration
+    if [ ! -f $VIGRID_CONF ]
+    then
+      echo "Can't find $VIGRID_CONF, exiting"
+      exit 1
+    fi
+    . $VIGRID_CONF
+
+    mkdir -p /var/log/gns3 /run/gns3 >/dev/null 2>/dev/null
+    if [ $VIGRID_TYPE -eq 1 ]
+    then
+      mkdir -p /home/gns3/GNS3/tmp >/dev/null 2>/dev/null
+    fi
+
+    echo "  Changing ownerships..."
+    chown -R gns3:gns3 /var/log/gns3 /run/gns3 /home/gns3/GNS3/* >/dev/null 2>/dev/null
+    chown gns3:gns3 /home/gns3/GNS3 >/dev/null 2>/dev/null
+    find /home/gns3 -depth -mount -exec chown gns3:gns3 {} \; 2>/dev/null
+    chown root:root /home/gns3/vigrid/etc/sudoers >/dev/null 2>/dev/null
+    chmod o+r /var/log/syslog >/dev/null 2>/dev/null
+    
+    # Vigrid Type: 1=Standalone, 2=Standalone+NAS, 3=GNS3farmMaster+NAS, 4=GNS3farmSlave+NAS, 5=GNS3scalableSlave
+    # To mount what's needed
+    if [ "x$VIGRID_TYPE" != "x" ]; then
+      echo -n "Vigrid design: "
+      
+      case "$VIGRID_TYPE" in
+        1)
+          echo "Standalone GNS3 server without NAS"
+          # NAS vs mount points
+          ;;
+        2)
+          echo "Standalone GNS3 server with NAS"
+          [ "x$VIGRID_NAS_SERVER" = "x" ] && echo "Cant find NAS IP address/name in $VIGRID_CONF, exiting" && exit 1
+          ;;
+        3)
+          echo "GNS3 Farm Master server with NAS"
+          [ "x$VIGRID_NAS_SERVER" = "x" ] && echo "Cant find NAS IP address/name in $VIGRID_CONF, exiting" && exit 1
+          until false
+          do
+            NFS_CLIENT_TARGET=`systemctl list-unit-files|grep "nfs-client.target"`
+            NFS_CLIENT_STATE=`echo $NFS_CLIENT_TARGET| awk '{print $2;}'`
+            NFS_CLIENT_PRESET=`echo $NFS_CLIENT_TARGET| awk '{print $3;}'`
+            [ "x$NFS_CLIENT_STATE" = "xenabled" ] && break
+            echo "Waiting for NFS client target to be enabled..."
+            sleep 1
+          done
+          ;;
+        4)
+          echo "GNS3 Farm Slave server with NAS"
+          [ "x$VIGRID_NAS_SERVER" = "x" ] && echo "Cant find NAS IP address/name in $VIGRID_CONF, exiting" && exit 1
+          until false
+          do
+            NFS_CLIENT_TARGET=`systemctl list-unit-files|grep "nfs-client.target"`
+            NFS_CLIENT_STATE=`echo $NFS_CLIENT_TARGET| awk '{print $2;}'`
+            NFS_CLIENT_PRESET=`echo $NFS_CLIENT_TARGET| awk '{print $3;}'`
+            [ "x$NFS_CLIENT_STATE" = "xenabled" ] && break
+            echo "Waiting for NFS client target to be enabled..."
+            sleep 1
+          done
+          ;;
+        5)
+          echo "GNS3 Farm Scalable server with NAS"
+          [ "x$VIGRID_NAS_SERVER" = "x" ] && echo "Cant find NAS IP address/name in $VIGRID_CONF, exiting" && exit 1
+          until false
+          do
+            NFS_CLIENT_TARGET=`systemctl list-unit-files|grep "nfs-client.target"`
+            NFS_CLIENT_STATE=`echo $NFS_CLIENT_TARGET| awk '{print $2;}'`
+            NFS_CLIENT_PRESET=`echo $NFS_CLIENT_TARGET| awk '{print $3;}'`
+            [ "x$NFS_CLIENT_STATE" = "xenabled" ] && break
+            echo "Waiting for NFS client target to be enabled..."
+            sleep 1
+          done
+          ;;
+        *)
+          echo "Cant find the type in Vigrid configuration file, exiting"
+          exit 1
+       esac
+    fi
+    ;;
+
+  *)
+    N=/etc/init.d/$SCRIPT_NAME
+    echo "Usage: $N start" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

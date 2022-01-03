@@ -1,0 +1,90 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             bwmNG-net-rate
+# Required-Start:       $remote_fs $network $syslog
+# Required-Stop:        $remote_fs $network $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    Vigrid system monitoring (net rate)
+# Description:          Vigrid is a CyberRange/Training extension to GNS3
+### END INIT INFO
+
+set -e
+
+test -x /usr/bin/bwm-ng || exit 1
+( /usr/bin/bwm-ng -h 2>&1 | grep -q "Bandwidth Monitor NG" ) 2>/dev/null || exit 1
+
+umask 022
+
+. /lib/lsb/init-functions
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+
+PIDfile="/run/bwm-ng/bwmNG-net-rate.pid"
+PIDdir=`dirname $PIDfile`
+CSVfile="/var/log/bwmNG-net-rate.log"
+
+trap '' HUP
+
+ACTION=$1
+# Get options after start...
+if [ -n "$2" ]
+then
+  shift
+  OPTIONS=$*
+  log_daemon_msg "$DESC service options detected: $OPTIONS" "bwmNG-net-rate" || true
+fi
+
+VIGRID_BWM=""
+# Vigrid server
+[ -x '/home/gns3/vigrid/bin/vigrid-bwmng' ] && VIGRID_BWM="/home/gns3/vigrid/bin/vigrid-bwmng"
+# Vigrid NAS
+[ -x '/Vstorage/GNS3/vigrid/bin/vigrid-bwmng' ] && VIGRID_BWM="/Vstorage/GNS3/vigrid/bin/vigrid-bwmng"
+
+case "$ACTION" in
+  start)
+    log_daemon_msg "Starting $DESC service" "bwmNG-net-rate" || true
+
+    # Sanity
+    [ ! -d "$PIDdir" ] && mkdir -p $PIDdir >/dev/null 2>/dev/null # && chown gns3:gns3 $PIDdir
+    [ ! -f "$CSVfile" ] && touch $CSVfile >/dev/null 2>/dev/null  # && chown gns3:gns3 $CSVfile
+
+    # Starting service
+    start-stop-daemon --start --background --make-pidfile --pidfile $PIDfile --exec $VIGRID_BWM -- -a start -i net -T rate $OPTIONS
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+        log_end_msg 0 || true
+    else
+        log_end_msg 1 || true
+    fi
+    exit $RC
+    ;;
+    
+  stop)
+    log_daemon_msg "Stopping $DESC service" "bwmNG-net-rate" || true
+    $VIGRID_BWM -a stop -i net -T rate $OPTIONS
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+        log_end_msg 0 || true
+    else
+        log_end_msg 1 || true
+    fi
+    exit $RC
+    ;;
+
+  restart)
+    log_daemon_msg "Restarting $DESC service" "bwmNG-net-rate" || true
+    $0 stop $OPTIONS
+    $0 start $OPTIONS
+    break;
+    ;;
+
+  *)
+    log_action_msg "Usage: /etc/init.d/bwmNG-net-rate {start|stop|restart}" || true
+    exit 1
+esac
+
+exit 0

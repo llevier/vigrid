@@ -1,0 +1,66 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+$hostname=gethostname(); ?>
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<HTML>
+ <HEAD>
+   <TITLE>Welcome to <?php print $hostname; ?></TITLE>
+ </HEAD>
+ <BODY>
+<?php
+	error_reporting(E_ERROR | E_PARSE);
+
+	if ($_SERVER['HTTP_X_FORWARDED_FOR']!= "")
+	{
+	  $source_ip=$_SERVER['HTTP_X_FORWARDED_FOR'];
+		$gns_host="";
+	}
+	else
+	{
+		$source_ip=$_SERVER['REMOTE_ADDR'];
+	}
+
+	$gns_host=$hostname;
+
+?>
+	 <TABLE><TR><TD><IMG SRC="/images/Vigrid.png" height=124 width=200></TD>
+	 <TD><FONT SIZE=+4><FONT COLOR="#f75c05">Welcome to Vigrid extension for GNS3 on <?php print $hostname; ?></FONT></FONT></TD></TR></TABLE>
+	 <H3><?php print $hostname; ?> is a platform to create virtual networks with clientless console access and industralization fonctions for cloning and accesses. It can be used for classical or troubleshoot <FONT COLOR="blue">trainings</font>, audits, <FONT COLOR="blue">cyber range</font>, troublehoots...<BR><BR>
+	 	 Vigrid relies on GNS3 as virtualisation software. GNS3 can simulate/virtualize any operating systems relying on x86/amd/ARM or MIPS architectures such as x86 unixes in general (Linux, *nux/nix, *BSD) and devices using them (pfSense, FreeNAS...), but also Windows, Mac OSX, Android (x86 and ARM) or even hardware devices such as routers, switches, firewalls...<BR>
+		 Created networks can be split on multiple servers, a single network cloned on many servers, or the mix of the two.<BR>
+		 Finally, created networks can be exported to other servers, and the solution provides a "local" server running on Windows workstations<H3>
+
+<?php
+  // Get GNS3 version
+  exec("gns3server -v", $output, $rc);
+  $gns_version=$output[0];
+?>
+	 <H3>To play with <?php print $hostname; ?>, you must first download the windows (<A HREF="https://github.com/GNS3/gns3-gui/releases/download/v<?php print $gns_version; ?>/GNS3-<?php print $gns_version; ?>-all-in-one.exe">GNS3-<?php print $gns_version; ?>-all-in-one.exe</A>) or MacOS (<A HREF="https://github.com/GNS3/gns3-gui/releases/download/v<?php print $gns_version; ?>/GNS3-<?php print $gns_version; ?>.dmg">GNS3-<?php print $gns_version; ?>.dmg</A>) client matching the server version: <?php print $gns_version; ?>.<BR>
+	 Once it is on your <FONT COLOR="#f75c05">favorite client desktop</FONT>, please install it to be only a client, not a local server, without any extensions/tools except if you need to wireshark or such. 
+   It means you must <FONT COLOR="#f75c05">select only</FONT> the following packages: <FONT COLOR="#f75c05">GNS3 Desktop</FONT> (removing Tools).<BR>
+   Instead of using TightVNC not able to use RFB+ protocol, please download & install <A HREF="https://sourceforge.net/projects/tigervnc/files/stable/1.11.0/tigervnc64-1.11.0.exe/download">TigerVNC Viewer x64</A>. This way, no non-US keyboard layout issues :-)<BR>
+   You can also use <A HREF="https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html">PuTTY</A> for telnet or SSH accesses.<BR>
+   
+   To access Vigrid, you can use either this WWW site, or set GNS3 remote server to:<BR>
+    <FONT COLOR="#f75c05">HOST:</FONT> <?php print $hostname; ?>, HTTPS on port 443. Credentials (default): <FONT COLOR="#f75c05">USER:</FONT> vigrid, <FONT COLOR="#f75c05">PASS:</FONT> vigrid
+
+   <BR><BR>If you intend to only start/stop virtual devices and access their console via browser (telnet or vnc), please avoid using Microsoft browsers (IE & Edge), these are not handling keymapping properly.
+    
+	 If you are in a Cyber Range network design (at least 4 NICs), attaching your network to a Cloud object <FONT COLOR="#f75c05">starting with N, standing for Networks (eg Nred_exposed0, Nred_admin0 or even Nsuperadmin0)</FONT> will make it reachable from phyiscal networks.<BR>
+   Note: network interfaced starting with B stand for Bridges<BR>
+	 You can use the <A HREF="/manager/vigrid-control_tower.html">control tower</A> to get given DHCP addresses. It demonstrates how it is easy to dev over REST to control the device.<H3>
+	 <H3>Upon any issue, please report to <A HREF="https://github.com/llevier/vigrid">github</A>.
+ </BODY>
+</HTML>
+

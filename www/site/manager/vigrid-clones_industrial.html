@@ -1,0 +1,272 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Industrial Cloning Center");
+
+  // GNS3 home directory
+  $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+  $gns_home="$vigrid_storage_root/home/gns3";
+
+  // Check I got an SMTP relay
+    $smtp=VIGRIDconfig("VIGRID_SMTP_RELAY");
+    $f=explode(":",$smtp);
+    $smtp_host=$f[0];
+    $smtp_ip=$f[1];
+    $smtp_port=$f[2];
+    
+    if (($smtp_host=="") || ($smtp_ip=="") || ($smtp_port==0))
+    {
+      ?><BR><FONT COLOR="Red">I am sorry but I cant find a SMTP relay in Vigrid configuration file.</FONT><?php
+      exit;
+    }
+    ini_set("SMTP", $smtp_ip);
+    ini_set("smtp_port", $smtp_port);
+    
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+
+  // get list of short-time deployable
+  $projects_list=array();
+
+	$selected_project_host       =HTMLvalue($_GET["selected_project_host"]);
+	$selected_project_uuid       =HTMLvalue($_GET["selected_project_uuid"]);
+	$selected_project_name       =HTMLvalue($_GET["selected_project_name"]);
+  
+  $clone_name         =HTMLvalue($_GET["clone_name"]);
+  $clone_numbers      =HTMLvalue($_GET["clone_numbers"]);
+  $clone_start        =HTMLvalue($_GET["clone_start"]);
+  $clone_owner        =HTMLvalue($_GET["clone_owner"]);
+ 
+  // Cloning confirmed if YesYes = $selected
+  $YesYes             =HTMLvalue($_GET["YesYes"]);
+
+  $selected           =HTMLvalue($_GET["selected"]);
+  if ($selected!="")
+  {
+    $f=explode("##",$selected);
+    if (sizeof($f)!=4)
+    {
+      ?><BR><FONT COLOR="Red">Input data is incorrect.</FONT><?php
+      exit;
+    }
+    $project_host       =$f[0];
+    $project_uuid       =$f[1];
+    $project_name       =$f[2];
+    $project_version    =$f[3];
+  }
+  else
+  {
+    $project_host       =HTMLvalue($_GET["project_host"]);
+    $project_uuid       =HTMLvalue($_GET["project_uuid"]);
+    $project_name       =HTMLvalue($_GET["project_name"]);
+    $project_version    =HTMLvalue($_GET["project_version"]);
+  }
+
+	if (($project_host!="") && ($project_uuid!="") && ($project_name!="") && ($clone_name!="") && ($clone_start>=1) && ($clone_numbers>1) && ($clone_owner!=""))
+	{
+    $pattern="/[\"';\[\]#\|]/";
+    if ((preg_match($pattern,$project_host))
+     || (preg_match($pattern,$project_name))
+     || (preg_match($pattern,$project_uuid))
+     || (preg_match($pattern,$project_version)))
+    { ?><IMG SRC="/images/nonono.jpg"><?php exit; } 
+
+    // Sanity checks
+    if ($clone_start<1)
+    {
+      ?><BR><FONT COLOR="Red">I am sorry, clone numbering must start at 1.</FONT><?php
+      exit;
+    }
+
+    if ($clone_numbers<=1)
+    {
+      ?><BR><FONT COLOR="Red">I am sorry, for such a few clones, ondemand clones will do.</FONT><?php
+      exit;
+    }
+
+    if ($clone_name=="")
+    {
+      ?><BR><FONT COLOR="Red">I am sorry, I need a target clones pattern for names.</FONT><?php
+      exit;
+    }
+    
+    $h=gns_gethost_by_projectuuid($gns_controller,$data_vigrid,$project_uuid);
+    $p=gns_getprojectname_by_projectuuid($gns_controller,$data_vigrid,$project_uuid);
+    if (($p!=$project_name) || ($h!=$project_host))
+    {
+      ?><BR><FONT COLOR="Red">I am sorry, either project name & uuid dont match, either host is bad.</FONT><?php
+      exit;
+    }
+  
+    $date=date("Y-m-d");
+    $hour=date("H:i:s");
+    ?><FONT SIZE=+2>Cloning request submitted on <?php print $date; ?> at <?php print $hour; ?> for:</FONT><BR><BR>
+    <TABLE BORDER=0>
+    <TR><TD><FONT SIZE=+1><li>Master host:</FONT></li></TD><TD><FONT SIZE=+1><?php print $project_host; ?><BR></FONT></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Project name:</FONT></li></TD><TD><FONT SIZE=+1><?php print $project_name; ?></FONT></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Project UUID:</FONT></li></TD><TD><FONT SIZE=+1><?php print $project_uuid; ?></FONT></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Project Snapshot source:</FONT></li></TD><TD><FONT SIZE=+1>clonesource_<?php print $project_version; ?></FONT></TD></TR>
+    <TR><TD COLSPAN=2></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Target clone name pattern:</FONT></li></TD><TD><FONT SIZE=+1><?php print $clone_name; ?></FONT></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Target clones starting at:</FONT></li></TD><TD><FONT SIZE=+1><?php print $clone_start; ?></FONT><BR></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Number of target clones:</FONT></li></TD><TD><FONT SIZE=+1><?php print $clone_numbers; ?></FONT><BR></TD></TR>
+    <TR><TD><FONT SIZE=+1><li>Owner email:</FONT></li></TD><TD><FONT SIZE=+1><?php print $clone_owner; ?></FONT></TD></TR></TABLE>
+    <?php
+
+    if ($YesYes!=$selected)
+    {
+      ?><BR><FORM action="<?php print $_SERVER["PHP_SELF"]; ?>">
+      <INPUT TYPE="submit" NAME="YesYes" VALUE="CONFIRM CLONING REQUEST">
+      <?php
+      if ($project_host!="")    { print("<INPUT TYPE=hidden name=\"project_host\" VALUE=\"".htmlentities($project_host)."\">\n"); }
+      if ($project_uuid!="")    { print("<INPUT TYPE=hidden name=\"project_uuid\" VALUE=\"".htmlentities($project_uuid)."\">\n"); }
+      if ($project_name!="")    { print("<INPUT TYPE=hidden name=\"project_name\" VALUE=\"".htmlentities($project_name)."\">\n"); }
+      if ($clone_name!="")    { print("<INPUT TYPE=hidden name=\"clone_name\" VALUE=\"".htmlentities($clone_name)."\">\n"); }
+      if ($clone_start!="")   { print("<INPUT TYPE=hidden name=\"clone_start\" VALUE=\"".htmlentities($clone_start)."\">\n"); }
+      if ($clone_numbers!="") { print("<INPUT TYPE=hidden name=\"clone_numbers\" VALUE=\"".htmlentities($clone_numbers)."\">\n"); }
+      if ($clone_owner!="")   { print("<INPUT TYPE=hidden name=\"clone_owner\" VALUE=\"".htmlentities($clone_owner)."\">\n"); }
+      if ($selected!="")   { print("<INPUT TYPE=hidden name=\"selected\" VALUE=\"".htmlentities($selected)."\">\n"); }
+      print("<INPUT TYPE=hidden name=\"YesYes\" VALUE=\"".htmlentities($selected)."\">\n");
+      ?><FORM><?php
+      exit;
+    }
+
+    if ($vigrid_type!=1) // Design with NAS
+    {
+      $vigrid_nas=VIGRIDconfig("VIGRID_NAS_SERVER");
+    }
+    
+    // Get console range
+    $gns_server=gns_getserver_config();
+    $console_range_start=$gns_server['console_start_port_range'];
+    $console_range_end=$gns_server['console_end_port_range'];
+      
+    // -W=with Web display
+    $command="sudo /home/gns3/vigrid/bin/project-lowlevel-clone-industrial -W";
+    if ($project_uuid!="")    { $command="$command -p $project_uuid"; }
+    if ($project_name!="")    { $command="$command -P \"$project_name\""; }
+    if ($project_version!="") { $command="$command -z \"clonesource_$project_version\""; }
+    if ($clone_name!="")      { $command="$command -T $clone_name"; }
+    if ($clone_start>0)       { $command="$command -s $clone_start"; }
+    if ($clone_numbers>0)     { $command="$command -q $clone_numbers"; }
+
+    if ($console_range_start>0) { $command="$command -c $console_range_start"; }
+    if ($console_range_end>0)   { $command="$command -e $console_range_end"; }
+
+    if ($report_file!="")     { $command="$command -r $report_file"; }
+
+    ?><BR><BR><FONT COLOR="Blue"><FONT SIZE=+2>Cloning in progress...</FONT></FONT><BR><?php
+
+    $fd=popen("$command 2>&1","r");
+    while (!feof($fd))
+    {
+      $line=fgets($fd,4096);
+      $line=trim($line);
+      // print("L=$line<BR>");
+      if (preg_match("/^OK=/",$line))
+      {
+        $text=preg_replace("/^OK=/","",$line);
+        $text="<FONT COLOR=\"Blue\">".$text."</FONT>";
+      }
+      else if (preg_match("/^BAD=/",$line))
+      {
+        $text=preg_replace("/^BAD=/","",$line);
+        $text="<FONT COLOR=\"Red\">".$text."</FONT>";
+      }
+      else if (preg_match("/^HIDE=/",$line)) { $text=""; }
+      else if ($line!="") { $text="<FONT COLOR=\"Black\">".$line."</FONT>"; }
+      else { $text=""; }
+      
+      if ($text!="") { print ($text."<BR>\n"); }
+      ob_implicit_flush();
+    }
+    // normally last always OK or BAD so useless
+    pclose($fd);
+    
+    // end of cloning...
+    exit;
+  }
+    
+  // Local execution
+  $command="sudo /home/gns3/vigrid/bin/projectZFSsnapshot -a list -S";
+  $fd=popen($command,"r");
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+    $line=trim($line);
+    
+    $f=preg_split("/\s+/",$line);
+
+    // $line=preg_replace("/ .*$/","",$line);
+
+    if (preg_match("/^S=.*@clonesource_/",$line))
+    {
+      // First extract size from name
+      $s=preg_split("/:/",$line);
+      $snap_size=$s[1];
+
+      $g=preg_split("/@/",$s[0]);
+      $g[1]=preg_replace("/clonesource_/","",$g[1]);
+      $f=preg_split("/\//",$g[0]);
+      array_push($projects_list,$f[sizeof($f)-1].":".$g[1].":".$snap_size);
+    }
+  }
+  fclose($fd);
+
+  ?>
+  <FONT SIZE=+1><FONT COLOR=Red>Industrial clones are different from ondemand clones.<BR>
+  They are created without considering console access and they dont have a lifetime<BR>
+  Also they will have to be destroyed with the Clones Exterminator page.</FONT></FONT><BR><BR>
+
+  <FONT SIZE=+1>Please select one of the project available for cloning:</FONT><BR>
+  <FORM action="<?php print $_SERVER["PHP_SELF"]; ?>">
+  <TABLE BORDER=1><TR><TD></TD><TD><B>Host</B></TD><TD><B>Project Name</B></TD><TD><B>Project ID</B></TD><TD><B>Version</B></TD><TD><B>Size</B></TD></TR><?php
+  for ($i=0;$i<count($projects_list);$i++)
+  {
+    list($project_uuid,$project_version,$snap_size)=preg_split("/:/",$projects_list[$i]);
+    $project_host=gns_gethost_by_projectuuid($gns_controller,$data_vigrid,$project_uuid);
+    $project_name=gns_getprojectname_by_projectuuid($gns_controller,$data_vigrid,$project_uuid);
+    
+    if ($project_name=="")
+    {
+      ?><TR><TD COLSPAN=6><FONT COLOR=Red><B>GNS3 server seems down, cant get project names. Exiting page.</B></FONT></TD></TR></TABLE><BR><?php
+      exit;
+    }
+    else if (((($selected_project_uuid!="") && ($project_uuid==$selected_project_uuid))
+      && (($selected_project_name!="") && ($project_name==$selected_project_name)))
+      || (($selected_project_uuid=="") && ($selected_project_name=="")))
+    {
+      if ($snap_size=="") { $snap_size="N/A"; }
+
+      ?><TD><input type="radio" name="selected" value="<?php print "$project_host##$project_uuid##$project_name##$project_version"; ?>"><?php
+        print("</TD><TD>$project_host</TD><TD>$project_name</TD><TD>$project_uuid</TD><TD>$project_version</TD><TD>$snap_size</TD></TR>");
+    }
+  } ?>
+  </TABLE><BR>
+  <FONT SIZE=+1>Also providing:</FONT><BR><BR>
+  <TABLE BORDER=0>
+  <TR><TD>Target clone common name:</TD><TD><INPUT TYPE="text" NAME="clone_name" SIZE=10 MAXLENGTH=32></TD><TD>(Clone names will be formatted 'name##', eg. Clone123)</TD></TR>
+  <TR><TD>Clones numbering, starting at:</TD><TD><INPUT TYPE="text" NAME="clone_start" SIZE=3 MAXLENGTH=4 PATTERN="[0-9]+"></TD><TD>At least 1 please</TD></TR>
+  <TR><TD>Wanted number of clones:</TD><TD><INPUT TYPE="text" NAME="clone_numbers" SIZE=3 MAXLENGTH=4 PATTERN="[0-9]+"></TD><TD>Symbolicly limited to 9999</TD></TR>
+  <TR><TD>Email of clones owner:</TD><TD COLSPAN=2><INPUT TYPE="text" NAME="clone_owner" SIZE=32 MAXLENGTH=48 PATTERN="*@*.*+"></TD><TD></TD></TR></TABLE><BR><BR>
+  Finally you can <input type="submit" value="REQUEST CLONING"></FORM>
+</html>

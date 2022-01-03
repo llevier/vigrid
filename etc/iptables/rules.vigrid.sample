@@ -1,0 +1,141 @@
+# Vigrid Firewall rules
+# MANGLE
+*mangle
+:PREROUTING ACCEPT [398669:81946452]
+:INPUT ACCEPT [389581:81245374]
+:FORWARD ACCEPT [4471:471508]
+:OUTPUT ACCEPT [385253:836508043]
+:POSTROUTING ACCEPT [386992:836802374]
+-A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
+-A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
+-A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
+COMMIT
+# FILTER
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [28002:3907426]
+:DOCKER - [0:0]
+:DOCKER-ISOLATION-STAGE-1 - [0:0]
+:DOCKER-ISOLATION-STAGE-2 - [0:0]
+:DOCKER-USER - [0:0]
+:LOGGING - [0:0]
+-A INPUT -i virbr0 -p icmp -j ACCEPT
+-A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i Nsuperadmin0 -s 172.29.0.0/255.255.255.0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+# Temporary for Vigrid install, should be removed later
+-A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+#
+-A INPUT -i Ninternet0 -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i Ninternet0 -p icmp -j ACCEPT
+# Internet reponses
+-A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A OUTPUT -o Ninternet0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+# Final drop
+-A INPUT -i Ninternet0 -j DROP
+#
+-A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 67 -j ACCEPT
+-A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -i Nred_exposed0 -j DROP
+-A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 67 -j ACCEPT
+-A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -i Nblue_exposed0 -j DROP
+-A INPUT -i lo -j ACCEPT
+-A INPUT -i tun0 -j ACCEPT
+-A INPUT -s 172.29.0.0/255.255.255.0 -i Nsuperadmin0 -j ACCEPT
+-A INPUT -j LOGGING
+-A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT
+-A FORWARD -i Nred_exposed0 -o Nsuperadmin0 -j DROP
+-A FORWARD -s 172.29.12.0/255.255.254.0 -d 172.29.8.0/255.255.254.0 -i Nred_exposed0 -o Nblue_exposed0 -j ACCEPT
+-A FORWARD -i Nblue_exposed0 -o Nsuperadmin0 -j DROP
+-A FORWARD -s 172.29.8.0/255.255.254.0 -d 172.29.12.0/255.255.254.0 -i Nblue_exposed0 -o Nred_exposed0 -j ACCEPT
+-A FORWARD -s 172.29.1.0/255.255.255.0 -d 172.29.0.0/255.255.255.0 -i tun0 -o Nsuperadmin0 -j ACCEPT
+-A FORWARD -s 172.29.1.0/255.255.255.0 -d 172.29.8.0/255.255.254.0 -i tun0 -o Nblue_exposed0 -j ACCEPT
+-A FORWARD -s 172.29.1.0/255.255.255.0 -d 172.29.12.0/255.255.254.0 -i tun0 -o Nred_exposed0 -j ACCEPT
+-A FORWARD -s 172.29.1.0/255.255.255.0 -i tun0 -o Ninternet0 -j ACCEPT
+-A FORWARD -s 172.29.0.0/255.255.255.0 -i Nsuperadmin0 -o Ninternet0 -j ACCEPT
+-A FORWARD -s 172.29.12.0/255.255.254.0 -i Nred_exposed0 -o Ninternet0 -j ACCEPT
+-A FORWARD -s 172.29.8.0/255.255.254.0 -i Nblue_exposed0 -o Ninternet0 -j ACCEPT
+-A FORWARD -j DROP
+-A LOGGING -m limit --limit 2/min -j LOG --log-prefix "IPTables Packet Dropped: " --log-level 7
+-A LOGGING -j DROP
+COMMIT
+# NAT
+*nat
+:PREROUTING ACCEPT [211:11626]
+:INPUT ACCEPT [6:636]
+:OUTPUT ACCEPT [118:7455]
+:POSTROUTING ACCEPT [115:7252]
+:DOCKER - [0:0]
+-A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+-A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER
+-A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+-A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+-A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nred_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s 172.29.0.0/255.255.255.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.8.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s 172.29.12.0/255.255.254.0 -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A DOCKER -i docker0 -j RETURN
+COMMIT

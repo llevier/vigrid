@@ -1,0 +1,39 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Clones Terminator");
+
+  $vigrid_type=VIGRIDconfig("VIGRID_TYPE");
+  // Standalone server
+  if ($vigrid_type==1)      { print("<IMG SRC=\"/images/vigrid_type1.png\" height=90 width=65>"); }
+  // Standalone server + NAS
+  else if ($vigrid_type==2) { print("<IMG SRC=\"/images/vigrid_type2.png\" height=90 width=62>"); }
+  // MASTER server (scale/farm) + NAS
+  else if ($vigrid_type==3) { print("<IMG SRC=\"/images/vigrid_type3.png\" height=90 width=77>"); }
+
+  // GNS3 home directory
+  $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+  $gns_home="$vigrid_storage_root/home/gns3";
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+?>

@@ -1,0 +1,229 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+
+GNS3_HOME="/home/gns3"
+GNS3_HOME_PROJECTS=`echo $GNS3_HOME"/GNS3/projects"`
+
+PROJECT_SOURCE=$1
+PROJECT_TARGET=$2
+
+# echo "$0 fails for now, cloned projects are not visible to GNS3, exiting"
+# exit 1
+
+if [ "x$PROJECT_SOURCE" = "x" -o "x$PROJECT_TARGET" = "x" ]
+then
+  echo "$0 Project_Source Project_Target"
+  exit 1
+fi
+
+echo "Duplicating $PROJECT_SOURCE as $PROJECT_TARGET..."
+
+echo "  GNS3 projects are in $GNS3_HOME_PROJECTS..."
+
+echo "  Searching for project $PROJECT_SOURCE..."
+PROJECT_SOURCE_FILE=`find $GNS3_HOME_PROJECTS -type f -name "$PROJECT_SOURCE.gns3"`
+if [ "x$PROJECT_SOURCE_FILE" = "x" ]
+then
+  echo "I am sorry, I failed to find that project, exiting"
+  exit 1
+fi
+PROJECT_SOURCE_DIR=`dirname "$PROJECT_SOURCE_FILE"`
+PROJECT_SOURCE_ID=`echo "$PROJECT_SOURCE_DIR" | awk 'BEGIN { FS="/"; } { print $NF; }'`
+echo "  Project ID is $PROJECT_SOURCE_ID..."
+
+PROJECT_TARGET_UUID=`uuidgen`
+echo "  New project ID will be $PROJECT_TARGET_UUID"
+
+echo "  Rsyncing project data..."
+PROJECT_TARGET_DIR="$GNS3_HOME_PROJECTS/$PROJECT_TARGET_UUID"
+rsync -alHgoprEDt --inplace $PROJECT_SOURCE_DIR/* $PROJECT_TARGET_DIR/
+
+PROJECT_TARGET_FILE="$PROJECT_TARGET_DIR/$PROJECT_TARGET.gns3"
+FILE=`basename $PROJECT_SOURCE_FILE`
+echo "  Renaming $FILE to target project $PROJECT_TARGET main file..."
+mv "$PROJECT_TARGET_DIR/$FILE" "$PROJECT_TARGET_FILE"
+
+echo "  Changing each UUID on target project main file $PROJECT_TARGET_FILE..."
+UUID_NUM=`cat "$PROJECT_TARGET_FILE" | egrep "\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"" | sort -u | wc -l`
+echo "    $UUID_NUM unique IDs detected in file..."
+echo "    Generating $UUID_NUM unique replacement IDs..."
+
+declare -a PROJECT_UUID
+RANDOM_UUID[0]=$PROJECT_TARGET_UUID
+I=1
+until false
+do
+   RANDOM_UUID[$I]=`uuidgen`
+   # echo "      UUID #$I: ${RANDOM_UUID[$I]}"
+   I=$((I+1))
+   [ $I -gt $UUID_NUM ] && break
+done
+
+echo "    Updating UUID on $PROJECT_TARGET_FILE..."
+
+export PROJECT_TARGET_FILE
+# echo "${RANDOM_UUID[@]}"
+
+echo "${RANDOM_UUID[@]}" | perl -e '
+	use Env;
+	
+  $target_file=${PROJECT_TARGET_FILE};
+	$t=<STDIN>;
+	@random_uuid=split(/ /,$t);
+	
+	open(IN,$target_file) || die "Cant open $target_file, exiting";
+	@lines=();
+	@uuid_pairs=();
+	while (<IN>)
+	{
+    s/(\r|\n)+$//g;
+    push(@lines,$_);
+  }
+	close(IN);
+	
+	$last_uuid=0;
+  open(OUT,">$target_file.tmp");
+	for ($i=0;$i<@lines;$i++)
+	{
+	  if ($lines[$i] =~ /\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/)
+		{
+		  # print("L1=$lines[$i]\n");
+			# extracting uuid
+			$_=$lines[$i];
+			s/^.* \"//;
+			s/\".*$//;
+			$uuid=$_;
+			
+			# print("Found ($last_uuid) $uuid, replacing with ");
+			
+			$uuid_new="";
+			# Now replacing uuid
+			@m=grep(/^$uuid:/,@random_uuid);
+			if (@m) # a pair already exists
+			{
+				$t=$m[0];
+			  $_=$t;
+				s/^.*://;
+				$uuid_new=$_;
+			}
+			else # no pair, creating one
+			{
+			  $uuid_new=$random_uuid[$last_uuid];
+				$random_uuid[$last_uuid]="$uuid:$uuid_new";
+				$last_uuid++;
+			}
+			# print($uuid_new."\n");
+			
+			$_=$lines[$i];
+			s/$uuid/$uuid_new/;
+			$lines[$i]=$_;
+			
+			# print("L2=$lines[$i]\n\n");
+		}
+		print(OUT "$lines[$i]\n");
+		# print("$lines[$i]\n");
+	}
+  print(OUT "\n");
+	close(OUT);
+	
+	exit 0;
+'
+
+cat $PROJECT_TARGET_FILE.tmp | sed "s/\"$PROJECT_SOURCE\"/\"$PROJECT_TARGET\"/" >$PROJECT_TARGET_FILE
+rm $PROJECT_TARGET_FILE.tmp
+
+CONSOLE_PORT_START=`cat $GNS3_HOME/.config/GNS3/gns3_server.conf | grep "^console_start_port_range" | sed 's/^.*=//' | awk '{ print $NF;}'`
+CONSOLE_PORT_END=`cat $GNS3_HOME/.config/GNS3/gns3_server.conf | grep "^console_end_port_range" | sed 's/^.*=//' | awk '{ print $NF;}'`
+echo "  Uniquing console & telnet ports (range=$CONSOLE_PORT_START-$CONSOLE_PORT_END)..."
+
+echo "    Extracting already used ports..."
+declare -a CONSOLES
+CONSOLES=(`cat $GNS3_HOME_PROJECTS/*/*.gns3|grep "\"console\": " | grep -v null | sed 's/^.*: //' | sed 's/,$//'`)
+
+CONSOLES_NEEDS=`cat $PROJECT_TARGET_FILE|grep "\"console\": " | grep -v null | wc -l`
+echo "    Needing to change $CONSOLES_NEEDS console ports..."
+
+I=1
+until false
+do
+   while (true)
+   do
+     PORT=$((RANDOM%$CONSOLE_PORT_END+$CONSOLE_PORT_START))
+     
+     if [ $PORT -ge $CONSOLE_PORT_START -a $PORT -le $CONSOLE_PORT_END ]
+     then
+        CHK=`echo "${CONSOLES[@]}" | grep "^$PORT$"|wc -l`
+        # echo "${CONSOLES[@]}"
+        # echo "Current=${CONSOLES[$I]}"
+
+        if [ $CHK -eq 0 ]
+        then
+          CONSOLE_PORT_OLD="${CONSOLES[$I]}"
+          CONSOLE_PORT_NEW="$PORT"
+          break
+        fi
+     fi
+   done
+   
+  # echo "      Console old/new pairs #$I: $CONSOLE_PORT_OLD -> $CONSOLE_PORT_NEW"
+
+  cat $PROJECT_TARGET_FILE | sed "s/\"console\": $CONSOLE_PORT_OLD/\"console\": $CONSOLE_PORT_NEW/" >$PROJECT_TARGET_FILE.tmp
+  mv $PROJECT_TARGET_FILE.tmp $PROJECT_TARGET_FILE
+   
+   I=$((I+1))
+   [ $I -gt $CONSOLES_NEEDS ] && break
+done
+
+echo "  Uniquing MAC addresses..."
+
+echo "    Extracting already MAC..."
+declare -a MAC_ADDR
+MAC_ADDR=(`cat $GNS3_HOME_PROJECTS/*/*.gns3|grep "\"mac_address\": " | sed 's/^.*: //' | sed 's/\"//g' | sed 's/,$//'`)
+
+MAC_ADDR_NEEDS=`cat $PROJECT_TARGET_FILE|grep "\"mac_address\": " | grep -v null | wc -l`
+echo "    Needing to change $MAC_ADDR_NEEDS MAC addresses..."
+
+I=1
+until false
+do
+   while (true)
+   do
+      MAC=$(echo $RANDOM|md5sum|sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*$/02:\1:\2:\3:\4:\5/')
+     
+      CHK=`echo "${MAC_ADDR[@]}" | grep "^$MAC$"|wc -l`
+      # echo "${MAC_ADDR[@]}"
+      # echo "Current=${MAC_ADDR[$I]}"
+
+      if [ $CHK -eq 0 ]
+      then
+        MAC_ADDR_OLD="${MAC_ADDR[$I]}"
+        MAC_ADDR_NEW="$MAC"
+        break
+      fi
+   done
+   
+  # echo "      MAC addresses old/new pairs #$I: $MAC_ADDR_OLD -> $MAC_ADDR_NEW"
+
+  cat $PROJECT_TARGET_FILE | sed "s/\"mac_address\": \"$MAC_ADDR_OLD\"/\"mac_address\": \"$MAC_ADDR_NEW\"/" >$PROJECT_TARGET_FILE.tmp
+  mv $PROJECT_TARGET_FILE.tmp $PROJECT_TARGET_FILE
+   
+   I=$((I+1))
+   [ $I -gt $MAC_ADDR_NEEDS ] && break
+done
+
+chown -R gns3:gns3 $PROJECT_TARGET_DIR
+
+echo "Cloning done, dont forget to restart gns3 service."
+
+# echo "Service opening URL: curl curl [ --user user:password ] -X POST \"http://gns3_host:3080/v2/projects/$PROJECT_TARGET_UUID/open\""
+

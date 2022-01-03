@@ -1,0 +1,35 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+cd /home/gns3/GNS3/projects
+if [ $? -ne 0 ]
+then
+  echo "Cant CD to project directory, exiting."
+  exit 1
+fi
+
+for i in *
+do
+  echo "Detected project UUID: $i"
+  CHK=`btrfs sub list /Bstorage | grep $i|wc -l`
+
+  if [ $CHK -eq 0 ]
+  then
+    echo -n "Project is not on a BTRfs volume, migrating ? [y/N] "
+    read ANS
+    case $ANS in
+	"Yy")
+    		/home/gns3/vigrid/bin/project2btrfs $i
+		;;
+    esac
+  fi
+done

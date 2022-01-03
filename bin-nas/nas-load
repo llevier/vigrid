@@ -1,0 +1,371 @@
+#!/usr/bin/php
+<?php
+
+// #################################################################################################################################
+// #
+// # This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+// #
+// # (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+// # LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+// #
+// # Each dependancies (c) to their respective owners
+// #
+// ##################################################################################################################################
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+// turn off output buffering
+ob_implicit_flush();
+
+$me=$argv[0];
+
+$usage="$me [ -R Vigrid_Storage_Root ] [ -N Network_Filter ] [ -D Disk_Filter ] where filters is a list of coma separated devices";
+
+$opt=getopt("R:N:D:h");
+$vigrid_storage_root=$opt['R'];
+$filter_net=$opt['N'];
+$filter_disk=$opt['D'];
+
+if (isset($opt['h'])) { print($usage."\n"); exit(0); }
+  
+$prev_cpu_user=0;
+$prev_cpu_idle=0;
+$prev_cpu_iowait=0;
+
+$nproc=trim(shell_exec('nproc'));
+$t=file('/proc/fs/nfsd/threads');
+$nfsd_threads=trim($t[0]);
+
+$t=array_values(preg_grep("/^RPCNFSDCOUNT=/",file('/etc/default/nfs-kernel-server')));
+$f=explode("=",trim($t[0]));
+$nfsd_config=$f[1];
+
+while (true)
+{
+  // Load average
+  $loadavg=file("/proc/loadavg");
+  $f=explode(" ",$loadavg[0]);
+  $load1=$f[0];
+  $load5=$f[1];
+  $load15=$f[2];
+  
+  $load_perf1=sprintf("%.2f",$load1/$nproc*100);
+  $load_perf5=sprintf("%.2f",$load5/$nproc*100);
+  $load_perf15=sprintf("%.2f",$load15/$nproc*100);
+
+  $cpu_line=array_values(preg_grep("/^cpu\s+/",file("/proc/stat")));
+  $cpu_line=$cpu_line[0];
+  
+  $f=preg_split("/\s+/",$cpu_line);
+  $cpu_user =$f[1];
+  $cpu_idle   =$f[4];
+  $cpu_iowait =$f[5];
+  
+  $cpu_total=0;
+  for ($i=1;$i<8;$i++)
+  { $cpu_total+=$f[$i]; }
+
+  $diff_cpu_user=$cpu_user-$prev_cpu_user;
+  $diff_cpu_idle=$cpu_idle-$prev_cpu_idle;
+  $diff_cpu_iowait=$cpu_iowait-$prev_cpu_iowait;
+  $diff_cpu_total=$cpu_total-$prev_cpu_total;
+
+  $prev_cpu_user=$cpu_user;
+  $prev_cpu_idle=$cpu_idle;
+  $prev_cpu_iowait=$cpu_iowait;
+  $prev_cpu_total=$cpu_total;
+
+  $diff_usage=sprintf("%.02f",((1024*($diff_cpu_total-$diff_cpu_idle)/$diff_cpu_total+5)/10));
+
+  $van_user     =$f[1];
+  $van_nice     =$f[2];
+  $van_system   =$f[3];
+  $van_idle     =$f[4];
+  $van_iowait   =$f[5];
+  $van_irq      =$f[6];
+  $van_irq_soft =$f[7];
+  $van_steal    =$f[8];
+  
+  $van_prev_idle_total    =0;
+  $van_prev_nonidle_total =0;
+
+  $van_prev_user    =0;
+  $van_prev_nice    =0;
+  $van_prev_system  =0;
+  $van_prev_idle    =0;
+  $van_prev_iowait  =0;
+  $van_prev_irq     =0;
+  $van_prev_irq_soft=0;
+  $van_prev_steal   =0;
+  
+  // PrevIdle = previdle + previowait
+  $van_prev_idle_total=$van_prev_idle+$van_prev_iowait;
+    
+  // Idle = idle + iowait
+  $van_idle_total=$van_idle+$van_iowait;
+
+  // PrevNonIdle = prevuser + prevnice + prevsystem + previrq + prevsoftirq + prevsteal
+  $van_prev_nonidle_total=$van_prev_user+$van_prev_nice+$van_prev_system+$van_prev_irq+$van_prev_irq_soft+$van_prev_steal;
+
+  // NonIdle = user + nice + system + irq + softirq + steal
+  $van_nonidle_total=$van_user+$van_nice+$van_system+$van_irq+$van_irq_soft+$van_steal;
+
+  // PrevTotal = PrevIdle + PrevNonIdle
+  $van_prev_total=$van_prev_idle_total+$van_prev_nonidle_total;
+
+  // Total = Idle + NonIdle
+  $van_total_total=$van_idle_total+$van_nonidle_total;
+
+  // # differentiate: actual value minus the previous one
+  // totald = Total - PrevTotal
+  $van_totald=$van_total_total-$van_prev_total_total;
+
+  // idled = Idle - PrevIdle
+  $van_idled=$van_idle_total-$van_prev_idle_total;
+
+  // CPU_Percentage = (totald - idled)/totald
+  $van_cpu=($van_totald-$van_idled)/$van_totald*100;
+  $van_cpu=sprintf("%.2f",$van_cpu);  
+  
+  // CPU load = %us+%sy+%ni+%hi+%si ?
+  // us: user cpu time (or) % CPU time spent in user space
+  // sy: system cpu time (or) % CPU time spent in kernel space
+  // ni: user nice cpu time (or) % CPU time spent on low priority processes
+  // hi: hardware irq (or) % CPU time spent servicing/handling hardware interrupts
+  // si: software irq (or) % CPU time spent servicing/handling software interrupts
+  $top_line=array_values(preg_grep("/^%Cpu/",explode(PHP_EOL,shell_exec('top -n1'))));
+  $top_line=$top_line[0];
+  $f=preg_split("/\s+/",$top_line);
+  $top_us=$f[1];
+  $top_sy=$f[3];
+  $top_ni=$f[5];
+  $top_hi=$f[11];
+  $top_si=$f[13]; 
+  $top_load=$top_us+$top_sy+$top_ni+$top_hi+$top_si;
+  
+  // Get monitoring information. Taking last 50 lines (should be far enough) to extract the last full details
+  // Rate=unix timestamp;iface_name;bytes_out/s;bytes_in/s;bytes_total/s;bytes_in;bytes_out;packets_out/s;packets_in/s;packets_total/s;packets_in;packets_out;errors_out/s;errors_in/s;errors_in;errors_out
+  
+  // Disk filter ?
+  $filters=array();
+  if ($filter_disk!="")
+  { $filters_disk=explode(",",$filter_disk); }
+
+  $bwmNG_disk_rate=bwmNGextract('/var/log/bwmNG-disk-rate.log');
+  for ($i=0;$i<sizeof($bwmNG_disk_rate);$i++)
+  {
+    $f=explode(";",$bwmNG_disk_rate[$i]);
+    
+    if ((($filter_disk!="") && (preg_grep("/^$f[1]/",$filters_disk)))
+     || (($filter_disk=="") && ($f[1]!="total")))
+    {
+      $name=$f[1];
+      $disk_rate_bps[$name]['time']=$f[0];
+      $disk_rate_bps[$name]['out']=sprintf("%d",$f[2]);
+      $disk_rate_bps[$name]['in']=sprintf("%d",$f[3]);
+    }
+  }
+
+  // Max=unix timestamp;iface_name;bytes_out;bytes_in;bytes_total;packets_out;packets_in;packets_total;errors_out;errors_in
+  $bwmNG_disk_max=bwmNGextract('/var/log/bwmNG-disk-max.log');
+  
+  for ($i=0;$i<sizeof($bwmNG_disk_max);$i++)
+  {
+    $f=explode(";",$bwmNG_disk_max[$i]);
+    
+    if ((($filter_disk!="") && (preg_grep("/^$f[1]/",$filters_disk)))
+     || (($filter_disk=="") && ($f[1]!="total")))
+    {
+      $name=$f[1];
+      $disk_max_bps[$name]['time']=$f[0];
+      $disk_max_bps[$name]['out']=sprintf("%d",$f[2]);
+      $disk_max_bps[$name]['in']=sprintf("%d",$f[3]);
+    }
+  }
+
+  // Same for net
+  $filters_net=array();
+  if ($filter_net!="")
+  { $filters_net=explode(",",$filter_net); }
+
+  $bwmNG_net_rate =bwmNGextract('/var/log/bwmNG-net-rate.log');
+  for ($i=0;$i<sizeof($bwmNG_net_rate);$i++)
+  {
+    $f=explode(";",$bwmNG_net_rate[$i]);
+    
+    if ((($filter_net!="") && (preg_grep("/^$f[1]/",$filters_net)))
+     || (($filter_net=="") && ($f[1]!="total") && ($f[1]!="lo")))
+    {
+      $name=$f[1];
+      $net_rate_bps[$name]['time']=$f[0];
+      $net_rate_bps[$name]['out']=sprintf("%d",$f[2]);
+      $net_rate_bps[$name]['in']=sprintf("%d",$f[3]);
+      
+      // Get NIC speed as well
+      if ($nic_speed[$name]==0)
+      {
+        $t=file('/sys/class/net/$name/speed');
+        $nic_speed[$name]=trim($t[0]);
+      }
+      
+      if ($nic_speed[$name]=="") // bridge_port(s)
+      {
+        $wd_cur=getcwd();
+        chdir("/sys/class/net/$name/");
+        
+        // List lower(s), extract min speed as default value
+        $value_min=0;
+        foreach (glob("lower_*") as $filename)
+        {
+          if (!preg_match("/gns3/",$filename)) // Ignoring GNS3 taps
+          {
+            $t=file("/sys/class/net/$name/$filename/speed");
+            
+            $name_lower=preg_replace("/lower_/","",$filename);
+            
+            if ($value_min==0) { $value_min=trim($t[0]); }
+            else if ($t[0]<$value_min) { $value_min=trim($t[0]); }
+            
+            $nic_speed[$name_lower]=$value_min;
+          }
+        }
+        $nic_speed[$name]=$value_min;
+
+        chdir($wd_cur);
+      }
+    }
+  }
+
+  $bwmNG_net_max =bwmNGextract('/var/log/bwmNG-net-max.log');
+  for ($i=0;$i<sizeof($bwmNG_net_max);$i++)
+  {
+    $f=explode(";",$bwmNG_net_max[$i]);
+    
+    if ((($filter_net!="") && (preg_grep("/^$f[1]/",$filters_net)))
+     || (($filter_net=="") && ($f[1]!="total") && ($f[1]!="lo")))
+    {
+      $name=$f[1];
+      $net_max_bps[$name]['time']=$f[0];
+      $net_max_bps[$name]['out']=sprintf("%d",$f[2]);
+      $net_max_bps[$name]['in']=sprintf("%d",$f[3]);
+    }
+  }
+
+  $hostname=gethostname();
+
+  system('clear');
+
+  // print("$cpu_line\nDU=$diff_usage%, CT=$cpu_total (diff=$diff_cpu_total), CU=$cpu_user (diff=$diff_cpu_user), CI=$cpu_idle (diff=$diff_cpu_idle), CIOw=$cpu_iowait (diff=$diff_cpu_iowait)\n\n");
+  print("$hostname Vigrid monitoring tracker
+
+NFSd RPC CPU: $nfsd_threads nfsd / $nfsd_config config / $nproc possible total vCPU
+
+LOAD AVERAGE: 1m=$load1 ($load_perf1%), 5m=$load5 ($load_perf5%), 15m=$load15 ($load_perf15%)
+
+Server CPU load: $top_load%/$van_cpu%
+
+");
+
+  $name_len=0;
+  foreach($disk_rate_bps as $name => $disk)
+  { if (strlen($name)>$name_len) { $name_len=strlen($name); } }
+  foreach($net_rate_bps as $name => $net)
+  { if (strlen($name)>$name_len) { $name_len=strlen($name); } }
+
+  foreach($disk_rate_bps as $name => $disk)
+  {
+    $rate_in=$disk['in'];
+    $rate_out=$disk['out'];
+    
+    $unit_in="B";
+    $unit_out="B";
+    
+    if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB"; }
+    if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB"; }
+    
+    if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB"; }
+    if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB"; }
+    
+    $max_in =$disk_max_bps[$name]['in'];
+    $max_out=$disk_max_bps[$name]['out'];
+    
+    $max_unit_in="B";
+    $max_unit_out="B";
+
+    if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB"; }
+    if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB"; }
+    
+    if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
+    if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
+
+    $size="%-".$name_len."s";
+    // For bwm, Rx is what is sent FROM disk, so that is OUT for us
+    printf("Disk: $size READ=%4d%2s/s (MAX=%4d%2s/s), WRITE=%4d%2s/s (MAX=%4d%2s/s)\n",$name,$rate_in,$unit_in,$max_in,$max_unit_in,$rate_out,$unit_out,$max_out,$max_unit_out);
+  }
+
+  print("\n");
+  foreach($net_rate_bps as $name => $net)
+  {
+    $rate_in=$net['in'];
+    $rate_out=$net['out'];
+    
+    $unit_in="B";
+    $unit_out="B";
+    
+    if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB"; }
+    if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB"; }
+    
+    if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB"; }
+    if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB"; }
+    
+    $max_in =$net_max_bps[$name]['in'];
+    $max_out=$net_max_bps[$name]['out'];
+    
+    $max_unit_in="B";
+    $max_unit_out="B";
+
+    if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB"; }
+    if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB"; }
+    
+    if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
+    if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
+
+    $size="%-".$name_len."s";
+    printf("NIC:  $size OUT=%4d%2s/s (MAX=%4d%2s/s), IN=%4d%2s/s (MAX=%4d%2s/s), NIC MAX=%4dMB/s\n",$name,$rate_out,$unit_out,$max_out,$max_unit_out,$rate_in,$unit_in,$max_in,$max_unit_in,$nic_speed[$name]);
+  }
+
+  sleep(1);
+}
+
+function bwmNGextract($filename)
+{
+  $bwmNG_array=array();
+  
+  $t=explode(PHP_EOL,shell_exec("tail -20 $filename"));
+  
+  $mark_end=-1;
+  $mark_start=-1;
+  
+  for ($i=sizeof($t);$i>0;$i--)
+  {
+    if (preg_match("/;total;/",$t[$i]))
+    {
+      if ($mark_end==-1) { $mark_end=$i; }
+      else if ($mark_start==-1)
+      {
+        $mark_start=$i+1;
+        break;
+      }
+    }
+  }
+
+  if (($mark_start!=-1) && ($mark_end!=-1))
+  {
+    for ($i=$mark_start;$i<=$mark_end;$i++)
+    { array_push($bwmNG_array,$t[$i]); }
+  }
+
+  return($bwmNG_array);
+}

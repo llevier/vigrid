@@ -1,0 +1,56 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="$0 [ -H Host ]"
+
+while getopts 'H:' OPTIONS
+do
+   case "$OPTIONS" in
+        H)      HOST="$OPTARG";;
+        [?])
+          print >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+if [ "x$HOST" = "x" ]
+then
+  SSHDO=""
+else
+  SSHDO="ssh -i $VIGRID_SSHKEY_DHCP $VIGRID_SSHKEY_OPTIONS gns3@$HOST"
+fi
+
+LIST=`$SSHDO ls -1 /var/log/syslog* 2>/dev/null | sort -r`
+
+for i in $LIST
+do
+  echo "$i..."
+  $SSHDO /bin/gzip -dfc $i 2>/dev/null
+done | /bin/grep "dhcpd.*DHCPACK"
+
+exit

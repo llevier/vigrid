@@ -1,0 +1,123 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="Usage: $0 -a start|stop -i net|disk [ -T type ] [ -R Storage_ROOT ] [ -I Net_or_Disk_filters ]"
+
+DAEMON=0
+
+while getopts 'a:i:I:T:R:D' OPTIONS
+do
+  case "$OPTIONS" in
+  D)  DAEMON=1;;
+  a)  ACTION="$OPTARG";;
+  i)  BWM_SOURCE="$OPTARG";;
+  T)  BWM_TYPE="$OPTARG";;
+  R)  VIGRID_STORAGE="$OPTARG";;
+  I)  FILTERS="$OPTARG";;
+	[?])
+		echo $USAGE
+		exit 1
+		;;
+	esac
+done
+
+USAGE_SHOW=0
+[ "x$BWM_SOURCE" != "xnet" -a "x$BWM_SOURCE" != "xdisk" ] && USAGE_SHOW=1
+[ "x$BWM_TYPE" != "xmax" -a "x$BWM_TYPE" != "xrate" -a "x$BWM_TYPE" != "x" ] && USAGE_SHOW=1
+
+if [ $USAGE_SHOW -eq 1 ]
+then
+  echo $USAGE
+	exit 1
+fi
+
+# No storage root = GNS3 home
+[ "x$VIGRID_STORAGE" = "x" ] && VIGRID_STORAGE="/home/gns3/GNS3"
+
+# Needed for stat filename
+[ "x$BWM_TYPE" = "x" ] && BWM_TYPE="rate"
+
+COMMON_NET=" /usr/bin/bwm-ng -i proc -t 1000 -o csv -D 1 -C ; -N -d --procfile /proc/net/dev $VIGRID_NETS"
+COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d MB --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
+
+# Detect existing Vigrid nets...
+if [ "x$BWM_SOURCE" = "xnet" ]
+then
+  if [ "x$FILTERS" = "x" ]
+  then
+    VIGRID_NETS=`ip link | grep "^[0-9]" | awk '{print $2;}' | sed 's/://g' | grep "^N"`
+    [ "x$VIGRID_NETS" != "x" ] && VIGRID_NETS=`echo -I $VIGRID_NETS`
+  else
+    VIGRID_NETS="-I $FILTERS"
+  fi
+fi
+
+PWD_CMD=`which pwd`
+
+if [ "x$BWM_SOURCE" = "xdisk" ]
+then
+  if [ "x$FILTERS" = "x" ]
+  then
+    PWD_OLD=`$PWD_CMD`
+    cd $VIGRID_STORAGE_ROOT 2>/dev/null
+    [ $? -ne 0 ] && echo "Cant CD to $VIGRID_STORAGE, exiting" && exit 1
+
+    PWD_REAL=`$PWD_CMD`
+
+    if [ "x$PWD_REAL" != "x" ]
+    then
+      VIGRID_FS=`df . 2>/dev/null | tail -n +2|awk '{print $1;}'`
+      
+      ZFS_CHK=`echo $VIGRID_FS|grep "^\/"`
+      # no /=ZFS
+      if [ "x$ZFS_CHK" = "x" ]
+      then
+        ZFS_ROOT=`echo $VIGRID_FS| awk 'BEGIN {FS="/";} { print $1;}'`
+        VIGRID_DISKS=`zpool status $ZFS_ROOT  2>/dev/null|grep "ONLINE" | grep -v "^ state:" | tail -n+2| awk '{print $1;}'`
+        # Clean variable (remove partitions, unique sorting)
+        VIGRID_DISKS=`echo $VIGRID_DISKS|sed "s' '\\n'g"|sort -u`
+        VIGRID_DISKS=`echo $VIGRID_DISKS|sed 's/ /,/g'`
+      else
+        VIGRID_DISKS=$VIGRID_FS
+      fi
+  else
+    VIGRID_DISKS="-I $FILTERS"
+  fi
+fi
+
+  [ "x$VIGRID_DISKS" != "x" ] && VIGRID_DISKS=`echo -I $VIGRID_DISKS`
+fi
+COMMON_CSV="/var/log/bwmNG-%%SOURCE%%-%%TYPE%%.log"
+
+BWM_OPTION=`echo "-F $COMMON_CSV"| sed "s/%%SOURCE%%/$BWM_SOURCE/" | sed "s/%%TYPE%%/$BWM_TYPE/"`
+
+BWM_OPTION="$BWM_OPTION -T $BWM_TYPE"
+
+[ "x$BWM_SOURCE" = "xnet" ] && COMMAND="$COMMON_NET   $VIGRID_NETS  $BWM_OPTION"
+[ "x$BWM_SOURCE" = "xdisk" ] && COMMAND="$COMMON_DISK $VIGRID_DISKS $BWM_OPTION"
+
+case "$ACTION" in
+  start)
+    echo "Launching \"$COMMAND\""
+    exec $COMMAND
+    ;;
+  stop)
+    echo "Stopping Vigrid bwmNG ($BWM_SOURCE $BWM_TYPE)..."
+    
+    [ "x$BWM_SOURCE" = "xnet" ] && BWM_SOURCE="proc"
+    PID=`ps ax|egrep "bwm-ng.*-i $BWM_SOURCE .* -T $BWM_TYPE"|grep -v grep | awk '{print $1;}'`
+    
+    [ "x$PID" != "x" ] && echo -n "$PID..." && kill -9 $PID && echo 
+    ;;
+  *)
+    ;;
+esac

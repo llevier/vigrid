@@ -1,0 +1,169 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+echo "Project launching script procedure..."
+
+USAGE="$0 -P ProjectName -p ProjectPause -n NodePause [ -N NodeName ] [ -B BladesSpreading ] [ -S 0 ] [ -A start|stop ] [ -f ]"
+
+while getopts 'A:S:P:p:N:n:B:f' OPTIONS
+do
+   case "$OPTIONS" in
+        f)      FAKE="-f";;
+        A)      ACTION="$OPTARG";;
+        P)      PROJECT_NAME="$OPTARG";;
+        p)      PROJECT_PAUSE="$OPTARG";;
+        N)      NODE_NAME="$OPTARG";;
+        n)      NODE_PAUSE="$OPTARG";;
+        B)      BLADES_LIST="$OPTARG";;
+        S)      SEQUENCE="$OPTARG";;
+        [?])
+          echo >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+if [ "x$PROJECT_NAME" = "x" -o "x$PROJECT_PAUSE" = "x" -o "x$NODE_PAUSE" = "x" ]
+then
+  echo "$USAGE"
+  exit 1
+fi
+
+# Trap signal to kill children
+kill_them_all()
+{
+  echo "Caught signal $1"
+  pkill -P $$
+}
+
+LIST=""
+
+if [ "x$BLADES_LIST" = "x" ]
+then
+  # Big Blades
+  LIST="$LIST""BigLame1:1:16 BigLame2:17:16 BigLame3:33:16 BigLame4:49:16"
+  LIST="$LIST BangLame1:65:16 BangLame2:81:16 BangLame3:96:16 BangLame4:113:16"
+
+  # Small Blades
+  #LIST="$LIST BigLame6:33:4 BigLame7:37:4 BigLame8:41:4 BigLame14:45:4 BigLame16:49:4"
+  #LIST="$LIST BangLame6:53:4 BangLame7:57:4 BangLame8:61:4 BangLame14:65:4 BangLame16:69:4"
+else
+  LIST="$BLADES_LIST"
+fi
+
+echo
+echo "  Project to launch: $PROJECT_NAME, with a pause of $PROJECT_PAUSE""s between projects and $NODE_PAUSE"s" between nodes"
+
+[ "x$SEQUENCE" = "x" ] && SEQUENCE=1
+
+if [ "x$SEQUENCE" != "x0" -a "x$SEQUENCE" != "x1" ]
+then
+  echo "$USAGE"
+  echo "-S can be 1 (sequential launch, default) or 0 (threaded launch)"
+  exit 1
+fi
+echo -n "    Launching type: "
+[ $SEQUENCE -eq 1 ] && echo "SEQUENTIAL"
+[ $SEQUENCE -eq 0 ] && echo "THREADED"
+
+echo "  Blades spreading:"
+NCOLS=`stty size|awk '{print $2;}'`
+NCOLS=$((NCOLS-4))
+DISP=`echo "$LIST"| fold -w $NCOLS -s`
+IFSBAK=$IFS
+IFS="
+"
+for i in $DISP
+do
+  echo "    $i"
+done
+IFS=$IFSBAK
+
+echo -n "  Estimating project number value size..."
+IV_SIZE=0
+CHK=`ls -1 /home/gns3/GNS3/projects/*/$PROJECT_NAME*.gns3|sed "s/^.*$PROJECT_NAME//"| sed 's/.gns3.*$//'`
+IFSBAK=$IFS
+IFS="
+"
+for i in $CHK
+do
+  S=`echo -n "$i"|wc -m`
+  [ $S -gt $IV_SIZE ] && IV_SIZE=$S
+done
+IFS=$IFSBAK
+echo "$IV_SIZE"
+
+# default action
+if [ "x$ACTION" = "x" ]
+then
+  ACTION="start"
+fi
+
+ACTION=`echo $ACTION | tr /A-Z/ /a-z/`
+
+if [ "x$ACTION" != "xstart" -a "x$ACTION" != "xstop" -a "x$ACTION" != "xstatus"]
+then
+  echo "Unknown action ($ACTION), considering status"
+  ACTION="status"
+fi
+
+ACTION_DESC="Start"
+[ $ACTION = "stop" ] && ACTION_DESC="Stopp"
+
+for i in $LIST
+do
+  # Starting/stopping number for CTFteam#
+  HOST=`echo "$i" | awk 'BEGIN { FS=":"; } { print $1; }'`
+  START=`echo "$i" | awk 'BEGIN { FS=":"; } { print $2; }'`
+  LAUNCH=`echo "$i" | awk 'BEGIN { FS=":"; } { print $3; }'`
+
+  echo "$ACTION_DESC""ing projects on $HOST from $START, $LAUNCH times..."
+
+  NUM=0
+  until false
+  do
+    IV="$(printf "%0$IV_SIZE""d" $START)"
+    
+    echo -n " $ACTION_DESC""ing $PROJECT_NAME$IV"
+    [ "x$NODE_NAME" != "x" ] && echo -n " (node $NODE_NAME only)"
+    echo " on $HOST (pausing $PROJECT_PAUSE""s, $NODE_PAUSE""s pause between objects)..."
+
+    echo -n " "
+    
+    [ "x$NODE_NAME" != "x" ] && NODE_SPECIAL="-n $NODE_NAME"
+
+    # Opening project to get nodes
+    if [ "x$ACTION" != "xstop" ]
+    then
+      echo "  Opening project $PROJECT_NAME$IV on $HOST"
+      /home/gns3/vigrid/bin/project-control -h $HOST -p $PROJECT_NAME$IV -a open >/dev/null 2>/dev/null
+      sleep 2
+    fi
+
+    echo "  Delegating project actions to project-control:"
+
+    # Sequential
+    [ $SEQUENCE -eq 1 ] && /home/gns3/vigrid/bin/project-control $FAKE -h $HOST -p $PROJECT_NAME$IV -a $ACTION -d $NODE_PAUSE $NODE_SPECIAL 
+
+    # Multi-threaded
+    [ $SEQUENCE -eq 0 ] && /home/gns3/vigrid/bin/project-control $FAKE -h $HOST -p $PROJECT_NAME$IV -a $ACTION -d $NODE_PAUSE $NODE_SPECIAL &
+
+    RC=$?
+
+    NUM=$((NUM+1))
+    START=$((START+1))
+
+    [ $NUM -ge $LAUNCH ] && break
+
+    [ $RC -eq 0 ] && sleep $PROJECT_PAUSE
+  done
+done

@@ -1,0 +1,630 @@
+#!/usr/bin/php
+<?php
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+include "/Vstorage/GNS3/bin/nas-project-lowlevel-functions";
+
+// turn off output buffering
+ob_implicit_flush();
+
+if (!function_exists(report))
+{
+  function report($level,$text)
+  {
+    global $report_file;
+    global $verbose;
+
+    if ($level>$verbose)
+    { return; }
+    
+    if ($report_file!="")
+    {
+      $fd=fopen($report_file,"a");
+      if (!$fd) { print("Cant append $report_file !!, stopping\n"); }
+
+      fwrite($fd,$text);
+
+      fclose($fd);
+    }
+    else { print $text; }
+  }
+}
+
+function gen_mac()
+{
+  $mac=str_split(md5(random_int(0,0xffffff)),2);
+   
+  return sprintf( '02:%s:%s:%s:%s:%s',$mac[0],$mac[1],$mac[2],$mac[3],$mac[4]);
+
+  // return sprintf( '%02x:%02x:%02x:%02x:%02x:%02x',
+    // random_int( 0, 0x10 ),
+    // random_int( 0, 0xff ),
+    // random_int( 0, 0xff ),
+    // random_int( 0, 0xff ),
+    // random_int( 0, 0xff ),
+    // random_int( 0, 0x10 )
+  // );
+}
+
+function clean_array($var)
+{
+  return ($var !== NULL && $var !== FALSE && $var !== "");
+}
+
+if (!function_exists(dirTOzdataset))
+{
+  function dirTOzdataset($dir)
+  {
+    if (($dir=="") || (!file_exists($dir))) { return(""); }
+    
+    list($rc,$res)=get_exec("/sbin/zfs list -o name,mountpoint","",false);
+    
+    for ($i=0;$i<sizeof($res);$i++)
+    {
+      $res[$i]=trim($res[$i]);
+      report(5,"L=$res[$i]\n");
+      $f=preg_split("/\s +/",$res[$i]);
+      report(5,"DIR=".$f[1]."\n");
+      
+      if ($f[1]==$dir)
+      { return($f[0]); }
+    }
+    
+    return("");
+  }
+}
+
+if (!function_exists(zdatasetTOdir))
+{
+  function zdatasetTOdir($zdataset)
+  {
+    report(4,"Searching dir for $zdataset\n");
+    
+    list($rc,$res)=get_exec("/sbin/zfs list","",false);
+    
+    for ($i=0;$i<sizeof($res);$i++)
+    {
+      $res[$i]=trim($res[$i]);
+      report(5,"L=$res[$i]\n");
+      $f=explode(" ",$res[$i]);
+      report(5,"DATASET=".$f[0].", DIR=".$f[sizeof($f)-1]."\n");
+      
+      if ($f[0]==$zdataset)
+      { report(5,"  returning DIR\n"); return($f[sizeof($f)-1]); }
+    }
+    
+    return("");
+  }
+}
+
+if (!function_exists(get_exec))
+{
+  function get_exec($command,$prefix,$display)
+  {
+    $res=array();
+
+    $fd=popen("$command 2>&1","r");
+    while (!feof($fd))
+    {
+      $line=fgets($fd,4096);
+      array_push($res,$line);
+      if ($display) { report(0,$prefix.$line); ob_implicit_flush(); }
+    }
+    $rc=pclose($fd);
+    
+    return(array($rc,$res));
+  }
+}
+
+if (!function_exists(gen_uuid))
+{
+  function gen_uuid()
+  {
+    return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+      // 32 bits for "time_low"
+      random_int( 0, 0xffff ), random_int( 0, 0xffff ),
+      // 16 bits for "time_mid"
+      random_int( 0, 0xffff ),
+      // 16 bits for "time_hi_and_version",
+      // four most significant bits holds version number 4
+      random_int( 0, 0x0fff ) | 0x4000,
+      // 16 bits, 8 bits for "clk_seq_hi_res",
+      // 8 bits for "clk_seq_low",
+      // two most significant bits holds zero and one for variant DCE1.1
+      random_int( 0, 0x3fff ) | 0x8000,
+      // 48 bits for "node"
+      random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xffff )
+    );
+  }
+}
+
+if (!function_exists(find_all_files))
+{
+  function find_all_files($mode,$dir, &$results = array())
+  {
+    $files = scandir($dir);
+
+    foreach ($files as $key => $value)
+    {
+      $path = realpath($dir . DIRECTORY_SEPARATOR . $value);
+      if (!is_dir($path))
+      {
+        // mode=0 -> all, mode=1 -> only dirs
+        if ($mode==0) { $results[] = $path; }
+      }
+      else if ($value != "." && $value != "..")
+      {
+        find_all_files($mode,$path, $results);
+        $results[] = $path;
+      }
+    }
+    return $results;
+  }
+}
+############################## Functions end
+
+$opt=getopt("G:P:s:S:t:T:r:Z:c:e:ni:W");
+
+$gns_home=$opt['G'];
+$gns_home_projects=$opt['P'];
+
+$from_project_uuid=$opt['s'];
+$from_project_name=$opt['S'];
+$to_project_uuid=$opt['t'];
+$to_project_name=$opt['T'];
+$ignore_rename=$opt['i'];
+
+if (($ignore_rename!='P') && ($ignore_rename!='N')) { $ignore_rename=""; }
+
+$from_project_dir_norename=0;
+if (isset($opt['n'])) { $from_project_dir_norename=1; }
+
+if (isset($opt['W'])) { $www=1; $www_ok="OK="; $www_bad="BAD="; }
+
+$console_port_start=$opt['c'];
+$console_port_end=$opt['e'];
+
+$report_file=$opt['r'];
+
+report(0,$www_ok."GNS3 low level project reset program\n\n");
+
+// print("GNS3 Home          = $gns_home\n");
+// print("GNS3 Projects home = $gns_home_projects\n");
+
+// $zfs_gns_home_projects=dirTOzdataset($gns_home_projects);
+// if ($zfs_gns_home_projects=="")
+// { report(0,$www_bad."###ERROR: cant identify ZFS dataset for directory $gns_home_projects, exiting.\n"); exit(1); }
+
+### Verbose level
+$verbose=1;
+
+if (($from_project_uuid=="") || (!preg_match("/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$from_project_uuid))
+ || ($to_project_uuid=="") || (!preg_match("/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$to_project_uuid))
+ || ($from_project_name=="") || ($to_project_name=="")
+ || ($gns_home=="") || ($gns_home_projects=="") || ($console_port_start=="") || ($console_port_end==""))
+{
+  print("
+Usage: $argv[0]
+    -G GNS3 home directory (eg: ~gns3/GNS3)
+    -P GNS3 projects directory (eg: ~gns3/GNS3/projects)
+
+    -s source_project_uuid
+    -Z source_projet_snapshot_name
+    -S source_project_name
+    -T target_project_name
+    -c console ports starting value
+    -e console ports ending value
+    [ -i P or N to ignore rename errors related to Projects or Nodes ]
+    [ -r report_file ]
+
+Will reset a GNS3 project, changing all its UUIDs, console ports & MAC addresses to be unique on GNS3 host.\n");
+
+  exit(1);
+}
+
+report(0,$www_ok."GNS3 reseting project $from_project_name (UUID=$from_project_uuid)\n\n");
+
+if ($from_project_dir_norename==1)
+{ report(0,$www_ok,"WARNING: -n OPTION IS SET, NO DIRECTORY WILL BE RENAMED\n\n"); }
+
+$config_file="$gns_home_projects/$to_project_uuid/$from_project_name.gns3";
+report(2,$www_ok."  Configuration file would be $config_file\n");
+
+report(1,$www_ok."2- Extracting all existing UUIDs (project itself included) from GNS3 projects directory...\n");
+
+$command="cat ".$gns_home_projects."/*/*.gns3";
+list($rc,$res)=get_exec($command,"",false);
+
+$all_project_uuid=preg_grep("/\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/",$res);
+$all_project_uuid=array_values($all_project_uuid);
+for ($u=0;$u<sizeof($all_project_uuid);$u++)
+{
+  $all_project_uuid[$u]=preg_replace("/^.* \"/","",$all_project_uuid[$u]);
+  $all_project_uuid[$u]=preg_replace("/\".*$/","",$all_project_uuid[$u]);
+  $all_project_uuid[$u]=rtrim($all_project_uuid[$u]);
+}
+$all_project_uuid=array_unique($all_project_uuid);
+sort($all_project_uuid);
+$uuid_all=$all_project_uuid;
+
+report(2,$www_ok."  I found ".sizeof($all_project_uuid)." unique UUIDs on target host\n");
+report(5,$www_ok."    Detected unique UUIDs: ".print_r($uuid_all,true)."\n");
+
+report(1,$www_ok."3- Extracting all UUIDs from $project_name project configuration file...\n");
+$command="cat $config_file";
+list($rc,$res)=get_exec($command,"",false);
+
+$from_project_uuid_list=preg_grep("/\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/",$res);
+$from_project_uuid_list=array_values($from_project_uuid_list);
+for ($u=0;$u<sizeof($from_project_uuid_list);$u++)
+{
+  // detect specifically project_id
+  if (preg_match("/project_id/",$from_project_uuid_list[$u]))
+  {
+    report(3,$www_ok."  Existing project UUID detected, replacing it with new uuid\n");
+    $from_project_uuid_list[$u]=$from_project_uuid;
+  }
+
+  $from_project_uuid_list[$u]=preg_replace("/^.* \"/","",$from_project_uuid_list[$u]);
+  $from_project_uuid_list[$u]=preg_replace("/\".*$/","",$from_project_uuid_list[$u]);
+  $from_project_uuid_list[$u]=rtrim($from_project_uuid_list[$u]);
+}
+$from_project_uuid_list=array_unique($from_project_uuid_list);
+sort($from_project_uuid_list);
+report(2,$www_ok."  I found ".sizeof($from_project_uuid_list)." unique UUIDs on project\n");
+
+// 3- generate new uuid pairs for objects but project_id
+report(2,$www_ok."  Generating UUID pairs...\n");
+$to_project_uuid_pairs=array();
+for ($i=0;$i<sizeof($from_project_uuid_list);$i++)
+{
+  if (preg_match("/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$from_project_uuid_list[$i]))
+  {
+    $t_arr=preg_split("/\//",$from_project_uuid_list[$i]);
+    $t_uuid=$t_arr[sizeof($t_arr)-1];
+    
+    if ($t_uuid==$from_project_uuid)
+    { $t_uuid_new=$to_project_uuid; }
+    else
+    {
+      while (preg_grep("/$t_uuid_new/",$uuid_all)) { $t_uuid_new=gen_uuid(); }
+    }
+    report(3,"    Detected $t_uuid, new will be $t_uuid_new\n");
+    array_push($to_project_uuid_pairs,"$t_uuid:$t_uuid_new");
+    array_push($uuid_all,$t_uuid_new);
+  }
+}
+
+// 4- target: all unique consoles
+report(1,$www_ok."4- managing console ports\n");
+
+$command="cat ".$gns_home_projects."/*/*.gns3";
+list($rc,$res)=get_exec($command,"",false);
+for ($i=0;$i<sizeof($res);$i++)
+{ $res[$i]=ltrim(rtrim($res[$i])); }
+
+$consoles_all=preg_grep("/\"console\": /",$res);
+$consoles_all=array_values($consoles_all);
+for ($u=0;$u<sizeof($consoles_all);$u++)
+{
+  $consoles_all[$u]=preg_replace("/^.*: /","",$consoles_all[$u]);
+  $consoles_all[$u]=preg_replace("/,.*$/","",$consoles_all[$u]);
+  $consoles_all[$u]=ltrim(rtrim($consoles_all[$u]));
+}
+$consoles_all=array_unique($consoles_all);
+sort($consoles_all);
+
+$consoles_total=sizeof($consoles_all);
+report(2,$www_ok."  I found $consoles_total unique console ports on target host...\n");
+
+$command="cat $config_file";
+list($rc,$res)=get_exec($command,"",false);
+$consoles_project=preg_grep("/\"console\": /",$res);
+sort($consoles_project);
+$consoles_project=array_unique($consoles_project);
+$console_needs=sizeof($consoles_project);
+report(2,$www_ok."  Project is using $console_needs unique console ports (null included)...\n");
+
+// 4b- generate new console ports
+report(2,$www_ok."  Generating new unique console ports pairs\n");
+for ($i=0;$i<$console_needs;$i++)
+{
+  $consoles_project[$i]=preg_replace("/^.*\"console\": /","",$consoles_project[$i]);
+  $consoles_project[$i]=preg_replace("/,.*$/","",$consoles_project[$i]);
+  $consoles_project[$i]=ltrim(rtrim($consoles_project[$i]));
+
+  $new=".*";
+  if ($consoles_project[$i]>0)
+  {
+    while(preg_grep("/^$new$/",$consoles_all))
+    { $new=rand($console_port_start,$console_port_end); }
+
+    array_push($consoles_all,$new);
+    $consoles_project[$i].=":".$new;
+
+    report(2,$www_ok."    Console ".preg_replace("/:/"," -> ",$consoles_project[$i])."\n");
+  }
+}
+
+// 5- target: extract all unique MAC
+report(1,$www_ok."5- managing MAC addresses\n");
+report(2,$www_ok."  Extracting unique MAC addresses on target host\n");
+$command="cat ".$gns_home_projects."/*/*.gns3";
+list($rc,$res)=get_exec($command,"",false);
+
+$all_project_mac=preg_grep("/\"mac_address\": /",$res);
+$all_project_mac=array_values($all_project_mac);
+for ($u=0;$u<sizeof($all_project_mac);$u++)
+{
+  $all_project_mac[$u]=preg_replace("/^.* \"/","",$all_project_mac[$u]);
+  $all_project_mac[$u]=preg_replace("/\".*$/","",$all_project_mac[$u]);
+  $all_project_mac[$u]=rtrim($all_project_mac[$u]);
+}
+$all_project_mac=array_unique($all_project_mac);
+sort($all_project_mac);
+report(3,"    I found ".sizeof($all_project_mac)." unique MACs on target host\n");
+
+$mac_all=$all_project_mac;
+
+report(2,$www_ok."  Extracting unique MAC addresses on project\n");
+$command="cat $config_file";
+list($rc,$res)=get_exec($command,"",false);
+
+$from_project_uuid_mac=preg_grep("/\"mac_address\": /",$res);
+$from_project_uuid_mac=array_values($from_project_uuid_mac);
+for ($u=0;$u<sizeof($from_project_uuid_mac);$u++)
+{
+  $from_project_uuid_mac[$u]=preg_replace("/^.* \"/","",$from_project_uuid_mac[$u]);
+  $from_project_uuid_mac[$u]=preg_replace("/\".*$/","",$from_project_uuid_mac[$u]);
+  $from_project_uuid_mac[$u]=rtrim($from_project_uuid_mac[$u]);
+}
+$from_project_uuid_mac=array_unique($from_project_uuid_mac);
+sort($from_project_uuid_mac);
+report(2,$www_ok."    I found ".sizeof($from_project_uuid_mac)." unique MACs on project\n");
+
+$from_project_uuid_mac_new=array();
+for ($u=0;$u<sizeof($from_project_uuid_mac);$u++)
+{
+  while (preg_grep("/$mac_new/",$mac_all)) { $mac_new=gen_mac(); }
+  array_push($from_project_uuid_mac_new,$mac_new);
+  array_push($mac_all,$mac_new);
+}
+
+// 5b- generate new macaddr pairs
+report(2,$www_ok."  Generating new unique MAC pairs\n");
+for ($u=0;$u<sizeof($from_project_uuid_mac);$u++)
+{ 
+  $to_project_uuid_mac_pairs[$u]=$from_project_uuid_mac[$u]."-".$from_project_uuid_mac_new[$u];
+  if ($verbose>=1) { report(2,"    #".$u.": ".preg_replace("/-/"," -> ",$to_project_uuid_mac_pairs[$u]."\n")); }
+}
+
+// 6- update project file of uuid + rename directories uuid + consoles + MAC addresses
+report(1,$www_ok."6- Finalizing target...\n");
+
+report(2,$www_ok."  - Regenerating target file $config_file...\n");
+
+$fd=fopen($config_file,"r");
+if (!$fd) { report(0,$www_bad."### ERROR: Cant open $config_file !!, stopping\n"); exit(1); }
+
+$config=array();
+while (($line = fgets($fd, 4096)) !== false)
+{ array_push($config,$line); }
+fclose($fd);
+
+for ($i=0;$i<sizeof($config);$i++)
+{
+  if (preg_match("/\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/",$config[$i])) // uuid
+  {
+    $uuid_type=preg_replace("/\": .*$/","",$config[$i]);
+    $uuid_type=preg_replace("/^.*\"/","",$uuid_type);
+    $uuid_type=ltrim(rtrim($uuid_type));
+    
+    $pattern="/^.*\"".$uuid_type."\": /";
+    $uuid_value=preg_replace("/^.*\"".$uuid_type."\": /","",$config[$i]);
+    $uuid_value=preg_replace("/[\",]/","",$uuid_value);
+    $uuid_value=ltrim(rtrim($uuid_value));
+
+    if ($verbose<5)
+    { report(4,$www_ok."    Config: $config[$i]"); }
+    report(2,$www_ok."      Found UUID type $uuid_type, value=$uuid_value, replacing it\n");
+
+    $line=preg_grep("/^$uuid_value:/",$to_project_uuid_pairs);
+    if (!$line)
+    {
+      report(0,$www_bad."### ERROR cant find a pair with UUID=$uuid_value\n");
+      sleep (5);
+    }
+
+    $line=array_values($line);
+    if (sizeof($line)>1)
+    {
+      report(0,$www_bad."### ERROR found multiple pairs for UUID=$uuid_value\n");
+      var_dump($line);
+      sleep (5);
+    }
+    else
+    {
+      $uuid_new=preg_replace("/^.*:/","",reset($line));
+      $config[$i]=preg_replace("/$uuid_value/",$uuid_new,$config[$i]);
+    }
+    report(4,$www_ok."       New: $config[$i]");
+  }
+  else if (preg_match("/\"mac_address\": /",$config[$i])) // MAC
+  {
+    $mac_value=preg_replace("/^.*\"mac_address\": \"/","",$config[$i]);
+    $mac_value=preg_replace("/\".*$/","",$mac_value);
+    $mac_value=ltrim(rtrim($mac_value));
+
+    if ($verbose<5) { report(4,"    Config: $config[$i]"); }
+    report(4,$www_ok."      Found MAC: $mac_value, replacing it\n");
+
+    if (!($line=preg_grep("/^$mac_value-/",$to_project_uuid_mac_pairs)))
+    {
+      report(0,$www_bad."ERROR in $config_file: cant find $mac_value\n");
+      sleep (5);
+    }
+    else
+    {
+      $mac_new=preg_replace("/^.*-/","",reset($line));
+      $config[$i]=preg_replace("/$mac_value/",$mac_new,$config[$i]);
+    }
+
+    report(4,$www_ok."       New: $config[$i]");
+  }
+  else if (preg_match("/^.*\"console\": /",$config[$i])) // console
+  {
+    $console_value=preg_replace("/^.*\"console\": /","",$config[$i]);
+    $console_value=preg_replace("/[\",]/","",$console_value);
+    $console_value=ltrim(rtrim($console_value));
+
+    if ($verbose<5) { report(4,"    Config: $config[$i]"); }
+    report(2,$www_ok."      Found Console port = \"$console_value\", replacing it\n");
+
+    if ($console_value>0)
+    {
+      if (!($line=preg_grep("/^$console_value:/",$consoles_project)))
+      {
+        report(0,$www_bad."ERROR in $config_file : cant find $console_value\n");
+        sleep (5);
+      }
+      else
+      {
+        $console_new=preg_replace("/^.*:/","",reset($line));
+        $console_new=preg_replace("/[\",]/","",$console_new);
+        $config[$i]=preg_replace("/: $console_value/",": $console_new",$config[$i]);
+      }
+    }
+  }
+  else if (preg_match("/\"name\": \"$from_project_name\",/",$config[$i])) // project name
+  {
+    if ($verbose<5) { report(4,"    Config: $config[$i]"); }
+    report(2,$www_ok."      Found project name = \"$from_project_name\", replacing it\n");
+    
+    $config[$i]=preg_replace("/\"name\": \"$from_project_name\",/","\"name\": \"$to_project_name\",",$config[$i]);
+  }
+
+  report(4,$www_ok."       New: $config[$i]");
+}
+$tmpfile=tempnam("/tmp", "project_$to_project_uuid");
+report(2,$www_ok."    Writing new configuration file ($tmpfile)...\n");
+
+$fd=fopen($tmpfile,"w");
+if (!$fd) { report(0,$www_bad."Cant create $tmpfile !!, stopping, recalling a copy has been created on $to_host !!\n"); exit(1); }
+for ($i=0;$i<sizeof($config);$i++)
+{ fwrite($fd,$config[$i]); }
+fclose($fd);
+
+report(2,$www_ok."  - Replacing target project configuration file with $tmpfile...\n");
+
+$config_file_new="$gns_home_projects/$to_project_uuid/$to_project_name.gns3";
+report(3,$www_ok."    Target config file will be $config_file_new\n");
+$rc=rename($tmpfile,$config_file_new);
+unlink($tmpfile);
+unlink($config_file);
+// report(0,"\n");
+
+report(3,$www_ok."  - Resetting targets ownerships...\n");
+$file_owner=fileowner($gns_home_projects);
+$file_group=fileowner($gns_home_projects);
+chown($config_file_new,$file_owner);
+chgrp($config_file_new,$file_group);
+
+// 6b- rename node directories with new uuids
+report(3,$www_ok."    Identifying project directories with an UUID...\n"); // into $gns_home_projects/$to_project_uuid...\n");
+// find is failing with NAS using ZFS subvolumes (loop detected)
+// $command="find $gns_home_projects/$to_project_uuid -type d 2>/dev/null";
+// $dirs=get_exec($command,"",false);
+find_all_files(1,"$gns_home_projects/$to_project_uuid",$dirs);
+$dirs_uuid=preg_grep("/\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$dirs);
+array_push($dirs_uuid,"$gns_home_projects/$from_project_uuid");
+$dirs_uuid=array_unique($dirs_uuid);
+sort($dirs_uuid);
+report(3,$www_ok."      Detected ".sizeof($dirs_uuid)." directories.\n");
+
+// Now move project dir entry (always first) to end of array
+$t=array_shift($dirs_uuid);
+array_push($dirs_uuid,$t);
+
+report(3,$www_ok."    Renaming target nodes directories with new UUIDs...\n");
+
+$to_project_uuid="";
+for ($d=0;$d<sizeof($dirs_uuid);$d++)
+{
+  if (preg_match("/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$dirs_uuid[$d]))
+  {
+    report(4,$www_ok."      Detected $dirs_uuid[$d]\n");
+    for ($u=0;$u<sizeof($to_project_uuid_pairs);$u++)
+    {
+      $t=preg_split("/:/",$to_project_uuid_pairs[$u]);
+      $uuid_source=$t[0];
+      $uuid_target=$t[1];
+      
+      if ($uuid_source==$from_project_uuid) { $to_project_uuid=$uuid_target; }
+      
+      if (preg_match("/\/$uuid_source$/",$dirs_uuid[$d]))
+      {
+        $dir_source=rtrim($dirs_uuid[$d]);
+        $dir_target=rtrim(preg_replace("/$uuid_source/",$uuid_target,$dir_source));
+        
+        if (!preg_match("/\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$dir_target))
+        {
+          report(0,$www_bad."    ###ERROR: target directory dont end with an UUID: $dir_target\n");
+        }
+        else if ($from_project_dir_norename==0) // Dont rename if asked
+        {
+          report(4,$www_ok."      Moving $dir_source\n          To $dir_target...");
+          $rc=rename($dir_source,$dir_target);
+          if ($rc==true)
+          { report(4,$www_ok."done...\n"); }
+          else // Try zfs rename also ?
+          {
+            $zfs_gns_home_projects=dirTOzdataset($gns_home_projects);
+            $command="zfs rename $zfs_gns_home_projects/$uuid_source  $zfs_gns_home_projects/$uuid_target";
+            report(4,$www_bad."Trying $command...\n");
+            list($rc,$res)=get_exec($command,"",false);
+            if ($rc!=0)
+            {
+              // Project dir rename
+              $error_display=1;
+              if (preg_match("/\/$uuid_source$/",$dir_source))
+              {
+                if ($ignore_rename=='P') { $error_display=0; }
+              }
+              else
+              {
+                if ($ignore_rename=='N') { $error_display=0; }
+              }
+              
+              if ($error_display==1)
+              {
+                report(0,"\n".$www_bad."      ###ERROR: Moving $dir_source to $dir_target FAILED with rc=$rc, try zfs rename.\n");
+              }
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+  $dir_source=$dir_project;
+  $dir_target=rtrim(preg_replace("/$from_project_uuid/",$to_project_uuid,$dir_source));
+}
+
+report(0,$www_ok."Reseting $from_project_name ($from_project_uuid) -> ### SUCCESS ###\n");
+report(0,$www_ok."You should now send a SIGHUP to GNS3 server\n");
+
+exit(0);
+?>

@@ -1,0 +1,41 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+echo "GNS3 safe (no running VM) restart"
+echo
+
+PS_GNS=`ps axo pid,command | grep -v grep | grep "\/usr\/share\/gns3\/gns3-server\/bin\/python" | awk '{print $1;}'`
+
+if [ "x$PS_GNS" = "x" ]
+then
+  echo "Cant get gns3 server pid, exiting"
+  exit 1
+fi
+
+echo "GNS3 server PID=$PS_GNS"
+
+PS=`ps o command --ppid $PS_GNS|egrep -v "(ubridge|dynamips)"`
+PS_NUM=`echo "$PS" | wc -l`
+
+((PS_NUM-=1))
+PS=`echo "$PS" | tail -$PS_NUM`
+
+if [ $PS_NUM -eq 0 ]
+then
+  echo "No running VM, restarting GNS3..."
+  service gns3 stop
+  service gns3 start
+else
+  echo "No restart, $PS_NUM VMs are running:"
+  echo "$PS" | colrm 80
+  exit 1
+fi

@@ -1,0 +1,77 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="$0 [ -H Host ]"
+
+while getopts 'H:' OPTIONS
+do
+   case "$OPTIONS" in
+        H)      HOST="$OPTARG";;
+        [?])
+          print >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+if [ "x$HOST" = "x" ]
+then
+   L=`cat /proc/loadavg | awk '{ print $1;}'`
+   echo "$L * 100 / $(nproc)" | bc
+   L=`cat /proc/loadavg | awk '{ print $2;}'`
+   echo "$L * 100 / $(nproc)" | bc
+   L=`cat /proc/loadavg | awk '{ print $3;}'`
+   echo "$L * 100 / $(nproc)" | bc
+
+   echo `iostat -c |grep -v "^$"|tail -1|awk '{print $NF;}'`
+
+   echo `free | grep "^Mem:" | awk '{print $NF;}'`
+   echo `free | grep "^Mem:" | awk '{print $2;}'`
+   echo `free | grep "^Swap:" | awk '{print $4;}'`
+   echo `free | grep "^Swap:" | awk '{print $2;}'`
+
+   echo $(nproc)
+
+   df -k /home/gns3/GNS3|tail -1 | awk '{print $4"/"$2;}'
+
+   exit
+fi
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+ssh -i $VIGRID_SSHKEY_GNS $VIGRID_SSHKEY_OPTIONS gns3@$HOST /home/gns3/vigrid/bin/host-stats 2>/dev/null
+RC=$?
+
+if [ $RC -eq 127 ] # target is not present, possibly, installing it on remote host
+then
+
+  cat /home/gns3/vigrid/bin/host-stats | ssh -i $VIGRID_SSHKEY_GNS $VIGRID_SSHKEY_OPTIONS gns3@$HOST 'mkdir -p /home/gns3/vigrid/bin;cat >/home/gns3/vigrid/bin/host-stats'
+  ssh -i $VIGRID_SSHKEY_GNS $VIGRID_SSHKEY_OPTIONS gns3@$HOST 'chmod 755 /home/gns3/vigrid/bin/host-stats'
+
+  ssh -i $VIGRID_SSHKEY_GNS $VIGRID_SSHKEY_OPTIONS gns3@$HOST /home/gns3/vigrid/bin/host-stats 2>/dev/null
+  RC=$?
+fi
+
+exit $RC

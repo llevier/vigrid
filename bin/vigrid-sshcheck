@@ -1,0 +1,70 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="$0 -h Host [ -a ] -s SSHkey -u user"
+
+ADD=0
+
+while getopts 'ah:s:u:' OPTIONS
+do
+   case "$OPTIONS" in
+        a)      ADD=1;;
+        h)      HOST="$OPTARG";;
+        s)      SSHKEY="$OPTARG";;
+        u)      USER="$OPTARG";;
+        [?])
+          print $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+if [ "x$HOST" = "x" -o "x$SSHKEY" = "x" -o "x$USER" = "x" ]
+then
+  echo "$USAGE"
+  exit 1
+fi
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+if [ $ADD -eq 1 ]
+then
+  echo "Adding SSH key requested..."
+  
+  PASS=`cat /home/gns3/.config/GNS3/gns3_server.conf 2>/dev/null|grep "^password" | awk '{print $NF;}'`
+  if [ "x$PASS" != "x" -a "x$USER" = "xgns3" ]
+  then
+    echo "Hint: 'gns3' password on the Slave server should be : '$PASS' (without quotes)"
+  else
+    echo "I am sorry, I cant find the password of gns3 user, you will have to find it yourself."
+  fi
+  
+  cat $SSHKEY.pub | ssh $USER@$HOST 'mkdir -p ~/.ssh 2>/dev/null;cat >>~/.ssh/authorized_keys'
+fi
+
+ssh -i $SSHKEY $VIGRID_SSHKEY_OPTIONS $USER@$HOST true
+RC=$?
+
+exit $RC

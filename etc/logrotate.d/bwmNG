@@ -1,0 +1,8 @@
+/var/log/bwmNG*.log {
+  rotate 1
+  missingok
+  create 644 gns3 gns3
+  copytruncate
+  hourly
+  size 10M
+}

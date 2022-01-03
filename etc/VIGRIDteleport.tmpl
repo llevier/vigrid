@@ -1,0 +1,32 @@
+dev tun
+persist-tun
+persist-key
+cipher AES-128-CBC
+ncp-disable
+auth SHA256
+tls-client
+client
+duplicate-cn
+resolv-retry 60
+remote %%VIGRID_GATEWAY_NAME%% 443 tcp-client
+remote %%VIGRID_GATEWAY_IP%% 443 tcp-client
+auth-user-pass /etc/openvpn/VIGRIDteleport.login
+remote-cert-tls server
+status /var/log/openvpn.log
+verb 3
+keepalive 10 120
+comp-lzo adaptive
+
+key-direction 1
+
+# <ca></ca>
+%%VIGRID_TLS_CA%%
+
+# <cert></cert>
+%%VIGRID_TLS_CERT%%
+
+# <key></key>
+%%VIGRID_TLS_KEY%%
+
+# <tls-auth></tls-auth>
+%%VIGRID_TLS_AUTH%%

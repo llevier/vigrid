@@ -1,0 +1,97 @@
+#!/bin/bash
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+[ ! -f /usr/bin/sshpass ] && apt install -y sshpass
+
+USAGE="$0 -H 'Host list' [ -U username -P password ] -A on|off|warm|reset
+  Nota: upon no username or password, Vigrid config will be used"
+
+while getopts 'A:U:P:H:V:' OPTIONS
+do
+   case "$OPTIONS" in
+        V)      VIGRID_DATA=1;;
+        A)      ACTION="$OPTARG";;
+        U)      POWER_USER="$OPTARG";;
+        P)      POWER_PASS="$OPTARG";;
+        H)      LIST="$OPTARG";;
+        [?])
+          print >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+[ "x$ACTION" = "x" ] && echo $USAGE && exit 0
+
+if [ "x$LIST" = "x" ]
+then
+  echo "No host, using Vigrid configuration"
+
+  for i in $VIGRID_POWER_SLAVE_HOSTS
+  do
+    HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+    NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+    
+    CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
+    if [ $CHK -eq 0 ]
+    then
+      LIST="$LIST $HOST"
+    else
+      echo "Skipping myself..."
+    fi
+  done
+fi
+  
+[ "x$LIST" = "x" ] && echo "No host anywhere, exiting" && exit 1
+
+ORDERS="on off warm reset"
+
+OK=0
+for i in $ORDERS
+do
+  [ "x$ACTION" = "x$i" ] && OK=1
+done
+
+if [ $OK -eq 0 ]
+then
+  echo $USAGE
+  exit 1
+fi
+
+ORDER="power $ACTION"
+
+[ "x$POWER_USER" = "x" ] && echo "No user defined, using Vigrid configuration" && POWER_USER=$VIGRID_POWER_USER
+[ "x$POWER_PASS" = "x" ] && echo "No pass defined, using Vigrid configuration" && POWER_PASS=$VIGRID_POWER_PASS
+
+for i in $LIST
+do
+  echo "### Executing on $i: $ARGS"
+  
+  # Their offer: diffie-hellman-group14-sha1,diffie-hellman-group1-sha1
+  eval sshpass -p "'$POWER_PASS'" ssh  -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=error -oKexAlgorithms=+diffie-hellman-group1-sha1 $POWER_USER@$i $ORDER 2>&1 | sed 's/^/  /'
+  [ $? -ne 0 ] && echo "### ORDER FAILED !"
+done

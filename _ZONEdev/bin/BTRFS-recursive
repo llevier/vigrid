@@ -1,0 +1,129 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+snap() {
+    local vol target
+    vol="$(readlink -e "$1")"
+    target="$2"
+
+    if [ -e "$target" ]; then
+        echo "Target \"$target\" already exists. Exiting."
+        exit 1
+    fi
+
+    btrfs subvolume snapshot "$vol" "$target" || exit $?
+
+    local realvol="$vol"
+    while ! btrfs subvolume list -at "$vol" | tail -n+3 | cut -f5- |
+        sed "s/<FS_TREE>\///" | sort | grep -q "^$realvol\$"
+    do
+        realvol="${realvol#*/}"
+    done
+
+    local nested
+    readarray -t nested < <(
+    btrfs subvolume list -at "$vol" | tail -n+3 | cut -f5- | \
+        sed "s/<FS_TREE>\///" | grep "^$realvol/" | sort
+    )
+
+    local nvol
+    for nvol in "${nested[@]}"; do
+        relapath="${nvol#$realvol/}"
+        rmdir "$target/$relapath"
+        btrfs subvolume snapshot "$vol/$relapath" "$target/$relapath"
+    done
+}
+
+delete() {
+    echo "Deletion requested:"
+    
+    local vol to_delete=()
+    for vol in "$@"; do
+        vol="$(realpath "$vol")"
+
+        local realvol="$vol"
+        while ! btrfs subvolume list -at "$vol" | tail -n+3 | cut -f5- |
+            sed "s/<FS_TREE>\///" | sort | grep -q "^$realvol\$"
+        do
+            if [[ ! "$realvol" =~ "/" ]]; then
+                echo "Subvolume \"$vol\" not a BTRfs volume. Exiting."
+                exit 1
+            fi
+            realvol="${realvol#*/}"
+        done
+
+        local nested
+        readarray -t nested < <(
+        btrfs subvolume list -at "$vol" | tail -n+3 | cut -f5- | \
+            sed "s/<FS_TREE>\///" | grep "^$realvol/" | sort -r
+        )
+
+        local nvol
+        for nvol in "${nested[@]}"; do
+            to_delete+=("$vol/${nvol#$realvol/}")
+        done
+
+        to_delete+=("$vol")
+    done
+
+    if [ "$interactive" ]; then
+        local to_delete_output yn
+        printf -v to_delete_output ', "%s"' "${to_delete[@]}"
+        echo "The following subvolumes will be deleted, in this order:"
+        echo "${to_delete_output:2}"
+        echo
+        read -rp "Do you really want to continue (y|N)? " yn
+        if [[ "$yn" != [Yy] ]]; then
+            echo "Deletion aborted."
+            return 1
+        fi
+    fi
+
+    for nvol in "${to_delete[@]}" "$vol"; do
+        btrfs property set -ts "$nvol" ro false
+    done
+    
+    echo btrfs subvolume delete -C "${to_delete[@]}"
+    btrfs subvolume delete -C "${to_delete[@]}"
+    
+    echo rm -rf "$nvol"
+    rm -rf "$nvol" 2>/dev/null  
+}
+
+main() {
+    local delete interactive
+
+    while true; do
+        case "$1" in
+            -d)
+                shift
+                delete=1
+                ;;
+            -i)
+                shift
+                interactive=1
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    if [ "$delete" ]; then
+        delete "$@"
+    else
+        snap "$@"
+    fi
+}
+
+main "$@"
+

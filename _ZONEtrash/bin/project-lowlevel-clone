@@ -1,0 +1,636 @@
+#!/usr/bin/php
+<?php
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+// Genesis home directory
+$gns_home="/home/gns3";
+$gns_home_projects="/home/gns3/GNS3/projects";
+
+// Genesis functions
+include "/home/gns3/vigrid/www/site/manager/gns3_functions.php";
+
+// turn off output buffering
+ob_implicit_flush();
+
+$host=gethostname();
+
+$SSHauth="ssh -i /home/gns3/.ssh/id_$host -o StrictHostKeyChecking=no";
+$SSHdo=$SSHauth." gns3";
+
+$opt=getopt("f:p:T:P:r:");
+$from_host=$opt['f'];
+$to_host=$opt['T'];
+$from_project=$opt['p'];
+$to_project=$opt['P'];
+
+$report_file=$opt['r'];
+
+$verbose=0;
+
+if (($from_host=="") || ($from_project=="") || ($to_host=="") || ($to_project==""))
+{
+  print("$argv[0] arguments:
+    -f host_from
+    -T host_to
+    -p project_source
+    -P project_target
+    [ -r report_file ]\n");
+
+  exit(1);
+}
+
+if ($report_file) { unlink($report_file); }
+
+if ($from_host==$to_host)
+{
+  report("I cant replicate to myself :-)\n");
+  // exit(1);
+}
+
+if ($host==$from_host)
+{ report("I am source host, ok\n"); }
+if ($host==$to_host)
+{ report("I am target host, ok\n"); }
+
+
+// get controller configuration to extract Genesis hosts...
+$gns_controller=gns_getcontrollers();
+
+report("Cloning project $from_project from ");
+if ($host==$from_host)
+{ report("me to project $to_project on host $to_host..."); }
+else if ($host==$to_host)
+{ report("host $from_host to project $to_project on me..."); }
+else
+{ report("host $from_host to project $to_project on host $to_host..."); }
+
+// 1- source: get project id and get homedir
+// 2- target: get projects UUIDs to generate new project id
+// 3- target: extract all unique uuid
+// 4- generate new uuid
+// 5- target: all unique consoles
+// 6- generate new console ports
+// 7- target: extract all unique MAC
+// 8- generate new macaddr pairs
+// 9- rsync avec new project id_$host
+// 10- update project file of uuid + rename directories uuid + consoles + MAC addresses
+// 11- rename node directories with new uuids
+// 12- chmod + chown target project dir
+// 13- SIGHUP to gns3-server
+
+report("\n\n");
+report("Phase 1: preparation\n");
+
+// 1- source: get project id and get homedir
+if ($host!=$from_host)
+{ report("  Searching for source project home directory on source host $from_host...\n"); }
+else
+{ report("  Searching for source project home directory on my directories...\n"); }
+
+$projects=gns_getprojects($gns_controller,$from_host);
+$project_id="";
+for ($p=0;$p<sizeof($projects);$p++)
+{
+  if ($projects[$p]['name']==$from_project)
+  { $project_id=$projects[$p]['project_id']; break; }
+}
+if ($project_id=="")
+{ report("I am sorry, I failed to find the ID of project $from_project.\n"); exit(1); }
+report("    Project ID is $project_id\n");
+
+if ($host!=$from_host)
+{ report("    Searching on host $from_host...\n"); }
+else
+{ report("    Searching on my directories...\n"); }
+
+if ($host!=$from_host)
+{ $command="$SSHdo"."@$from_host find $gns_home_projects -type d -name $project_id 2>/dev/null"; }
+else
+{ $command="find $gns_home_projects -type d -name $project_id 2>/dev/null"; }
+$res=get_exec($command,"",false);
+$from_project_dir=rtrim($res[0]);
+
+if ($from_project_dir=="")
+{ report("I am sorry, I failed findling home directory for project ID $project_id. Exiting\n"); exit(1); }
+report("      Found $from_project_dir\n");
+
+// 2- target: get projects UUIDs to generate new project id
+report("  Extracting all project UUIDs on target host $to_host...\n");
+unset($projects);
+$projects=gns_getprojects($gns_controller,$to_host);
+
+$to_project_uuid_list=array();
+for ($p=0;$p<sizeof($projects);$p++)
+{ array_push($to_project_uuid_list,$projects[$p]['project_id']); }
+report("  Generating unique target project ID for host $to_host...\n");
+while (preg_grep("/$uuid_new/",$to_project_uuid_list)) { $uuid_new=gen_uuid(); }
+$to_project_uuid=$uuid_new;
+report("    Target project uuid will be $to_project_uuid\n");
+
+if ($to_project_uuid=="")
+{ report("I am sorry but I cant generate a unique UUID for target project, exiting.\n"); exit(1); }
+
+$to_project_dir=$gns_home_projects."/".$to_project_uuid;
+
+// 3- target: extract all unique uuid
+report("  Managing UUIDs\n");
+report("    Extracting unique project UUIDs\n");
+if ($host!=$to_host) // replicate not from me
+{ $command="$SSHdo"."@$to_host cat '".$gns_home_projects."/*/*.gns3'"; }
+else
+{ $command="cat ".$gns_home_projects."/*/*.gns3"; }
+$res=get_exec($command,"",false);
+
+$all_project_uuid=preg_grep("/\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/",$res);
+usort($all_project_uuid, 'compare_name');
+report("      I found ".sizeof($all_project_uuid)." unique UUIDs on target host\n");
+
+for ($u=0;$u<sizeof($all_project_uuid);$u++)
+{
+  $all_project_uuid[$u]=preg_replace("/^.* \"/","",$all_project_uuid[$u]);
+  $all_project_uuid[$u]=preg_replace("/\".*$/","",$all_project_uuid[$u]);
+  $all_project_uuid[$u]=rtrim($all_project_uuid[$u]);
+}
+
+$uuid_all=$all_project_uuid;
+
+report("    Extracting project UUIDs\n");
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host cat '".$from_project_dir."/*.gns3'"; }
+else
+{ $command="cat ".$from_project_dir."/*.gns3"; }
+$res=get_exec($command,"",false);
+
+$from_project_uuid=preg_grep("/\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/",$res);
+usort($from_project_uuid, 'compare_name');
+report("      I found ".sizeof($from_project_uuid)." unique UUIDs on project\n");
+
+for ($u=0;$u<sizeof($from_project_uuid);$u++)
+{
+  $from_project_uuid[$u]=preg_replace("/^.* \"/","",$from_project_uuid[$u]);
+  $from_project_uuid[$u]=preg_replace("/\".*$/","",$from_project_uuid[$u]);
+  $from_project_uuid[$u]=rtrim($from_project_uuid[$u]);
+}
+
+$from_project_uuid_new=array();
+
+for ($u=0;$u<sizeof($from_project_uuid);$u++)
+{
+  while (preg_grep("/$uuid_new/",$uuid_all)) { $uuid_new=gen_uuid(); }
+  array_push($from_project_uuid_new,$uuid_new);
+  array_push($uuid_all,$uuid_new);
+}
+
+// 4- generate new uuids
+report("    Generating new unique UUIDs pairs\n");
+for ($u=0;$u<sizeof($from_project_uuid);$u++)
+{ 
+  $to_project_uuid_pairs[$u]=$from_project_uuid[$u].":".$from_project_uuid_new[$u];
+  if ($verbose==1) { report("      #".$u.": ".preg_replace("/:/"," -> ",$to_project_uuid_pairs[$u]."\n")); }
+}
+
+// 5- target: all unique consoles
+report("  Managing console ports\n");
+
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host cat '".$gns_home."/.config/GNS3/gns3_server.conf'"; }
+else
+{ $command="cat ".$gns_home."/.config/GNS3/gns3_server.conf"; }
+$res=get_exec($command,"",false);
+for ($i=0;$i<sizeof($res);$i++)
+{ $res[$i]=ltrim(rtrim($res[$i])); }
+
+$line=preg_grep("/^console_start_port_range.*=/",$res);
+$console_port_start=ltrim(rtrim(preg_replace("/^.*=/","",reset($line))));
+$line=preg_grep("/^console_end_port_range.*=/",$res);
+$console_port_end=ltrim(rtrim(preg_replace("/^.*=/","",reset($line))));
+report("    Console & telnet ports range on target host is from $console_port_start to $console_port_end.\n");
+
+if ($host!=$to_host) // replicate not from me
+{ $command="$SSHdo"."@$to_host cat '".$gns_home_projects."/*/*.gns3'"; }
+else
+{ $command="cat ".$gns_home_projects."/*/*.gns3"; }
+$res=get_exec($command,"",false);
+for ($i=0;$i<sizeof($res);$i++)
+{ $res[$i]=ltrim(rtrim($res[$i])); }
+
+$consoles_all=preg_grep("/\"console\": /",$res);
+$consoles_total=sizeof($consoles_all);
+report("    $consoles_total console ports already defined on target host...\n");
+
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host cat '".$from_project_dir."/*.gns3'"; }
+else
+{ $command="cat ".$from_project_dir."/*.gns3"; }
+$res=get_exec($command,"",false);
+$consoles_project=preg_grep("/\"console\": /",$res);
+$console_needs=sizeof($consoles_project);
+report("    Project needs $console_needs unique console ports...\n");
+usort($consoles_project, 'compare_name');
+
+// 6- generate new console ports
+report("    Generating new unique console ports pairs\n");
+for ($i=0;$i<$console_needs;$i++)
+{
+  $consoles_project[$i]=preg_replace("/^.*\"console\": /","",$consoles_project[$i]);
+  $consoles_project[$i]=preg_replace("/,.*$/","",$consoles_project[$i]);
+  $consoles_project[$i]=ltrim(rtrim($consoles_project[$i]));
+
+  $new=".*";
+  if ($consoles_project[$i]>0)
+  {
+    while(preg_grep("/^$new$/",$consoles_all))
+    { $new=rand($console_port_start,$console_port_end); }
+
+    array_push($consoles_all,$new);
+    $consoles_project[$i].=":".$new;
+
+    if ($verbose==1) { report("      Console ".preg_replace("/:/"," -> ",$consoles_project[$i])."\n"); }
+  }
+}
+
+// 7- target: extract all unique MAC
+report("  Managing MAC addresses\n");
+report("    Extracting unique MAC addresses on target host\n");
+if ($host!=$to_host) // replicate not from me
+{ $command="$SSHdo"."@$to_host cat '".$gns_home_projects."/*/*.gns3'"; }
+else
+{ $command="cat ".$gns_home_projects."/*/*.gns3"; }
+$res=get_exec($command,"",false);
+
+$all_project_mac=preg_grep("/\"mac_address\": /",$res);
+usort($all_project_mac, 'compare_name');
+report("      I found ".sizeof($all_project_mac)." unique MACs on target host\n");
+
+for ($u=0;$u<sizeof($all_project_mac);$u++)
+{
+  $all_project_mac[$u]=preg_replace("/^.* \"/","",$all_project_mac[$u]);
+  $all_project_mac[$u]=preg_replace("/\".*$/","",$all_project_mac[$u]);
+  $all_project_mac[$u]=rtrim($all_project_mac[$u]);
+}
+
+$mac_all=$all_project_mac;
+
+report("    Extracting unique MAC addresses on project\n");
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host cat '".$from_project_dir."/*.gns3'"; }
+else
+{ $command="cat ".$from_project_dir."/*.gns3"; }
+$res=get_exec($command,"",false);
+
+$from_project_mac=preg_grep("/\"mac_address\": /",$res);
+usort($from_project_mac, 'compare_name');
+report("      I found ".sizeof($from_project_mac)." unique MACs on project\n");
+
+for ($u=0;$u<sizeof($from_project_mac);$u++)
+{
+  $from_project_mac[$u]=preg_replace("/^.* \"/","",$from_project_mac[$u]);
+  $from_project_mac[$u]=preg_replace("/\".*$/","",$from_project_mac[$u]);
+  $from_project_mac[$u]=rtrim($from_project_mac[$u]);
+}
+
+$from_project_mac_new=array();
+
+for ($u=0;$u<sizeof($from_project_mac);$u++)
+{
+  while (preg_grep("/$mac_new/",$mac_all)) { $mac_new=gen_mac(); }
+  array_push($from_project_mac_new,$mac_new);
+  array_push($mac_all,$mac_new);
+}
+
+// 8- generate new macaddr pairs
+report("    Generating new unique UUIDs pairs\n");
+for ($u=0;$u<sizeof($from_project_mac);$u++)
+{ 
+  $to_project_mac_pairs[$u]=$from_project_mac[$u]."-".$from_project_mac_new[$u];
+  if ($verbose==1) { report("      #".$u.": ".preg_replace("/:/"," -> ",$to_project_mac_pairs[$u]."\n")); }
+}
+
+report("Phase 2: data transfer...\n");
+// 9- rsync avec new project id_$host
+report("  Rsyncing project data directory from $from_host to $to_host... Please be patient...\n");
+if ($host!=$from_host) // replicate not from me
+{
+  if ($host!=$to_host) // replicate not from me and to another host
+  { $command="$SSHdo"."@$from_host /usr/bin/rsync -valHgoprEDt --inplace --rsh=\"$SSHauth"."\" $from_project_dir/* gns3@$to_host:$to_project_dir/"; }
+  else // replicate to me
+  { $command="$SSHdo"."@$from_host /usr/bin/rsync -valHgoprEDt --inplace --rsh=\"$SSHauth"."\" $from_project_dir/* $to_project_dir/"; }
+}
+else if ($host!=$to_host) // replicate from me to another host
+{ $command="/usr/bin/rsync -valHgoprEDt --inplace --rsh=\"$SSHauth"."\" $from_project_dir/* gns3@$to_host:$to_project_dir/"; }
+else // replicate from me to me
+// { $command="/usr/bin/rsync -valHgoprEDt --inplace --rsh=\"$SSHauth"."\" $from_project_dir/* gns3@$to_host:$to_project_dir/"; }
+{ $command="/home/gns3/vigrid/bin/btrfs-recursive \"/Bstorage$from_project_dir\" \"/Bstorage$to_project_dir\""; }
+
+print("C=$command\n");
+$res=get_exec($command,"    ",true);
+
+// 10- update project file of uuid + rename directories uuid + consoles + MAC addresses
+report("Phase 3: finalizing target...\n");
+report("  Updating target project file to change UUIDs, MAC addresses & console ports...\n");
+
+report("    Renaming target project file to new name: $to_project.\n");
+$config_file="$to_project_dir/$to_project.gns3";
+
+$command="";
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host "; }
+$command.="mv '$to_project_dir/$from_project.gns3' '$config_file' ";
+$res=get_exec($command,"",true);
+
+if ($host!=$to_host) // must copy project config file locally to update it
+{
+  $command="$SSHdo"."@$to_host cat '$config_file'";
+  $fd=popen($command,"r");
+  if (!$fd) { print("Cant open $to_project_dir/*.gns3 !!, stopping\n"); exit(1); }
+}
+else
+{
+  $fd=fopen($config_file,"r");
+  if (!$fd) { print("Cant open $config_file !!, stopping\n"); exit(1); }
+}
+$config=array();
+while (($line = fgets($fd, 4096)) !== false)
+{ array_push($config,$line); }
+fclose($fd);
+
+for ($i=0;$i<sizeof($config);$i++)
+{
+  if (strpos($config[$i],"\"$from_project\""))
+  // if (preg_match("/\"$from_project\"/i",$config[$i]))
+  {
+    if ($verbose==1)
+    { print("Detected project name: $from_project\n"); }
+  
+    // $config[$i]=preg_replace("/\"$from_project\"/","\"".$to_project."\"",$config[$i]);
+    $count=1;
+    $config[$i]=str_replace("\"$from_project\"","\"$to_project\"",$config[$i],$count);
+    
+    if ($verbose==1)
+    { report("  New=$config[$i]\n"); }
+  }
+  else if (preg_match("/\"\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\"/",$config[$i])) // uuid
+  {
+    $uuid_type=preg_replace("/\": .*$/","",$config[$i]);
+    $uuid_type=preg_replace("/^.*\"/","",$uuid_type);
+    $uuid_type=ltrim(rtrim($uuid_type));
+    
+    $pattern="/^.*\"".$uuid_type."\": /";
+    $uuid_value=preg_replace("/^.*\"".$uuid_type."\": /","",$config[$i]);
+    $uuid_value=preg_replace("/[\",]/","",$uuid_value);
+    $uuid_value=ltrim(rtrim($uuid_value));
+
+    if ($verbose==1)
+    { report("UUID type $uuid_type, value=$uuid_value"); }
+  
+    // if (preg_match("/template_id/i",$uuid_type))
+    // {
+      // print("\n  *** WARNING !!! Template ID $uuid_value might need to exist on target host $to_host ***\n");
+    // }
+    if (preg_match("/project_id/i",$uuid_type))
+    {
+      $config[$i]=preg_replace("/$project_id/",$to_project_uuid,$config[$i]);
+    }
+    else
+    {
+      if (!($line=preg_grep("/^$uuid_value:/",$to_project_uuid_pairs)))
+      {
+        report("ERROR : cant find $uuid_value\n");
+      }
+      else
+      {
+        $uuid_new=preg_replace("/^.*:/","",reset($line));
+        $config[$i]=preg_replace("/$uuid_value/",$uuid_new,$config[$i]);
+      }
+    }
+    if ($verbose==1)
+    { report("\n  New=$config[$i]\n"); }
+  }
+  else if (preg_match("/\"mac_address\": /",$config[$i])) // MAC
+  {
+    $mac_value=preg_replace("/^.*\"mac_address\": \"/","",$config[$i]);
+    $mac_value=preg_replace("/\".*$/","",$mac_value);
+    $mac_value=ltrim(rtrim($mac_value));
+
+    if ($verbose==1)
+    { report("MAC: $mac_value"); }
+
+    if (!($line=preg_grep("/^$mac_value-/",$to_project_mac_pairs)))
+    {
+      report("ERROR : cant find $mac_value\n");
+    }
+    else
+    {
+      $mac_new=preg_replace("/^.*-/","",reset($line));
+      $config[$i]=preg_replace("/$mac_value/",$mac_new,$config[$i]);
+    }
+
+    if ($verbose==1)
+    { report("\n  New=$config[$i]\n"); }
+  }
+  else if (preg_match("/^.*\"console\": /",$config[$i])) // console
+  {
+    $console_value=preg_replace("/^.*\"console\": /","",$config[$i]);
+    $console_value=preg_replace("/[\",]/","",$console_value);
+    
+    if ($verbose==1)
+    { report("Console port = $console_value"); }
+
+    if ($console_value>0)
+    {
+      $console_new=preg_replace("/^.*:/","",reset($line));
+      $console_new=preg_replace("/[\",]/","",$console_new);
+      $config[$i]=preg_replace("/: $console_value/",": $console_new",$config[$i]);
+    }
+
+    if ($verbose==1)
+    { report("  New=$config[$i]\n"); }
+  }
+}
+$tmpfile=tempnam("/tmp", "project_$to_project_uuid");
+report("    Writing new configuration file ($tmpfile)...\n");
+
+$fd=fopen($tmpfile,"w");
+if (!$fd) { report("Cant create $tmpfile !!, stopping, recalling a copy has been created on $to_host !!\n"); exit(1); }
+for ($i=0;$i<sizeof($config);$i++)
+{ fwrite($fd,$config[$i]); }
+fclose($fd);
+
+report("    Replacing target project configuration file with $tmpfile...\n");
+if ($host!=$to_host)
+{
+  $command="cat $tmpfile | $SSHdo"."@$to_host cat >'$config_file'";
+  $fd=popen($command,"r");
+  if (!$fd) { print("Cant open $to_project_dir/*.gns3 !!, stopping\n"); exit(1); }
+}
+else
+{ $command="mv $tmpfile '$config_file'"; }
+$res=get_exec($command,"",false);
+unlink($tmpfile);
+report("\n");
+
+// 11- rename node directories with new uuids
+report("    Renaming target nodes directories with new UUIDs...");
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host find $gns_home_projects/$to_project_uuid -type d 2>/dev/null"; }
+else
+{ $command="find $gns_home_projects/$to_project_uuid -type d 2>/dev/null"; }
+$dirs=get_exec($command,"",false);
+$dirs_uuid=preg_grep("/\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$dirs);
+usort($dirs_uuid, 'compare_name');
+
+if ($verbose==1) { report("\n"); }
+for ($d=0;$d<sizeof($dirs_uuid);$d++)
+{
+  if (preg_match("/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$dirs_uuid[$d]))
+  {
+    for ($u=0;$u<sizeof($to_project_uuid_pairs);$u++)
+    {
+      $t=preg_split("/:/",$to_project_uuid_pairs[$u]);
+      $uuid_source=$t[0];
+      $uuid_target=$t[1];
+      
+      if (preg_match("/\/$uuid_source$/",$dirs_uuid[$d]))
+      {
+        $dir_source=rtrim($dirs_uuid[$d]);
+        $dir_target=rtrim(preg_replace("/$uuid_source/",$uuid_target,$dir_source));
+        
+        // renaming is local or remote...
+        if ($host!=$to_host)
+        { $command="$SSHdo"."@$to_host mv $dir_source $dir_target"; }
+        else
+        { $command="mv $dir_source $dir_target"; }
+
+        if ($verbose==1)
+        { report("      Moving $dir_source\n          To $dir_target..."); }
+        system($command,$rc);
+        if (!$rc)
+        { if ($verbose) { report("done...\n"); } }
+        else
+        { if ($verbose) { report("failed (rc=$rc)...\n"); } else { report("mv from $dir_source to $dir_target failed (rc=$rc)...\n"); }  }
+
+        break;
+      }
+    }
+  }
+}
+report("\n");
+
+// 12- chmod + chown target project dir
+report("    Changing target directory ownership to gns3:gns3 (dirty way)...");
+system("chown -R gns3:gns3 $to_project_dir",$rc);
+if (!$rc)
+{ report("chown done..."); }
+else
+{ report("chown failed (rc=$rc)..."); }
+
+system("chmod -R ug+rw $to_project_dir",$rc);
+if (!$rc)
+{ report("chmod done..."); }
+else
+{ report("chmod failed (rc=$rc)..."); }
+report("\n");
+
+// 13- SIGHUP to gns3-server
+report("  Sending SIGHUP to target GNS3 server (until API is updated)...");
+if ($host!=$to_host)
+{ $command="$SSHdo"."@$to_host ps axo pid,command|grep \"gns3-server\"|grep -v grep 2>/dev/null"; }
+else
+{ $command="ps axo pid,command|grep \"gns3-server\"|grep -v grep 2>/dev/null"; }
+$res=get_exec($command,"",false);
+$line=ltrim($res[0]);
+$pid=preg_split("/[\s ]+/",$line);
+if ($pid[0]>0)
+{
+  if (posix_kill($pid[0],SIGHUP)) // Sending SIHGUP to server for reloading...
+  { report("sent to $pid[0]\n"); }
+  else
+  { report("cant send to $pid[0]\n"); }
+}
+else
+{ report("Cant get PID of gns3-server to send it a SIGHUP..."); }
+
+report("Finally opening target project...");
+gns_project_command($gns_controller,$to_host,$to_project_uuid,"open");
+report("done\n");
+
+report("### SUCCESS ###\n");
+
+// print("Erasing $to_project_dir...\n");
+// $res=get_exec("rm -rf $to_project_dir","",true);
+
+exit(0);
+
+function get_exec($command,$prefix,$display)
+{
+  $res=array();
+
+  $fd=popen("$command 2>/dev/null","r");
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+    array_push($res,$line);
+    if ($display) { report($prefix.$line); ob_implicit_flush(); }
+  }
+  fclose($fd);
+  
+  return($res);
+}
+
+function gen_uuid() {
+  return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+    // 32 bits for "time_low"
+    mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+    // 16 bits for "time_mid"
+    mt_rand( 0, 0xffff ),
+    // 16 bits for "time_hi_and_version",
+    // four most significant bits holds version number 4
+    mt_rand( 0, 0x0fff ) | 0x4000,
+    // 16 bits, 8 bits for "clk_seq_hi_res",
+    // 8 bits for "clk_seq_low",
+    // two most significant bits holds zero and one for variant DCE1.1
+    mt_rand( 0, 0x3fff ) | 0x8000,
+    // 48 bits for "node"
+    mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
+  );
+}
+
+function gen_mac() {
+  return sprintf( '%02x:%02x:%02x:%02x:%02x:%02x',
+    mt_rand( 0, 0xff ),
+    mt_rand( 0, 0xff ),
+    mt_rand( 0, 0xff ),
+    mt_rand( 0, 0xff ),
+    mt_rand( 0, 0xff ),
+    mt_rand( 0, 0xff )
+  );
+}
+
+function report($text)
+{
+  global $report_file;
+  
+  if ($report_file!="")
+  {
+    $fd=fopen($report_file,"a");
+    if (!$fd) { print("Cant append $report_file !!, stopping\n"); }
+
+    fwrite($fd,$text);
+
+    fclose($fd);
+  }
+  else { print $text; }
+}
+?>

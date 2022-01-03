@@ -1,0 +1,292 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+VIGRID_SOLO_HOME="/home/gns3/VIGRIDsolo"
+
+# To have script execution traced...
+SCRIPT_NAME=`basename $0`
+LOG_FILE="/tmp/$SCRIPT_NAME-log.out"
+DATE=`date '+%Y%m%d_%H%M%S'`
+
+Error()
+{
+  TXT=$*
+  
+  until false
+  do
+    echo
+    echo -n "$TXT do you wish to (F)orce continue, (C)ontinue/(R)un a sub shell/(E)xit script [F/C/R/E) ? "
+    read ANS
+    
+    case "$ANS" in
+      f|F)
+        return 2
+        ;;
+      c|C)
+        return 1
+        ;;
+      r|R)
+        echo "Launching /bin/sh via script command. Output will be added to the log file"
+        echo "Once you finished, end with the 'exit' command."
+        echo
+        # script /bin/sh /tmp/shell-$$.log
+        /bin/sh -xi
+        
+        # echo "Concatening shell output to log file..."
+        # cat /tmp/shell-$$.log >>$LOG_FILE
+        # rm /tmp/shell-$$.log
+        TXT="Shell ended,"
+        ;;
+      e|E)
+        echo "Ok. bye bye then..."
+        exit 1
+        ;;
+    esac
+  done
+}
+
+Display()
+{
+  NO_CR=0
+  NO_HEAD=0
+  
+  until false
+  do
+    case "$1" in
+      "-n")
+        NO_CR=1
+        shift
+        ;;
+      "-h")
+        NO_HEAD=1
+        shift
+        ;;
+      *)
+        TXT=$*
+        break
+        ;;
+    esac
+  done
+
+  [ $NO_HEAD -eq 0 ] && echo && echo "############# VIGRID DISPLAY ################################################################"
+
+  [ $NO_HEAD -eq 1 ] && echo -n "# "
+  
+  [ $NO_CR -eq 0 ] && echo "$TXT"
+  [ $NO_CR -eq 1 ] && echo -n "$TXT"
+  
+  return 0
+}
+
+rm -f $LOG_FILE 2>/dev/null
+(
+Display "Vigrid Solo building script
+
+Upon any issue, script will pause, proposing to (force) continue, run a sub shell or exit procedure.
+Everything will be logged to $LOG_FILE.
+
+Press [RETURN] to start"
+read ANS
+
+Display -h "Checking needed packages/commands are there..."
+#CMDS="debootstrap squashfs-tools isolinux syslinux-efi grub-pc-bin grub-efi-amd64 mtools mksquashfs grub-mkstandalone xorriso"
+CMDS="debootstrap squashfs-tools isolinux syslinux-efi grub-efi-amd64 mtools mksquashfs grub-mkstandalone xorriso"
+for i in $CMDS
+do
+  CHK=`dpkg -l | grep "$i" 2>/dev/null`
+  if [ "x$CHK" = "x" ]
+  then
+    CHK=`which $i`
+    if [ "x$CHK" = "x" ]
+    then
+      Display "I cant find $i, installing it..."
+      sudo apt install -y $i || Error ", installed failed, exiting"
+    fi
+  fi
+done
+
+until false
+do
+  echo
+  Display -n "First I need to know the name of the last stable Ubuntu LTS version. Please type it: "
+  read UBUNTU_VERSION
+  UBUNTU_VERSION=`echo $UBUNTU_VERSION|tr /A-Z/ /a-z/`
+
+  if [ "x$UBUNTU_VERSION" != "x" ]
+  then
+    curl "ftp://distrib-coffee.ipsl.jussieu.fr/pub/linux/ubuntu/dists/$UBUNTU_VERSION/" >/dev/null 2>/dev/null
+    [ $? -eq 0 ] && break
+  fi
+
+  Display "I am sorry, I failed to find that version..."
+done
+
+mkdir -p $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION >/dev/null 2>/dev/null
+
+Display "Building Ubuntu LTS '"$UBUNTU_VERSION"'..."
+debootstrap --arch=amd64 $UBUNTU_VERSION $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION http://archive.ubuntu.com/ubuntu
+
+Display -n "Integrating /etc/lsb-release..."
+. $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION/etc/lsb-release || Error ', failed'
+Display -h "$DISTRIB_ID $DISTRIB_RELEASE $DISTRIB_CODENAME ($DISTRIB_DESCRIPTION)"
+
+Display "  Mounting /proc & /sys..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "mount -t proc proc /proc"
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "mount -t sysfs sysfs /sys"
+
+Display "  Generating locales..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "locale-gen" || Error ', generation failed'
+
+Display "  Setting locales..."
+echo 'LC_CTYPE="en_US.UTF-8"
+LC_ALL="en_US.UTF-8"
+LANG="en_US.UTF-8"
+'>>$VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION/etc/default/locale
+
+Display "Adding Ubuntu software-properties"
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'apt install -y software-properties-common' || Error ', adding failed'
+
+Display "Adding Ubuntu universes"
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'add-apt-repository universe' || Error ', adding failed'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'add-apt-repository multiverse' || Error ', adding failed'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'add-apt-repository restricted' || Error ', adding failed'
+
+Display "  Installing Ubuntu image..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "apt install -y linux-image-generic-hwe-$DISTRIB_RELEASE" || Error ', update failed'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'apt update -y' || Error ', update failed'
+
+Display "  Installing required packages..."
+# https://www.thegeekstuff.com/2010/01/debootstrap-minimal-debian-ubuntu-installation/
+
+#PACKAGES="grub-pc-bin bash grub-efi-amd64 wget"
+PACKAGES="bash grub-efi-amd64 wget"
+Display "    Installing $PACKAGES..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "apt install -y $PACKAGES" || Error ', install failed'
+
+Display "  Replacing netplan by ifup..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "apt install -y ifenslave vlan ifupdown bridge-utils" || Error "Failed to add ifenslave vlan ifupdown bridge-utils packages,"
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "apt remove -y netplan.io && apt autoremove -y"
+
+Display "  Cleaning..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'apt update -y'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'apt full-upgrade -y'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'apt autoclean -y'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'apt autoremove -y'
+
+# Display "Installing Vigrid on VIGRIDsolo..."
+# mkdir -p /home  2>/dev/null
+# chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'cd /tmp && wget https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid2-gns-install.sh >/dev/null 2>/dev/null' || Error ', failed downloading Vigrid install script'
+# chmod 755 $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION/tmp/vigrid2-gns-install.sh || Error ', Vigrid install script chmod failed'
+# chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c '/tmp/vigrid2-gns-install.sh solo' || Error ', launch of vigrid2-gns-install.sh failed'
+
+mkdir -p $VIGRID_SOLO_HOME/image/live $VIGRID_SOLO_HOME/scratch >/dev/null 2>/dev/null
+touch $VIGRID_SOLO_HOME/image/VIGRID_SOLO || Error 'Cant touch file, exiting'
+
+Display -h "Updating image directory..."
+cp /home/gns3/vigrid/etc/VIGRIDsolo.tga $VIGRID_SOLO_HOME/image/ || Error ',VIGRIDsolo copy failed'
+
+Display "Adding some users..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'addgroup --system admin'
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'useradd -s /bin/bash -g admin -m -k /dev/null solo'
+
+Display "Setting password for 'solo' user to 'vigrid'..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c 'echo "solo:vigrid" | chpasswd user'
+
+Display "Copying VMlinuz..."
+cp $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION/boot/vmlinuz* $VIGRID_SOLO_HOME/image/ || Error 'Cant copy vmlinuz, exiting'
+cp $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION/boot/initrd.img* $VIGRID_SOLO_HOME/image/  || Error 'Cant copy initrd, exiting'
+
+Display -h "Copying EFI boot..."
+cp $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION/usr/lib/grub/x86_64-efi/monolithic/grubx64.efi $VIGRID_SOLO_HOME/scratch/bootx64.efi || Error ', failed copying'
+
+Display -h "Creating grub.cfg"
+cat <<_EOF_ >$VIGRID_SOLO_HOME/scratch/grub.cfg || Error ',creation failed' 
+search --set=root --file /VIGRID_SOLO
+
+insmod all_video
+insmod vga
+insmod gfxterm
+insmod gfxterm_background
+
+set gfxmode="640x480x32"
+terminal_input console
+terminal_output gfxterm
+insmod tga
+
+set menu_auto_hide=1
+set timeout=1
+set timeout_style=hidden
+
+background_image --mode stretch /VIGRIDsolo.tga
+
+menuentry "VIGRIDsolo" {
+    linux /vmlinuz boot=live nomodeset # quiet splash
+    initrd /initrd.img
+}
+_EOF_
+
+Display "  Unmounting /proc & /sys..."
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "umount /proc"
+chroot $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION /bin/sh -c "umount /sys"
+
+Display -h "Building SquashFS..."
+rm $VIGRID_SOLO_HOME/image/live/filesystem.squashfs 2>/dev/null
+mkdir -p $VIGRID_SOLO_HOME/image/live $VIGRID_SOLO_HOME/scratch 2>/dev/null
+mksquashfs $VIGRID_SOLO_HOME/ubuntu-amd64-$UBUNTU_VERSION $VIGRID_SOLO_HOME/image/live/filesystem.squashfs -e boot -noappend -comp gzip || Error 'Cant mksquashfs VIGRIDsolo, exiting'
+
+Display "Building EFI ISO..."
+rm $VIGRID_SOLO_HOME/$VIGRID_SOLO_HOME-efi.iso >/dev/null 2>/dev/null
+grub-mkstandalone --format=x86_64-efi --output=$VIGRID_SOLO_HOME/scratch/bootx64.efi  \
+                --locales="" --fonts="" "boot/grub/grub.cfg=$VIGRID_SOLO_HOME/scratch/grub.cfg"
+
+( cd $VIGRID_SOLO_HOME/scratch && dd if=/dev/zero of=efiboot.img bs=1M count=10 && \
+                mkfs.vfat efiboot.img && mmd -i efiboot.img efi efi/boot && \
+                mcopy -i efiboot.img ./bootx64.efi ::efi/boot/ )
+
+grub-mkstandalone --format=i386-pc --output=$VIGRID_SOLO_HOME/scratch/core.img \
+                --install-modules="linux normal iso9660 biosdisk memdisk search tar ls all_video gfxterm_background tga" \
+                --modules="linux normal iso9660 biosdisk search all_video gfxterm_background tga" \
+                --locales="" --fonts="" "boot/grub/grub.cfg=$VIGRID_SOLO_HOME/scratch/grub.cfg" || Error 'grub-mkstandalone failed, exiting'
+cat /usr/lib/grub/i386-pc/cdboot.img $VIGRID_SOLO_HOME/scratch/core.img > $VIGRID_SOLO_HOME/scratch/bios.img || Error 'Boot image copy failed, exiting'
+xorriso -as mkisofs -iso-level 3 -full-iso9660-filenames -volid "VIGRID_SOLO" \
+        -eltorito-boot boot/grub/bios.img -no-emul-boot -boot-load-size 4 -boot-info-table \
+        --eltorito-catalog boot/grub/boot.cat --grub2-boot-info --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
+        -eltorito-alt-boot -e EFI/efiboot.img -no-emul-boot -append_partition 2 0xef $VIGRID_SOLO_HOME/scratch/efiboot.img \
+        -output "$VIGRID_SOLO_HOME/VIGRIDsolo-efi.iso" \
+        -graft-points \
+                "$VIGRID_SOLO_HOME/image" \
+                /boot/grub/bios.img=$VIGRID_SOLO_HOME/scratch/bios.img \
+                /EFI/efiboot.img=$VIGRID_SOLO_HOME/scratch/efiboot.img || Error 'xorriso failed, exiting'
+
+echo "Building non-EFI ISO..."
+rm $VIGRID_SOLO_HOME/$VIGRID_SOLO_HOME.iso >/dev/null 2>/dev/null
+grub-mkstandalone --format=i386-pc --output=$VIGRID_SOLO_HOME/scratch/core.img \
+        --install-modules="linux normal iso9660 biosdisk memdisk search tar ls all_video gfxterm_background tga" \
+        --modules="linux normal iso9660 biosdisk search all_video gfxterm_background tga" \
+        --locales="" --fonts="" "boot/grub/grub.cfg=$VIGRID_SOLO_HOME/scratch/grub.cfg" || Error 'grub-mkstandalone failed, exiting'
+cat /usr/lib/grub/i386-pc/cdboot.img $VIGRID_SOLO_HOME/scratch/core.img >$VIGRID_SOLO_HOME/scratch/bios.img || Error 'Boot image copy failed, exiting'
+xorriso -as mkisofs -iso-level 3 -full-iso9660-filenames -volid "VIGRID_SOLO" --grub2-boot-info \
+        --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
+        -eltorito-boot boot/grub/bios.img -no-emul-boot -boot-load-size 4 -boot-info-table \
+        --eltorito-catalog boot/grub/boot.cat -output "$VIGRID_SOLO_HOME/VIGRIDsolo.iso" \
+        -graft-points "$VIGRID_SOLO_HOME/image" /boot/grub/bios.img=$VIGRID_SOLO_HOME/scratch/bios.img || Error 'xorriso failed, exiting'
+
+ISO_SIZE_EFI=`stat -c %s $VIGRID_SOLO_HOME/VIGRIDsolo-efi.iso`
+ISO_SIZE=`stat -c %s $VIGRID_SOLO_HOME/VIGRIDsolo.iso`
+
+Display "VIGRIDsolo ISO are now ready:
+- EFI:    $VIGRID_SOLO_HOME/VIGRIDsolo-efi.iso ($ISO_SIZE_EFI bytes)
+- Legacy: $VIGRID_SOLO_HOME/VIGRIDsolo.iso ($ISO_SIZE bytes)
+
+You can use tools as BalenaEtcher, Rufus... to burn on USB key.
+"
+) 2>&1 | tee -a $LOG_FILE

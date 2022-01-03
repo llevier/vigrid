@@ -1,0 +1,73 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+echo "ZFS volume cloning script"
+
+SOURCE_ZFS=$1
+
+TARGET_HOST=`echo $2 | awk 'BEGIN { FS=":"; } { print $1;}'`
+TARGET_PORT=`echo $2 | awk 'BEGIN { FS=":"; } { print $2;}'`
+TARGET_ZFS=$3
+
+if [ "x$SOURCE_ZFS" = "x" -o "x$TARGET_HOST" = "x" -o "x$TARGET_ZFS" = "x" ]
+then
+  echo "Usage: $0 ZFS_poolname Target_Host_SSH[:port] Target_ZFSpool"
+  exit 1
+fi
+
+echo "ZFS pool $SOURCE_ZFS cloning in progress..."
+CHK=`zfs list -o name $SOURCE_ZFS | tail -1`
+
+if [ "x$CHK" != "x$SOURCE_ZFS" ]
+then
+  echo "I am sorry, I cant find any ZFS pool named $SOURCE_ZFS, exiting."
+  exit 1
+fi
+
+SSH="ssh $TARGET_HOST"
+[ "x$TARGET_PORT" != "x" ] && SSH="$SSH -p $TARGET_PORT"
+  
+# Each snapshot name must be unique, timestamp is a good choice.
+snapshot_string=DO_NOT_DELETE_remote_replication_
+timestamp=$(/bin/date '+%Y%m%d%H%M%S')
+replication_snap_name="$snapshot_string""$timestamp"
+replication_snap="$SOURCE_ZFS"@"$replication_snap_name"
+
+# Initial send:
+# Create first recursive snapshot of the whole pool.
+echo "Snapping shot source (as $replication_snap)..."
+zfs snapshot -r "$replication_snap"
+
+# Initial replication via SSH.
+echo "Initial sending of $replication_snap to $TARGET_HOST"
+zfs send -R "$replication_snap" | $SSH zfs recv -Fdu "$TARGET_ZFS"
+
+# Incremental sends:
+
+# Get old snapshot name.
+old_snap=$(zfs list -H -o name -t snapshot -r "$SOURCE_ZFS" | grep "$SOURCE_ZFS"@"$snapshot_string" | tail --lines=1)
+# Create new recursive snapshot of the whole pool.
+zfs snapshot -r "$replication_snap"
+# Incremental replication via SSH.
+zfs send -R -I "$old_snap" "$replication_snap" | $SSH zfs recv -Fdu "$TARGET_ZFS"
+
+echo "Deleting replication snapshots on target..."
+# for i in `zfs list -t snapshot -o name |grep "DO_NOT"`; do zfs destroy $i; done
+$SSH 'for i in `zfs list -t snapshot -o name |grep "@$replication_snap_name"; do echo "zfs destroy $i"; done'
+exit
+
+# Delete older snaps on the local source (grep -v inverts the selection)
+delete_from=$(zfs list -H -o name -t snapshot -r "$SOURCE_ZFS" | grep "$snapshot_string" | grep -v "$timestamp")
+
+for snap in $delete_from; do
+    zfs destroy "$snap"
+done

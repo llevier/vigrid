@@ -1,0 +1,129 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+#PROGRESS=""
+PROGRESS="--progress"
+
+SSH_KEY="/root/.ssh/id_Vigrid-NAS"
+SSHDO="ssh -i $SSH_KEY"
+MASTER="Vigrid-NAS1"
+
+# entry control: mounted ZFS datasets
+CHK=`zfs list -o name,mounted|grep "no$"`
+if [ "x$CHK" != "x" ]
+then
+  echo "WARNING, some datasets are not mounted:"
+  echo "$CHK"
+  echo
+  echo "Sleeping 5s..."
+  sleep 5
+fi
+
+# first detect the dataset slave is missing
+ZFS_LIST=`$SSHDO $MASTER zfs list -r Vstorage -o name |tail -n+2`
+for i in $ZFS_LIST
+do
+  TARGET=`echo $i | sed 's/Vstorage/Vstorage_BKP/'`
+
+  [ "x$PROGRESS" != "x" ] && echo "Identified dataset: Vigrid-NAS1 -> $i"
+
+  [ "x$PROGRESS" != "x" ] && echo "  Checking for local -> $i..."
+  CHK=`zfs list $i -o name 2>/dev/null`
+
+  if [ "x$CHK" = "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo -n "    $i dataset does not exist locally"
+
+    if [ -d "/$i" ]
+    then
+      [ "x$PROGRESS" != "x" ] && echo -n " but /$i exists locally, erasing it... "
+      rm -rf /$i
+    fi
+
+    [ "x$PROGRESS" != "x" ] && echo " creating local dataset $i..." && echo
+    zfs create $i
+    [ $? -ne 0 ] && echo "ZFS create $i failed !" && sleep 5
+  fi
+
+  [ "x$PROGRESS" != "x" ] && echo "  Checking for $TARGET..."
+
+  CHK=`zfs list $TARGET -o name 2>/dev/null`
+  if [ "x$CHK" = "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo -n "$TARGET dataset does not exist"
+
+    if [ -d "/$TARGET" ]
+    then
+      [ "x$PROGRESS" != "x" ] && echo -n " but /$TARGET exists, erasing it... "
+      rm -rf /$TARGET
+    fi
+
+    [ "x$PROGRESS" != "x" ] && echo " creating dataset $TARGET..." && echo
+    zfs create $TARGET
+    [ $? -ne 0 ] && echo "ZFS create $TARGET failed !" && sleep 5
+  fi
+done
+
+# then destroy the ones no longer existing on master
+ZFS_LIST=`zfs list -r -o name Vstorage |tail -n+2`
+for i in $ZFS_LIST
+do
+  [ "x$PROGRESS" != "x" ] && echo "Identified dataset: $i"
+
+  [ "x$PROGRESS" != "x" ] && echo "  Checking for $i..."
+
+  CHK=`$SSHDO $MASTER zfs list $i -o name 2>/dev/null`
+  if [ "x$CHK" = "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo "$i dataset does not exist on Vigrid-NAS1, destroying local dataset $i..." && echo
+
+    zfs destroy -r $i
+    [ $? -ne 0 ] && echo "ZFS destroy $i failed !" && sleep 5
+  fi
+done
+
+# finally cleaning Vstorage_BKP
+ZFS_LIST=`zfs list -r -o name Vstorage_BKP |tail -n+2`
+for i in $ZFS_LIST
+do
+  SOURCE=`echo $i | sed 's/Vstorage_BKP/Vstorage/'`
+
+  [ "x$PROGRESS" != "x" ] && echo "Identified dataset: $i"
+
+  [ "x$PROGRESS" != "x" ] && echo "  Checking for $SOURCE..."
+
+  CHK=`zfs list $SOURCE -o name 2>/dev/null`
+  if [ "x$CHK" = "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo "$SOURCE dataset does not exist, destroying dataset $i..." && echo
+
+    zfs destroy -r $i
+    [ $? -ne 0 ] && echo "ZFS destroy $i failed !" && sleep 5
+  fi
+done
+
+[ "x$PROGRESS" != "x" ] && echo
+
+#echo "  Rclone syncing $MASTER:/Vstorage to /Vstorage..."
+#rclone sync $PROGRESS $MASTER:/Vstorage/ /Vstorage/
+
+echo "  Rsyncing $MASTER:/Vstorage to /Vstorage..."
+
+echo "    Deletions first..."
+rsync -e "$SSHDO" -r --delete --existing --ignore-existing --ignore-errors --delete-before --delete-excluded --force --max-delete=5000000 --timeout 7200 $PROGRESS $MASTER:/Vstorage/ /Vstorage/
+
+echo "    ...then data..."
+rsync -e "$SSHDO" -EAXDtogrHpav --force --numeric-ids --force $PROGRESS --inplace $MASTER:/Vstorage/ /Vstorage/
+
+echo "  Finally copying $MASTER:/etc/exports"
+cd / && $SSHDO $MASTER 'tar cf - /etc/exports' | tar xvf -
+

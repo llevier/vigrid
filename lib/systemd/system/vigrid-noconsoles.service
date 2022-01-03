@@ -1,0 +1,18 @@
+[Unit]
+Description=Vigrid NOconsoles Daemon
+Wants=network-online.target
+After=network.target network-online.target gns3.target
+
+[Service]
+Type=forking
+#User=gns3
+User=root
+Group=gns3
+PermissionsStartOnly=true
+ExecStart=/home/gns3/vigrid/bin/vigrid-daemon-noconsoles -d -l /var/log/gns3/vigrid.log
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

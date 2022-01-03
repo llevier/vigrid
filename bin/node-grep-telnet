@@ -1,0 +1,113 @@
+#!/usr/bin/perl
+##################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+use ExtUtils::Installed;
+
+my @required_modules = qw( Getopt::Std IO::Socket IO::Socket::Timeout Errno);
+
+for(@required_modules)
+{
+  eval "use $_";
+  if ($@)
+  {
+    print("\nPerl module $_ not found, installing it, provide root password if asked:...\n\n"); 
+    
+    system("sudo perl -MCPAN -e 'install $_'");
+  }
+}
+
+require Getopt::Std;
+require IO::Socket;
+require IO::Socket::Timeout;
+require Errno; #qw(ETIMEDOUT EWOULDBLOCK);
+
+getopts("n:h:p:r:a:lvi");
+$host_ip=$opt_h;
+$host_port=$opt_p;
+$name=$opt_n;
+$pattern=$opt_r;
+$action=$opt_a;
+$verbose=$opt_v;
+$infinite=$opt_i;
+$logfile=$opt_l;
+
+if ($verbose)
+{
+  print("Arguments:
+  Host:    $host_ip:$host_port
+  Pattern: $pattern
+  Action:  $action
+  Endless? $infinite
+  Log?     $logfile
+");
+}
+
+if (($host_ip eq "") || ($host_port eq "") || ($pattern eq "") || ($action eq ""))
+{
+  print("Usage: node-grep-telnet Host Port Pattern Action [ -v ] [ -i ]\n");
+  exit 1;
+}
+
+while (1)
+{
+
+  if ($verbose) { print("Opening socket to $host_ip:$host_port\n"); }
+
+  $socket = new IO::Socket::INET (PeerAddr => $host_ip, PeerPort => $host_port, Proto => "tcp", Type => SOCK_STREAM, Timeout => 2) or die "Can't connect to $host_ip:$host_port : $!\n";
+ 
+  if ($verbose) { print("Connected to $host_ip:$host_port, setting timeout\n"); }
+
+  IO::Socket::Timeout->enable_timeouts_on($socket);
+  $socket->read_timeout(2);
+
+  if ($verbose) { print("Waiting data\n"); }
+
+  while ($socket->connected)
+  {
+    $line=<$socket>;
+
+    if (!$line && ( 0+$! == ETIMEDOUT || 0+$! == EWOULDBLOCK ))
+    {
+      if ($verbose) { print("timeout reading...\n"); }
+    }
+    elsif ((!$socket->connected) || (!$line)) { print("socket error $!\n"); last; }
+
+    if (-f "/NGTstop") { print("Global stopper detected, exiting.\n"); exit; }
+
+    if ($line ne "")
+    {
+      if ($verbose) { print("RCVD: $line"); }
+ 
+      if ($line =~ /$pattern/)
+      {
+        if ($verbose)
+        {
+          print ("Detected pattern $pattern:\n  \"$line\"\n");
+          print ("Running action: \n$action\n");
+        }
+        if ($logfile)
+        {
+          system("/usr/bin/logger -p alert \"$name: $host_ip:$host_port, \"$pattern\" detected, launched action")
+        }
+        system("$action >/dev/null 2>/dev/null");
+        last;
+      }
+    }
+  }
+
+  if ($verbose) { print("Socket with $host_ip:$host_port has been closed, exiting\n"); }
+  close($socket);
+
+  if (!$infinite) { last; }
+  sleep (2);
+}
+

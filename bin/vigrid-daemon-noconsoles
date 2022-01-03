@@ -1,0 +1,400 @@
+#!/usr/bin/php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+##################################################################################################################################
+
+<?php
+
+// NOconsoles daemon : in charge of launching noconsoles programs (websockify)
+// Way to work:
+// Upon start/stop, host/project/node details are mandatory
+// Else it is a service: to launch consoles, lauch service. To stop all consoles, stop service
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+// GNS3 home directories
+$gns_home="/home/gns3";
+$gns_home_projects="/home/gns3/GNS3/projects";
+
+$usage="$0 -a [ start|stop ] -h host -p ProjectUUID -n NodeUUID [ -v ] | -d ]";
+
+// Vigrid functions
+include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+
+$vigrid_websockify_options=VIGRIDconfig("VIGRID_WEBSOCKIFY_OPTIONS");
+
+// NOconsoles managers
+$CMD_WEBSOCKIFY="/usr/bin/websockify -D $vigrid_websockify_options --web=/home/gns3/vigrid/www/";
+$CMD_WEBSOCKIFY_VNC_SUFFIX="novnc";
+$CMD_WEBSOCKIFY_TELNET_SUFFIX="notelnet";
+$CMD_WEBSOCKIFY_VNC="$CMD_WEBSOCKIFY$CMD_WEBSOCKIFY_VNC_SUFFIX/";
+$CMD_WEBSOCKIFY_TELNET="$CMD_WEBSOCKIFY$CMD_WEBSOCKIFY_TELNET_SUFFIX/";
+
+// turn off output buffering
+ob_implicit_flush();
+
+// ini_set("register_argc_argv=On");
+$opt=getopt("a:h:p:n:l:vd");
+if (isset($opt['v'])) { $verbose=1; }
+if (isset($opt['d'])) { $daemon=1; }
+
+$action=strtolower($opt['a']);
+$gns_host=$opt['h'];
+$project_uuid=$opt['p'];
+$node_uuid=$opt['n'];
+$log_file=$opt['l'];
+
+$NOCONSOLE_RANGE_START=0;
+$NOCONSOLE_RANGE_END=0;
+
+$fd=fopen("$gns_home/.config/GNS3/gns3_server.conf","r");
+while (!feof($fd))
+{
+  $line=fgets($fd,4096);
+  $line=preg_replace("/;.*$/","",$line);
+  $line=preg_replace("/#.*$/","",$line);
+  $line=trim($line);
+  $line=preg_replace("/[\s ]+/","",$line);
+
+  $f=preg_split("/=/",strtolower($line));
+  
+  if (preg_match("/^console_start_port_range$/",$f[0]))    { $NOCONSOLE_RANGE_START=$f[1]; }
+  else if (preg_match("/^console_end_port_range$/",$f[0])) { $NOCONSOLE_RANGE_END=$f[1]; }
+}
+fclose($fd);
+
+if (($NOCONSOLE_RANGE_START==0) || ($NOCONSOLE_RANGE_END==0))
+{
+  report("ERROR: Cant find console range values, exiting\n");
+  exit(1);
+}
+
+// Action specified, limiting usage
+if ($action!="")
+{
+  if ($verbose) report("Limiting to single action on host $gns_host, project $project_uuid, node $node_uuid\n");
+
+  $gns_controller=gns_getcontrollers();
+  $node_console=gns_getnode_console($gns_controller,$gns_host,$project_uuid,$node_uuid);
+  
+  $f=explode(":",$node_console);
+  $node_console_type=$f[0];
+  $node_console_host=$f[1];
+  $node_console_port=$f[2];
+
+  if ($action=='start')
+  { CONSOLESlaunch($node_console_type,$node_console_host,$node_console_port); }
+  else if ($action=='stop')
+  { CONSOLESkill($node_console_type,$node_console_host,$node_console_port); }
+  
+  exit;
+}
+
+report("$host NOconsoles Daemon starting at ".strftime("%F %T",time())."...\n");
+
+// Capture SIGTERM
+declare(ticks = 1);
+pcntl_signal(SIGTERM,"sig_handler");
+pcntl_signal(SIGINT ,"sig_handler");
+
+if ($verbose) { report("  verbose=on\n"); }
+// turn to daemon
+if ($daemon)
+{
+  report("  turning to daemon...\n");
+  
+  $pid=pcntl_fork();
+  if ($pid===-1)
+  { die("Couldn't fork()!"); }
+  else if ($pid) { exit(0); }
+
+  posix_setsid();
+  usleep(100000);
+
+  report("   Daemon now running on ".posix_getpid()."\n");
+}
+
+// Infinite loop
+$mark=0;
+while (1)
+{
+  if ($mark++>60) { $mark=0; report("I am still alive...\n"); }
+
+  // get controller configuration to extract Vigrid hosts...
+  $gns_controller=gns_getcontrollers();
+
+  // sort alpha computes...
+  usort($gns_controller['computes'], 'compare_name');
+
+  // Get consoles from Master server
+  // CONSOLES_LIST=(`cat $gns_home/*/*.gns3|grep "" | grep -v null | sed 's/^.*: //' | sed 's/,$//'`)
+  $fd=popen("cat $gns_home_projects/*/*.gns3 2>/dev/null","r");
+  $consoles_local=array();
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+    if (preg_match("/\"console\": /",$line))
+    {
+      $line=trim($line);
+      $line=preg_replace("/^.*: /","",$line);
+      $line=preg_replace("/,$/","",$line);
+      array_push($consoles_local,$line);
+    }
+  }
+  fclose($fd);
+  // if ($verbose) { print("Consoles from local files:\n".print_r($consoles_local)."\n"); }
+
+  // Get consoles from servers
+  $consoles_servers=array();
+  $consoles_servers=CONSOLESlist($gns_controller);
+  // if ($verbose) { print("Consoles:\n".print_r($consoles_servers)."\n"); }
+
+  // Now we got the lists, let's start NOconsoles...if node is 'started'
+  // if ($verbose) { print("Now managing redirections for started nodes...\n"); }
+  
+  for ($i=0;$i<count($consoles_servers);$i++)
+  {
+    $f=preg_split("/:/",$consoles_servers[$i]);
+    $console_type=$f[0];
+    $console_host=$f[1];
+    $console_port=$f[2];
+    $console_status=$f[3];
+
+    if ($console_status=="started")
+    {
+      if ($verbose) { report("  Console $console_type ($console_host:$console_port), $console_status\n"); }
+      
+      CONSOLESlaunch($console_type,$console_host,$console_port);
+    }
+  }
+  
+  // Now terminate redirection no longer used...
+  if ($verbose) { report("Now killing obsolete redirections...\n"); }
+  $line_pid=CONSOLEScheck("","",0);
+  
+  for ($i=0;$i<sizeof($line_pid);$i++)
+  {
+    $f=explode(":",$line_pid[$i]);
+    
+    if (!preg_grep("/$f[2]:$f[3]:started$/",$consoles_servers))
+    {
+      report("Cant find a running node for $f[2]:$f[3], killing redirection PID=$f[0]\n");
+      posix_kill($f[0],SIGTERM);
+    }
+  }
+
+  sleep(10);
+}
+exit;
+
+function CONSOLESlaunch($console_type,$console_host,$console_port)
+{
+  global $CMD_WEBSOCKIFY_VNC;
+  global $CMD_WEBSOCKIFY_TELNET;
+  global $NOCONSOLE_RANGE_START;
+  global $NOCONSOLE_RANGE_END;
+  
+  // Searching for a free port for console redirection
+  while (1)
+  {
+    $port=rand($NOCONSOLE_RANGE_START,$NOCONSOLE_RANGE_END);
+
+    $fd=popen("ss -lnt 2>/dev/null","r");
+    $ok=1;
+    while (!feof($fd))
+    {
+      $line=fgets($fd,4096);
+      $line=trim($line);
+      $line=preg_replace("/[\s ]+/"," ",$line);
+      $f=preg_split("/ /",$line);
+      
+      if (preg_match("/:$port$/",$f[3])) { $ok=0; }
+    }
+    fclose($fd);
+    if ($ok==1) { break; }
+  }
+
+  // Now launching redirection
+  if ($console_type=="vnc")
+  { $CMD_NOCONSOLE="$CMD_WEBSOCKIFY_VNC $port $console_host:$console_port"; }
+  else if ($console_type=="telnet")
+  { $CMD_NOCONSOLE="$CMD_WEBSOCKIFY_TELNET $port $console_host:$console_port"; }
+  
+  $t=CONSOLEScheck($console_type,$console_host,$console_port);
+  if (sizeof($t)==0) // No PID found
+  {
+    // report("    Launching: $console_type -> $CMD_NOCONSOLE\n");
+    exec("$CMD_NOCONSOLE >/dev/null 2>/dev/null",$a,$b);
+    $a=null;
+    $b=null;
+  }
+  // else { report("    No action, already a running console\n"); }
+}
+
+function CONSOLESlist($gns_controller)
+{
+  global $verbose;
+  
+  $consoles=array();
+  
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+
+  // Get Vigrid hosts as name:ip:port:compute_id
+  $vigrid_hosts=VIGRIDgetgnshosts($gns_controller);
+  for ($i=0;$i<sizeof($vigrid_hosts);$i++)
+  {
+    $f=explode(":",$vigrid_hosts[$i]);
+    $host_name=$f[0];
+    $host_ip=$f[1];
+    $host_port=$f[2];
+    $host_compute=$f[3];
+    
+    if (isset($data_vigrid['GNS3'][$host_ip]))
+		{
+      for ($j=0;$j<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$j++)
+      {
+        for ($k=0;$k<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
+        {
+          if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started")
+            && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_type']!="cloud"))
+          {
+            if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console']!="")
+            {
+              $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k].":";
+
+              if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="vnc")
+              || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="telnet"))
+              {
+                if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=='0.0.0.0')
+                { $data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=$host_ip; }
+                
+                $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'];
+                array_push($consoles,$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return($consoles);
+}
+
+function get_exec($command,$prefix,$display)
+{
+  $res=array();
+
+  $fd=popen("$command 2>/dev/null","r");
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+    array_push($res,$line);
+    if ($display) { report($prefix.$line); ob_implicit_flush(); }
+  }
+  fclose($fd);
+  
+  return($res);
+}
+
+function report($text)
+{
+  global $log_file;
+  
+  // Jun 22 10:19:49 Singularity sudo
+  $date=date("M j G:i:s");
+  $hostname=gethostname();
+  
+  if ($log_file!="")
+  {
+    $fd=fopen($log_file,"a");
+    if (!$fd) { report("Cant append $log_file !!, stopping\n"); }
+
+    fwrite($fd,"$date $hostname Vigrid-noconsoles: $text");
+
+    fclose($fd);
+  }
+  else { print $text; }
+}
+
+function CONSOLEScheck($console_type,$console_host,$console_port)
+{
+  global $CMD_WEBSOCKIFY_VNC,$CMD_WEBSOCKIFY_TELNET,$verbose;
+  global $CMD_WEBSOCKIFY_VNC_SUFFIX,$CMD_WEBSOCKIFY_TELNET_SUFFIX,$CMD_WEBSOCKIFY;
+  
+  $lines_pid=array();
+  
+  // Specific target
+  if (($console_host!="") && ($console_port>0)) 
+  {
+    if ($console_type=="vnc")
+    { $CMD_NOCONSOLE_CHECK="$CMD_WEBSOCKIFY_VNC [0-9]* $console_host:$console_port"; }
+    else if ($console_type=="telnet")
+    { $CMD_NOCONSOLE_CHECK="$CMD_WEBSOCKIFY_TELNET [0-9]* $console_host:$console_port"; }
+  }
+  else
+  { $CMD_NOCONSOLE_CHECK="$CMD_WEBSOCKIFY($CMD_WEBSOCKIFY_VNC_SUFFIX|$CMD_WEBSOCKIFY_TELNET_SUFFIX)/ [0-9]* ([0-9]{1,3}.){3}.([0-9]{1,3}):[0-9]*"; }
+  
+  if ($verbose) { report("RESTRICTING TO: $CMD_NOCONSOLE_CHECK\n"); }
+  
+  // Already running console ?
+  $fd=popen("ps axo pid,command 2>/dev/null","r");
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+
+    $pattern=preg_replace("/\//","\\\/",$CMD_NOCONSOLE_CHECK);
+    if (preg_match("/$pattern/",$line))
+    {
+      // PID:local_port:CONSOLE_HOST:CONSOLE_PORT
+      $f=preg_split("/[\s ]+/",trim($line));
+      array_push($lines_pid,"$f[0]:".$f[(sizeof($f)-2)].":".$f[(sizeof($f)-1)]);
+    }
+  }
+  fclose($fd);
+
+  return($lines_pid);
+}
+
+function CONSOLESkill($console_type,$console_host,$console_port)
+{
+  $line_pid=CONSOLEScheck($console_type,$console_host,$console_port);
+
+  if (sizeof($line_pid)==0)
+  { report("Failed to find a console for $console_type -> $console_host:$console_port\n"); }
+
+  for ($i=0;$i<sizeof($line_pid);$i++)
+  {
+    $f=explode(":",$line_pid[$i]);
+    report("Sending SIGTERM to PID=$f[0]\n");
+    posix_kill($line_pid[$i],SIGTERM);
+  }
+  
+  return;
+}
+function sig_handler($signo)
+{
+  if (($signo==SIGTERM) || ($signo==SIGINT))
+  {
+    report("Received SIGTERM or SIGINT, closing console redirections ".strftime("%F %T",time()).".\n");
+
+    CONSOLESkill("","",0);
+    
+    report("Exiting at ".strftime("%F %T",time()).".\n");
+    exit(0);
+  }
+
+  // other signals, normally useless
+  report("Received signal $signo !!");
+}
+
+?>

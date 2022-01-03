@@ -1,0 +1,299 @@
+#!/usr/bin/php
+<?php
+
+// #################################################################################################################################
+// #
+// # This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+// #
+// # (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+// # LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+// #
+// # Each dependancies (c) to their respective owners
+// #
+// ##################################################################################################################################
+
+// ZFSexports Updater : runs on NAS using ZFS.
+//
+// Since autofs must see (showmount) each share it will connect to
+// Since a ZFS dataset must be explicitely shared
+// Program is in charge of updating /etc/exports and respread it (exportfs -a) upon each new dataset.
+// Upon a dataset containing a 'TBD_projectuuid' file, dataset will *not* be put into /etc/exports for to come deletion.
+
+// Required vigrid_storage_root of course (else / will be used), then Vigrid standards will apply to generate directories list:
+// $vigrid_storage_root/GNS3/GNS3farm/GNS3/projects/*
+// $vigrid_storage_root/NFS/*/GNS3mount/GNS3/projects/*
+// $vigrid_storage_root/NFS/*/var-lib-docker
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+// turn off output buffering
+ob_implicit_flush();
+
+
+$usage="Vigrid-daemon-ZFSexportsUPD -R VigridStorageRoot [ -v ] | -d ] [ -l logfile ]";
+$host=gethostname();
+
+$opt=getopt("R:l:vd");
+if (isset($opt['v'])) { $verbose=1; }
+if (isset($opt['d'])) { $daemon=1; }
+
+$vigrid_storage_root=$opt['R'];
+$log_file=$opt['l'];
+
+if ($vigrid_storage_root=="") { print "Usage: $usage\n"; exit(1); }
+
+report("$host ZFSexports Updater Daemon starting at ".strftime("%Y/%m/%d %H:%M:%S",time())."...\n");
+
+if ($verbose) { report("  verbose=on\n"); }
+
+// Capture SIGTERM
+declare(ticks = 1);
+pcntl_signal(SIGTERM,"sig_handler");
+pcntl_signal(SIGINT ,"sig_handler");
+
+if ($daemon)
+{
+  report("  turning to daemon...\n");
+  
+  $pid=pcntl_fork();
+  if ($wpid===-1)
+  { die("Couldn't fork()!"); }
+  else if ($pid) { exit(0); }
+
+  posix_setsid();
+  usleep(100000);
+
+  report("   Daemon now runing on ".posix_getpid()."\n");
+}
+
+// Directories to check, uuid_pattern rewritten simpler for glob()
+$uuid_pattern ="[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-";// 8
+$uuid_pattern.="[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-";// 4
+$uuid_pattern.="[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-";// 4
+$uuid_pattern.="[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-";// 4
+$uuid_pattern.="[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]";// 12
+
+$dir_list=array(
+  "$vigrid_storage_root/GNS3/GNS3farm/GNS3/projects/$uuid_pattern/",
+  "$vigrid_storage_root/NFS/*/GNS3mount/GNS3/projects/$uuid_pattern/");
+
+// Infinite loop
+$mark=0;
+report("Entering infinite loop...\n");
+while (1)
+{
+  if ($mark++>60) { $mark=0; report("I am still alive...\n"); }
+
+  $export_toremove=array();
+
+  // Loading /etc/exports file, the real exported ones
+  $exports=file('/etc/exports');
+  $exports=array_map('trim',$exports);
+  
+  // Generating local directories list exports from Vigrid design
+  $matches=array();
+  for ($i=0;$i<sizeof($dir_list);$i++)
+  { array_push($matches,glob($dir_list[$i],GLOB_ONLYDIR)); }
+
+  $matches=call_user_func_array('array_merge',$matches);
+
+  // print_r($exports);
+  // Checking for TBD_ProjectUUID (exports to not export anymore)
+  for ($i=0;$i<sizeof($matches);$i++)
+  {
+    $f=explode("/",$matches[$i]);
+    $project_uuid=$f[(sizeof($f)-2)];
+    
+    if (file_exists($matches[$i]."TBD_$project_uuid"))
+    {
+      if (array_search($matches[$i],$exports,false))
+      {
+        // if not yet present, then report
+        report(strftime("%Y/%m/%d %H:%M:%S",time()).": TBD_* file in $matches[$i], removing it from exports\n");
+      }
+      
+      $match_clean=preg_replace("/\/$/","",$matches[$i]); // no / at end here too
+      array_push($export_toremove,$match_clean);
+      unset($matches[$i]); // To be more efficient
+    }
+  }
+  $matches=array_values($matches);
+  
+  // Getting ZFS dataset list
+  list($rc,$zfs_list)=get_exec("zfs list -o mountpoint","",false);
+  $zfs_list=array_map('trim',$zfs_list);
+  
+  // Creating new export to merge that all...
+  $export_new=array();
+  
+  for ($l=0;$l<sizeof($exports);$l++)
+  {
+    // Clean export line from [CR] etc.
+    $f=preg_split("/[\s ]+/",trim($exports[$l]));
+
+    // Managing existings, always put again...until they are in $matches
+    if ((($exports[$l]=="") || ($f[0]=="")) // not empty
+     || ((!(in_array(trim($exports[$l]),$export_new))) // not already in the new export list
+     && (!(in_array($f[0],$export_toremove))))) // not in the ones to remove array as well
+    {
+      array_push($export_new,$exports[$l]);
+    }
+    
+    // Ok, now what about new $matches that could be in this directory tree ?
+    $export_line=trim(preg_replace("/#.*$/","",trim($exports[$l])));
+    if (($export_line!="") && (!preg_match("/^#/",$export_line)))
+    {
+      for ($m=0;$m<sizeof($matches);$m++)
+      {
+        // This match should be after line 23 of current /etc/exports file
+        $best_export=EXPORTSbestmatch($exports,$matches[$m]);
+        
+        if ($best_export==$l) // We are currently at this line, that is best line, adding it to new export
+        {
+          // Transform export with new dir
+          
+          // clean export line
+          $export_line=trim($exports[$best_export]);
+          // Extracting exported dir
+          $f=preg_split("/[\s ]+/",$export_line);
+
+          if ($verbose) { report("\n### Comparing '$f[0]' vs '$matches[$m]'\n"); }
+          
+          // That is *not* an already exported line and not one to remove from export
+          $match_clean=preg_replace("/\/$/","",$matches[$m]); // no / at end here too
+          
+          if (($f[0]!=$match_clean) && (!(array_search($match_clean,$export_toremove))))
+          {
+            $t=preg_replace("/\/$/","",$matches[$m]); // no / at end for zfs list mountpoint check
+
+            // checking it is on a dataset
+            if ((sizeof($zfs_list)>0) && ($rc==0) && ($t!=""))
+            {
+              if (array_search($t,$zfs_list,true))
+              {
+                if ($verbose) { report("  $t is a ZFS dataset, new exportline: $export_line\n"); }
+                $export_line=str_replace($f[0],$t,$export_line);
+                $export_line=trim($export_line);
+                array_push($export_new,$export_line);
+              }
+              else { if ($verbose) { report("  $t is *NOT* a ZFS dataset, removing it from exports\n"); } }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Now writing the new export file, saving the old one
+  unlink("/etc/exports.old");
+  rename("/etc/exports /etc/exports.old");
+
+  $fd=fopen("/etc/exports","w");
+  if (!$fd) { report("###ERROR: Cant open /etc/exports for writing !\n"); }
+  else
+  {
+    for ($e=0;$e<sizeof($export_new);$e++)
+    {
+       if (fwrite($fd,"$export_new[$e]\n")===false)
+       { report("###ERROR: Cant write into /etc/exports: '$export_new[$e]'\n"); }
+    }
+  }
+  fclose($fd);
+  
+  // Finally re-exporting new shares
+  list($rc,$res)=get_exec("exportfs -ra","",false);
+  if ($rc!=0) { report("###ERROR, exportfs -ra failed\n"); }
+
+  sleep(5);
+}
+
+exit;
+
+function clean_comment($text)
+{ return(preg_replace("/#.*$/","",trim($text))); }
+
+function EXPORTSbestmatch($exports,$dir)
+{  
+  // Clean export content for comments and beyond
+  $exports=array_map('clean_comment',$exports);
+
+  $best_match=-1;
+  $best_len=-1;
+
+  // Find uncommented /etc/exports line matching the best the detected directory to share
+  for ($i=0;$i<sizeof($exports);$i++)
+  {
+    $export_line=preg_replace("/#.*$/","",trim($exports[$i]));
+    
+    $f=preg_split("/[\s ]+/",$export_line);
+    $export_share=$f[0];
+    
+    if ($export_share!="")
+    {
+      if (strpos($dir,$export_share)!==false)
+      {
+        for ($j=strlen($dir);$j>=strlen($export_share);$j--)
+        {
+          $current=substr($dir,0,$j);
+          if (($current==$export_share) && ($j>$best_len)) { $best_match=$i; $best_len=$j; }
+        }
+      }
+    }
+  }
+
+  return($best_match);
+}
+
+function get_exec($command,$prefix,$display)
+{
+  $res=array();
+
+  $fd=popen("$command 2>/dev/null","r");
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+    array_push($res,$line);
+    if ($display) { report($prefix.$line); ob_implicit_flush(); }
+  }
+  $rc=pclose($fd);
+  
+  return(array($rc,$res));
+}
+
+function report($text)
+{
+  global $log_file;
+  
+  // Jun 22 10:19:49 Singularity sudo
+  $date=date("M j G:i:s");
+  $hostname=gethostname();
+  
+  if ($log_file!="")
+  {
+    $fd=fopen($log_file,"a");
+    if (!$fd) { report("Cant append $log_file !!, stopping\n"); }
+
+    fwrite($fd,"$date $hostname Vigrid-daemon-ZFSexportsUPD: $text");
+
+    fclose($fd);
+  }
+  else { print $text; }
+}
+
+function sig_handler($signo)
+{
+  if (($signo==SIGTERM) || ($signo==SIGINT))
+  {
+    report("Received SIGTERM or SIGINT, Vigrid-daemon-ZFSexportsUPD exiting at ".strftime("%Y/%m/%d %H:%M:%S",time()).".\n");
+
+    report("Exiting at ".strftime("%Y/%m/%d %H:%M:%S",time()).".\n");
+    exit(0);
+  }
+
+  // other signals, normally useless
+  report("Received signal $signo !!");
+}
+
+?>

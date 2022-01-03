@@ -1,0 +1,39 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+echo "Checking GNS3 appliances dependancies..."
+
+LIST=`grep -H filename *.gns3a|sed 's/:.*: \"/:/'|sed 's/\".*$//'|sort -u`
+
+for i in $LIST
+do
+  GNS=`echo $i | awk 'BEGIN { FS=":";} { print $1;}'`
+  FILE=`echo $i | awk 'BEGIN { FS=":";} { print $2;}'`
+
+  echo "$GNS requires file: $FILE"
+  FILES=`find /opt/BKPunetlab -type f -name "$FILE"`
+
+  if [ "x$FILES" != "x" ]
+  then
+    echo "Found $FILES"
+    IFS_BAK=$IFS
+    IFS="
+"
+    for j in $FILES
+    do
+      echo "Copying $j to ~/downloads/"
+      cp "$j" ~/downloads/
+    done
+    IFS=$IFS_BAK
+  fi
+
+done

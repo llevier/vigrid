@@ -1,0 +1,105 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             bwmNG-disk-max
+# Required-Start:       $remote_fs $network $syslog
+# Required-Stop:        $remote_fs $network $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    Vigrid system monitoring (disk max)
+# Description:          Vigrid is a CyberRange/Training extension to GNS3
+### END INIT INFO
+
+set -e
+
+test -x /usr/bin/bwm-ng || exit 1
+( /usr/bin/bwm-ng -h 2>&1 | grep -q "Bandwidth Monitor NG" ) 2>/dev/null || exit 1
+
+umask 022
+
+. /lib/lsb/init-functions
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+
+PIDfile="/run/bwm-ng/bwmNG-disk-max.pid"
+PIDdir=`dirname $PIDfile`
+CSVfile="/var/log/bwmNG-disk-max.log"
+
+trap '' HUP
+
+ACTION=$1
+# Get options after start...
+if [ -n "$2" ]
+then
+  shift
+  OPTIONS=$*
+  log_daemon_msg "$DESC service options detected: $OPTIONS" "bwmNG-disk-max" || true
+fi
+
+VIGRID_BWM=""
+# Vigrid server
+if [ -x '/home/gns3/vigrid/bin/vigrid-bwmng' ]
+then
+  VIGRID_BWM="/home/gns3/vigrid/bin/vigrid-bwmng"
+  . /home/gns3/etc/vigrid.conf
+  VIGRID_STORAGE=$VIGRID_STORAGE_ROOT
+fi
+# Vigrid NAS
+if [ -x '/Vstorage/GNS3/vigrid/bin/vigrid-bwmng' ]
+then
+  VIGRID_BWM="/Vstorage/GNS3/vigrid/bin/vigrid-bwmng"
+  VIGRID_STORAGE="/Vstorage"
+fi
+
+case "$ACTION" in
+  start)
+    log_daemon_msg "Starting $DESC service" "bwmNG-disk-max" || true
+
+    # Sanity
+    [ ! -d "$PIDdir" ] && mkdir -p $PIDdir >/dev/null 2>/dev/null # && chown gns3:gns3 $PIDdir
+    [ ! -f "$CSVfile" ] && touch $CSVfile >/dev/null 2>/dev/null  # && chown gns3:gns3 $CSVfile
+
+    # Starting service
+    VIGRID_BWM=""
+    # Vigrid server
+    [ -x '/home/gns3/vigrid/bin/vigrid-bwmng' ] && VIGRID_BWM="/home/gns3/vigrid/bin/vigrid-bwmng"
+    # Vigrid NAS
+    [ -x '/Vstorage/GNS3/vigrid/bin/vigrid-bwmng' ] && VIGRID_BWM="/Vstorage/GNS3/vigrid/bin/vigrid-bwmng"
+    
+    start-stop-daemon --start --background --make-pidfile --pidfile $PIDfile --exec $VIGRID_BWM -- -a start -R $VIGRID_STORAGE -i disk -T max $OPTIONS
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+        log_end_msg 0 || true
+    else
+        log_end_msg 1 || true
+    fi
+    exit $RC
+    ;;
+    
+  stop)
+    log_daemon_msg "Stopping $DESC service" "bwmNG-disk-max" || true
+    $VIGRID_BWM -a stop -i disk -T max $OPTIONS
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+        log_end_msg 0 || true
+    else
+        log_end_msg 1 || true
+    fi
+    exit $RC
+    ;;
+
+  restart)
+    log_daemon_msg "Restarting $DESC service" "bwmNG-disk-max" || true
+    $0 stop $OPTIONS
+    $0 start $OPTIONS
+    break;
+    ;;
+
+  *)
+    log_action_msg "Usage: /etc/init.d/bwmNG-disk-max {start|stop|restart}" || true
+    exit 1
+esac
+
+exit 0

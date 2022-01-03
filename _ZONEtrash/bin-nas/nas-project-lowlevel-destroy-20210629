@@ -1,0 +1,53 @@
+#!/bin/sh
+
+PROJECT_NAME=$1
+
+if [ "x$PROJECT_NAME" = "x" ]
+then
+  echo "Usage: $0 ProjectName"
+  exit 1
+fi
+
+LIST=`ls -1 /Vstorage/GNS3/GNS3farm/GNS3/projects/*/$PROJECT_NAME*.gns3`
+
+echo "Detected the following projects:"
+echo "$LIST"
+
+echo -n "Associated datasets will be destroyed, are you sure [y/N] ? "
+
+read ANS
+
+if [ "x$ANS" != "xY" -a "x$ANS" != "xy" ]
+then
+  echo "Ok, exiting"
+  exit
+fi
+
+echo -n "Associated datasets will be destroyed, are you *REALLY* sure [y/N] ? "
+
+read ANS
+
+if [ "x$ANS" != "xY" -a "x$ANS" != "xy" ]
+then
+  echo "Ok, exiting"
+  exit
+fi
+
+echo "Ok, lets do it then..."
+
+for i in $LIST
+do
+  echo -n "Directory $i: "
+
+  DATASET=`zfs list -o name $i|tail -n+2`
+  CHK=`echo $DATASET|grep "\/projects\/"|wc -l`
+
+  if [ "x$DATASET" = "x" -o $CHK -lt 1 ]
+  then
+    echo "Cant find an associated dataset, skipping"
+  else
+    echo "destroying $DATASET..."
+    zfs destroy -r $DATASET
+  fi
+done
+

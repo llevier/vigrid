@@ -1,0 +1,433 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Monitoring Control Tower");
+
+  $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+
+	if ($_GET["refresh"] != 0)    { $refresh=HTMLvalue($_GET["refresh"]); }
+	else { $refresh=60; }
+
+	if ($_GET["dispid"] != 0)     { $dispid=HTMLvalue($_GET["dispid"]); }         else { $dispid=0; }
+	if ($_GET["gnsall"] != 0)     { $gnsall=HTMLvalue($_GET["gnsall"]); }         else { $gnsall=0; }
+
+	// end of metarefresh
+	$refresh_url=getselfurl_controltower();
+	print ("<meta http-equiv=\"refresh\" content=\"".$refresh."; ".$refresh_url."\">\n");
+	// echo "Refresh=".$refresh_url."<BR>\n";
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+  
+  // Get all data
+  // Data format:
+  // $_['STATS'][GNS_HOSTNAME][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df) ]
+  // $_['STATS'][NAS_HOSTNAME][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df) ]
+  // Projects:  $_['GNS3'][GNS_HOSTNAME]['PROJECTS'][]
+  // Nodes:     $_['GNS3'][GNS_HOSTNAME]['PROJECT_NODES'][GNS_PROJECT_UUID]['NODES'][]
+
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+
+  $new_url=getselfurl_controltower();
+  ?><div class="tooltip"><A HREF="<?php print $new_url; ?>"><IMG SRC="/images/reload.png"><span class="tooltiptext_aboveR">Refresh page</span></A></div>&nbsp;&nbsp;&nbsp<?php
+  
+  if (preg_match("/\?/",$new_url)) { $split_char="&"; } else { $split_char="?"; }
+  if (preg_match("/dispid=1/",$new_url))
+  {
+    $text_id="off";
+    $new_url=preg_replace("/[?&]dispid=[01]/","",$new_url);
+    if (preg_match("/\?/",$new_url)) { $split_char="&"; } else { $split_char="?"; }
+  }
+  else { $text_id="on"; $new_url.=$split_char."dispid=1"; }
+  print("<div class=\"tooltip\"><A HREF=\"".$new_url."\"><IMG SRC=\"/images/uuid_".$text_id.".png\"><span class=\"tooltiptext_above\">Switch: display UUIDs</span></A></div>&nbsp;&nbsp;&nbsp;");
+
+  $new_url=getselfurl_controltower();
+  if (preg_match("/\?/",$new_url)) { $split_char="&"; } else { $split_char="?"; }
+  if (preg_match("/gnsall=1/",$new_url))
+  {
+    $text_links="off";
+    $new_url=preg_replace("/[?&]gnsall=[01]/","",$new_url);
+    if (preg_match("/\?/",$new_url)) { $split_char="&"; } else { $split_char="?"; }
+  }
+  else { $text_links="on"; $new_url.=$split_char."gnsall=1"; }
+  print("<div class=\"tooltip\"><A HREF=\"".$new_url."\"><IMG SRC=\"/images/gnshost_".$text_links.".png\"><span class=\"tooltiptext_above\">Switch: display only active GNS hosts</span></A></div>&nbsp;&nbsp;&nbsp;");
+  ?>
+	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=4 pattern="[0-9]{4}">seconds<?php getselfurl_controltower_form("refresh"); ?></form>
+  </TD></TR></TABLE><?php
+  
+  // If Vigrid design with NAS, show NAS stats
+  $data_vigrid_stats=VIGRIDgetstatsdataASYNC($gns_controller);
+
+  $vigrid_type=VIGRIDconfig("VIGRID_TYPE");
+  
+  if ($vigrid_type!=1) // Design with NAS
+  {
+    ?><H3>NAS server(s)</H3>
+    <TABLE NUMCOL=4 BORDER=1>
+    <TR><TD><B>NAS hostname</B></TD><TD><B>Status</B></TD><TD><B>SSH</B></TD><TD><B>IP address</B></TD>
+    <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD><TD ALIGN=CENTER COLSPAN=2><B>DISK free/total</B></TD><TR>
+    <?php
+    
+    $vigrid_nas=VIGRIDconfig("VIGRID_NAS_SERVER");
+    $nas_list=preg_split("/[\s ]+/",$vigrid_nas);
+    for ($i=0;$i<sizeof(nas_list);$i++)
+    {
+      $nas=explode(":",$nas_list[$i]);
+      $nas_host=$nas[0];
+      $nas_ip=$nas[1];
+      
+      print("<TR><TD>".$nas[0]."</TD>");
+
+      // Check Server up to display monitoring data
+      if (false)
+      { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15></TD>"); }
+      else
+      { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15></TD>"); }
+
+      // Check SSH access
+      if (VIGRIDssh_check($nas[0],VIGRIDconfig("VIGRID_SSHKEY_NAS"),"root")==0)
+      { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_on.png\" WIDTH=20 HEIGTH=20></TD>"); }
+      else
+      { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
+
+      print("<TD ALIGN=RIGHT>".    $nas[1]."</TD>");
+
+      if (isset($data_vigrid_stats['STATS'][$nas_ip]))
+      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=$data_vigrid_stats['STATS'][$nas_ip]; }
+      else
+      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+
+      if (($load1==-1) || ($load5==-1) || ($load15==-1))
+      { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        if ($load1>75)       { $color="Red"; }
+        else if ($load1>50)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+
+        if ($load5>75)       { $color="Red"; }
+        else if ($load5>50)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
+
+        if ($load15>75)       { $color="Red"; }
+        else if ($load15>50)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
+      }
+      
+      if ($cpu==-1)
+      { print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        if ($cpu<10)       { $color="Red"; }
+        else if ($cpu<30)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
+      }
+
+      if ($cores==-1)
+      { print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>"); }
+
+      if ($ram_free==-1)
+      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        $ratio=$ram_total/$ram_free*100;
+        if ($ratio<10)       { $color="Red"; }
+        else if ($ratio<30)  { $color="Orange"; }
+        else                 { $color="Green"; }
+        // Set RAM & swap (units in bytes) to MB or GB
+        if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
+        else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
+        if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
+        else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
+      }
+
+      if ($swap_free==-1)
+      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        $ratio=$swap_total/$swap_free*100;
+
+        if ($ratio<30)       { $color="Red"; }
+        else if ($ratio<60)  { $color="Orange"; }
+        else                 { $color="Green"; }
+
+        if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
+        else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
+        if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
+        else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
+      }
+
+      if ($disk_df=="")
+      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        // directories (directory:free/total)
+        $dod=preg_split("/##/",$disk_df);
+
+        print("<TD><TABLE BORDER=0>");
+        for ($do=0;$do<sizeof($dod);$do++)
+        {
+          $f=explode(":",$dod[$do]);
+          $nas_dir=$f[0];
+
+          $f=explode("/",$f[1]);
+          $disk_free=$f[0];
+          $disk_total=$f[1];
+          
+          if ($disk_free<100000000)     { $color="Red"; } // Less than 100GB
+          elseif ($disk_free<150000000) { $color="Orange"; } // Less than 150GB
+          else { $color="Green"; }
+          
+          if ($disk_free/1000000000>1) { $disk_free=sprintf("%02.02f",$disk_free/1000000000); $disk_free_unit=" TB"; }
+          else { $disk_free=sprintf("%02.02f",$disk_free/1000000); $disk_free_unit=" GB"; }
+          if ($disk_total/1000000000>1) { $disk_total=sprintf("%02.02f",$disk_total/1000000000); $disk_total_unit=" TB"; }
+          else { $disk_total=sprintf("%02.02f",$disk_total/1000000); $disk_total_unit=" GB"; }
+
+          if ($disk_total>0)
+          { print("<TR><TD>".$nas_dir."</TD><TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$disk_free.$disk_free_unit." / ".$disk_total.$disk_total_unit."</FONT></TD></TR>"); }
+        }
+        print("</TABLE></TD>\n");
+      }
+      print("</TR>\n");
+    } 
+    print("</TABLE>\n");
+  }
+  
+  ?><H3>GNS Host(s)</H3>
+  <TABLE NUMCOL=4 BORDER=1>
+  <TR><TD><B>Server name</B></TD><TD><B>Status</B></TD>
+  <?php if (VIGRIDconfig("VIGRID_TYPE")!=1) { ?><TD><B>SSH</B></TD><?php } ?>
+  <TD><B>Hostname/IP</B></TD><TD><B>TCP port</B></TD><TD><B>Version</B></TD>
+  <?php if ($dispid==1) { print("<TD><B>Compute ID</B></TD>"); } ?>
+  <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD><TD ALIGN=CENTER><B>DISK free/total</B></TD><TR>
+  <?php
+
+  $vigrid_hosts=VIGRIDgetgnshosts($gns_controller);
+  
+  for ($i=0;$i<sizeof($vigrid_hosts);$i++)
+  {
+    $f=explode(":",$vigrid_hosts[$i]);
+    $host_name=$f[0];
+    $host_ip=$f[1];
+    $host_port=$f[2];
+    $host_compute=$f[3];
+  
+    $display=0;
+    if ($_GET["gns_host"]!="")
+    {
+      if ($host_name==HTMLvalue($_GET["gns_host"]))
+      { $display=1; }
+    }
+    else if ($_GET["regex_host"]!="")
+    {
+      if (preg_match("/".HTMLvalue($_GET["regex_host"])."/",$host_name))
+      { $display=1; }
+    }
+    else { $display=1; }
+
+    // Hide inactive GNS hosts by default
+    if ((!isset($data_vigrid['GNS3'][$host_ip])) && ($gnsall==0)) { $display=0; }
+
+    if ($display==1)
+    {
+      if ($host_name==gethostname())
+      { print("<TR><TD><FONT COLOR=Blue><FONT SIZE=+1><B>".$host_name."</FONT></FONT></B></TD>"); }
+      else
+      { print("<TR><TD>".$host_name."</TD>"); }
+
+      // Check Server up to display GNS status data
+      if (isset($data_vigrid['GNS3'][$host_ip]))
+      { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15></TD>"); }
+      else
+      { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15></TD>"); }
+
+      // Check SSH access for not Standalone servers
+      if (VIGRIDconfig("VIGRID_TYPE")!=1)
+      {
+        if (isset($data_vigrid_stats['STATS'][$host_ip]))
+        {
+          if ($host_name!=gethostname())
+          {
+            if (VIGRIDssh_check($host_ip,VIGRIDconfig("VIGRID_SSHKEY_GNS"),"gns3")==0)
+            { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_on.png\" WIDTH=20 HEIGTH=20></TD>"); }
+            else
+            { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
+          }
+          else
+          { print("<TD ALIGN=CENTER>N/A</TD>"); }
+        }
+        else { print("<TD></TD>"); }
+      }
+            
+      print("<TD ALIGN=RIGHT>".    $host_ip."</TD>");
+      print("<TD ALIGN=CENTER>".    $host_port."</TD>");
+      
+      if (isset($data_vigrid['GNS3'][$host_ip]))
+      { print("<TD ALIGN=CENTER>".$data_vigrid['GNS3'][$host_ip]['COMPUTES'][0]['capabilities']['version']."</TD>"); }
+
+      if ($dispid==1)
+      {
+        if (gethostname()==$host_name) { print("<TD>local</TD>"); }
+        else { print("<TD>".    $host_compute."</TD>"); }
+      }
+
+      if (isset($data_vigrid_stats['STATS'][$host_ip]))
+      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=$data_vigrid_stats['STATS'][$host_ip]; }
+      else
+      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+
+      if (($load1==-1) || ($load5==-1) || ($load15==-1))
+      { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        if ($load1>75)       { $color="Red"; }
+        else if ($load1>50)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+
+        if ($load5>75)       { $color="Red"; }
+        else if ($load5>50)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
+
+        if ($load15>75)       { $color="Red"; }
+        else if ($load15>50)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
+      }
+      
+      if ($cpu==-1)
+      { print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        if ($cpu<10)       { $color="Red"; }
+        else if ($cpu<30)  { $color="Orange"; }
+        else               { $color="Green"; }
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
+      }
+
+      if ($cores==-1)
+      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
+      else
+      {
+        print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>");
+      }
+
+      if ($ram_free==-1)
+      {	print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
+      else
+      {
+        $ratio=$ram_total/$ram_free*100;
+        if ($ratio<10)       { $color="Red"; }
+        else if ($ratio<30)  { $color="Orange"; }
+        else                         { $color="Green"; }
+        // Set RAM & swap (units in bytes) to MB or GB
+        if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
+        else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
+        if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
+        else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
+      }
+
+      if ($swap_free==-1)
+      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        $ratio=$swap_total/$swap_free*100;
+
+        if ($ratio<30)       { $color="Red"; }
+        else if ($ratio<60)  { $color="Orange"; }
+        else                         { $color="Green"; }
+
+        if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
+        else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
+        if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
+        else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
+      }
+
+      if ($disk_df==-1)
+      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+      else
+      {
+        $f=preg_split("/\//",$disk_df);
+        $disk_free=$f[0];
+        $disk_total=$f[1];
+        
+        if ($disk_free<100000000)     { $color="Red"; } // Less than 100GB
+        elseif ($disk_free<150000000) { $color="Orange"; } // Less than 150GB
+        else { $color="Green"; }
+        
+        if ($disk_free/1000000000>1) { $disk_free=sprintf("%02.02f",$disk_free/1000000000); $disk_free_unit=" TB"; }
+        else { $disk_free=sprintf("%02.02f",$disk_free/1000000); $disk_free_unit=" GB"; }
+        if ($disk_total/1000000000>1) { $disk_total=sprintf("%02.02f",$disk_total/1000000000); $disk_total_unit=" TB"; }
+        else { $disk_total=sprintf("%02.02f",$disk_total/1000000); $disk_total_unit=" GB"; }
+        
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$disk_free.$disk_free_unit." / ".$disk_total.$disk_total_unit."</FONT></TD>");
+      }
+      print("<TR>\n");
+    }
+  }
+  print("</TABLE><BR>\n");
+  
+	function getselfurl_controltower() // return self url with all arguments (GET)
+	{
+    // for URL: ? or &
+		$arg=0;
+
+		$refresh_url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'].$_SERVER["PHP_SELF"];
+    
+		if ($_GET["regex_host"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_host=".HTMLvalue($_GET["regex_host"]); }
+		if ($_GET["gns_host"]!="")      { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="gns_host=".HTMLvalue($_GET["gns_host"]); }
+		if ($_GET["regex_project"]!="") { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_project=".HTMLvalue($_GET["regex_project"]); }
+		if ($_GET["gns_project"]!="")   { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="gns_project=".HTMLvalue($_GET["gns_project"]); }
+		if ($_GET["regex_node"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_node=".HTMLvalue($_GET["regex_node"]); }
+		if ($_GET["refresh"]!="")       { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="refresh=".HTMLvalue($_GET["refresh"]); }
+		if ($_GET["dispid"]!="")        { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="dispid=".HTMLvalue($_GET["dispid"]); }
+		if ($_GET["links"]!="")         { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="links=".HTMLvalue($_GET["links"]); }
+		if ($_GET["activeonly"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="activeonly=".HTMLvalue($_GET["activeonly"]); }
+		if ($_GET["gnsall"]!="")        { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="gnsall=".HTMLvalue($_GET["gnsall"]); }
+		if ($_GET["hostmon"]!="")       { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="hostmon=".HTMLvalue($_GET["hostmon"]); }
+
+		return($refresh_url);
+	}
+
+	function getselfurl_controltower_form($arg) // create forms fields of all in URL but the one in $arg
+	{
+		$arg_fields=array("regex_host","gns_host","regex_project","gns_project","regex_node","refresh","dispid","links","hostmon","activeonly","gnsall");
+		for ($field=0;$field<sizeof($arg_fields);$field++)
+		{
+			if ($arg_fields[$field] != $arg)
+			{ if ($_GET[$arg_fields[$field]]!="")
+				{ print("<input type=\"hidden\" name=\"$arg_fields[$field]\"; value=\"".HTMLvalue($_GET[$arg_fields[$field]])."\">"); }
+			}
+		}
+	}
+?>
+</html>

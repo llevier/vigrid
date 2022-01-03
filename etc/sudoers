@@ -1,0 +1,49 @@
+#
+# Vigrid sudoers file
+#
+#
+User_Alias      VIGRID = gns3, www-data
+
+# Snapshot management
+# list of all snapshots, no space at end
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a list
+# list of specific projects snapshots
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a list *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a size *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a CONVproject *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a ADDclone *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a DELclone *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a ADDhistory *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a DELhistory *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a SWAPsnap *
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectZFSsnapshot -a ROLLback *
+
+# Clones
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/project-lowlevel-clone-industrial *
+
+# List process (localhost), get DHCP etc
+VIGRID       ALL = (gns3) NOPASSWD: /home/gns3/vigrid/bin/dhcp-list-leases
+VIGRID       ALL = (gns3) NOPASSWD: /home/gns3/vigrid/bin/host-stats
+VIGRID       ALL = (gns3) NOPASSWD: /home/gns3/vigrid/bin/nas-stats
+VIGRID       ALL = (gns3) NOPASSWD: /home/gns3/vigrid/bin/dhcp-get-arp-table
+VIGRID       ALL = (root) NOPASSWD: /usr/sbin/service gns3 reload
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/vigrid-run -M -A '/usr/sbin/service gns3 reload'
+VIGRID       ALL = (gns3) NOPASSWD: /home/gns3/vigrid/bin/vigrid-sshcheck
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/vigrid-run
+
+############# OBSOLETE ##########################################################################
+# Snapshot management (BTRfs, too slow, obsolete)
+#VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectBTRFSsnapshot -a list *
+#VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectBTRFSsnapshot -a rollback *
+#VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectBTRFSsnapshot -a list *
+#VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/projectBTRFSsnapshot -a rollback *
+
+#VIGRID       ALL = (root) NOPASSWD: /bin/btrfs sub list *
+#VIGRID       ALL = (root) NOPASSWD: /bin/btrfs sub snap *
+#VIGRID       ALL = (root) NOPASSWD: /bin/btrfs sub delete *
+
+# to put on remote hosts
+#VIGRID       ALL = (root) NOPASSWD: /bin/btrfs sub list *
+#VIGRID       ALL = (root) NOPASSWD: /bin/btrfs sub snap *
+#VIGRID       ALL = (root) NOPASSWD: /bin/btrfs sub delete *
+#

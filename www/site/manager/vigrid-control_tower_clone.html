@@ -1,0 +1,551 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Clone Control Tower");
+
+  // GNS3 home directory
+  $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+  $gns_home="$vigrid_storage_root/home/gns3";
+
+	if ($_GET["refresh"] != 0) { $refresh=$_GET["refresh"]; }
+	else { $refresh=60; }
+
+	if ($_GET["dispid"] != 0) { $dispid=$_GET["dispid"]; }
+
+	if ($_GET["links"] != 0) { $displinks=$_GET["links"]; }
+
+	if ($_GET["clone_owner"] != "")      { $scope_owner=$_GET["clone_owner"]; }
+	if ($_GET["clone_owner_pass"] != "") { $scope_owner_pass=$_GET["clone_owner_pass"]; }
+
+  if ($scope_owner=="")
+  { ?><FONT COLOR="Red"><FONT SIZE=+1><B>I am sorry, I dont know you. Please identify yourself.</B></FONT></FONT><?php exit(1); }
+  
+  // Clone control tower is bound to a user
+  $mysql_host="127.0.0.1";
+  $mysql_port="";
+  $mysql_user="gns3clones";
+  $mysql_pass="v9moJ5dJILIm4bRTeyj9";
+
+  $mysql_database="gns3clones";
+  $mysql_table="list";
+  
+  $dsn=$mysql_host;
+  if ($mysql_port!="") { $dsn.=":$mysql_port"; }
+  $dbh=mysqli_connect($dsn,$mysql_user,$mysql_pass);
+  if (!$dbh) { print('cant connect to server ('.$dsn.'): '.mysqli_error()."(errno=".mysqli_connect_errno().")\n"); exit(1); }
+
+  if (!mysqli_select_db($dbh,$mysql_database)) // Cant connect to DB
+  { print('cant reach database ('.$dsn.'): '.mysqli_error()."(errno=".mysqli_connect_errno().")\n"); exit(1); }
+
+  $Powner=mysqli_real_escape_string($dbh,$scope_owner);
+
+  print("<FONT SIZE=+1>Hello <B><U>$scope_owner</U></B></FONT>, ");
+
+  $query="SELECT Phost_source,Pname_source,Puuid_source,Phost_target,Pname_target,Puuid_target,Plifetime,UNIX_TIMESTAMP(Pcreatime),Powner,Powner_pass FROM $mysql_database.$mysql_table WHERE Powner='$Powner';";
+  if(!($result=mysqli_query($dbh, $query)))
+  { ?><FONT COLOR="Red"><FONT SIZE=+1><B>I am sorry, there has been an error. Exiting.</B></FONT></FONT><?php exit(1); }
+
+  $numrows=mysqli_num_rows($result);
+  if ($numrows==0)
+  { ?><FONT COLOR="Red"><FONT SIZE=+1><B>I am sorry, but Clone Control Tower requires to own at least a clone. Exiting.</B></FONT></FONT><?php exit(1); }
+
+  print("<FONT SIZE=+1>I see you own <B>$numrows</B> project(s).</FONT><BR><BR>");
+
+	// end of metarefresh
+	$refresh_url=getselfurl_controltower();
+	print ("<meta http-equiv=\"refresh\" content=\"".$refresh."; ".$refresh_url."\">\n");
+	// echo "Refresh=".$refresh_url."<BR>\n";
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+	
+	// if there are parameters, means start/stop something :-)
+	if (($_GET["gnshost"]!="") && ($_GET["project_id"]!="") && ($_GET["status"]!=""))
+	{
+		// Node start/stop requested
+		if (($_GET["status"]=="started") || ($_GET["status"]=="stopped"))
+		{
+			print("<FONT SIZE=+1 COLOR=\"Red\"><B>Action: </B><FONT COLOR=\"Blue\">");
+      
+			if ($_GET["status"]=="started")
+      { $t_text="Stopping"; $t_action="stop"; }
+      elseif ($_GET["status"]=="stopped")
+      { $t_text="Starting"; $t_action="start"; }
+     
+      if (($_GET["node_id"]=="") && ($_GET["node_name"]=="")) // no node ID/name, means whole project
+      {
+        $nodes=gns_getnodes($gns_controller,$_GET["gnshost"],$_GET["project_id"]);
+        for ($k=0;$k<sizeof($nodes);$k++)
+        {
+          gns_node_command($gns_controller,$_GET["gnshost"],$_GET["project_id"],$nodes[$k]['node_id'],$t_action);
+          print("<li>".$t_text." node: <B>".$_GET["gnshost"]." / ".$_GET["project_name"]." / ".$nodes[$k]['name']." (ID=".$nodes[$k]['node_id'].")</B></li>\n");
+        }
+      }
+      else
+      {
+        gns_node_command($gns_controller,$_GET["gnshost"],$_GET["project_id"],$_GET["node_id"],$t_action);
+        print($t_text." node: <B>".$_GET["gnshost"]." / ".$_GET["project_name"]." / ".$_GET["node_name"]."</B>\n");
+        print("</FONT></FONT>");
+      }
+      print("</H4><BR><BR>\n");
+
+			sleep (2);
+		}
+		else { print("<H4><FONT COLOR=\"Red\"><B>MALFORMED START/STOP URL (".$node_control_url=$node_control_url.$_GET["status"]."), cowardly doing nothing...</B></FONT></H4><BR>\n"); }
+	}
+  
+  // Toggles
+  if (preg_match("/\?/",$refresh_url)) { $split_char="&"; } else { $split_char="?"; }
+  
+  $new_url=$refresh_url;
+  if (preg_match("/dispid=1/",$refresh_url))
+  { $text_id="HIDE"; $new_url=preg_replace("/dispid=1/","",$new_url); }
+  else { $text_id="SHOW"; $new_url.=$split_char."dispid=1"; }
+  print("<A HREF=\"".$new_url."\">".$text_id." IDs</A>&nbsp;&nbsp;&nbsp;");
+
+  $new_url=$refresh_url;
+  if (preg_match("/links=1/",$refresh_url))
+  { $text_links="HIDE"; $new_url=preg_replace("/links=1/","",$new_url); }
+  else { $text_links="SHOW"; $new_url.=$split_char."links=1"; }
+  print("<A HREF=\"".$new_url."\">".$text_links." LINKs</A>&nbsp;&nbsp;&nbsp;");
+
+	?>
+	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=2 pattern="[0-9]{2}">seconds<?php getselfurl_controltower_form("refresh"); ?></form>
+	<H3>Hosts</H3>
+	<TABLE NUMCOL=4 BORDER=1>
+	<TR><TD><B>Server name</B></TD><TD><B>Status</B></TD><TD><B>Hostname/IP</B></TD><TD><B>TCP port</B></TD><TD><B>Protocol</B></TD>
+	<?php if ($dispid==1) { print("<TD><B>Compute ID</B></TD>"); } ?>
+	<TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD><TD ALIGN=CENTER><B>DISK free/total</B></TD><TR>
+	<?php
+
+	// Get DHCP leases
+  $dhcp_leases=get_dhcp_leases();
+
+  // sort alpha computes...
+  // Move myself (master) at top of list
+  usort($gns_controller['computes'], 'compare_name');
+
+  // ping to save time
+  $command="/home/gns3/www/manager/threaded-ping.php ";
+	for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+  {
+		$ping[$gns_controller['computes'][$i]['host']]=-1;
+    $command=$command." \"".$gns_controller['computes'][$i]['host']."\"";
+  }
+
+  exec($command,$output,$rc);
+  for ($i=0;$i<sizeof($output);$i++)
+  {
+    // print("L=$output[$i]<BR>");
+    if (preg_match("/^RC@/",$output[$i]))
+    {
+      $t=preg_replace("/^RC@/","",$output[$i]);
+      $f=preg_split("/=/",$t);
+      
+      if     ($f[1]=="1") { $ping[$f[0]]=0; } // Return code, 1 means no answer to ping :-)
+      elseif ($f[1]=="0") { $ping[$f[0]]=1; }
+    }
+  }
+
+	for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+	{
+    if ($ping[$gns_controller['computes'][$i]['host']]==-1)
+    {
+		  $ping[$gns_controller['computes'][$i]['host']]=0;
+		  system("/bin/ping -q -c1 -w1 ".$gns_controller['computes'][$i]['host']." >/dev/null 2>/dev/null",$rc);
+		  if ($rc==0) { $ping[$gns_controller['computes'][$i]['host']]=1; }
+    }
+
+    if ($gns_controller['computes'][$i]['name']==gethostname())
+    { print("<TR><TD><FONT COLOR=Blue><FONT SIZE=+1><B>".$gns_controller['computes'][$i]['name']."</FONT></FONT></B></TD>"); }
+    else
+    { print("<TR><TD>".$gns_controller['computes'][$i]['name']."</TD>"); }
+
+		if ($ping[$gns_controller['computes'][$i]['host']]==1)
+		{ $computes=gns_getcomputes($gns_controller,$gns_controller['computes'][$i]['host']); }		
+		else { $computes[0]['connected']==""; }
+		
+		if (($computes[0]['connected']=="") || ($ping[$gns_controller['computes'][$i]['host']]==0))
+		{ print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15></TD>"); }
+		else
+		{ print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15></TD>"); }
+		print("<TD ALIGN=RIGHT>".    $gns_controller['computes'][$i]['host']."</TD>");
+		print("<TD ALIGN=CENTER>".    $gns_controller['computes'][$i]['port']."</TD>");
+		print("<TD ALIGN=CENTER>".    $gns_controller['computes'][$i]['protocol']."</TD>");
+
+		if ($dispid==1)
+		{
+      if (gethostname()==$gns_controller['computes'][$i]['name']) { print("<TD>local</TD>"); }
+      else { print("<TD>".    $gns_controller['computes'][$i]['compute_id']."</TD>"); }
+    }
+    
+    if (gethostname()==$gns_controller['computes'][$i]['name'])
+    { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=get_sys_stats(""); }
+    else if ($ping[$gns_controller['computes'][$i]['host']]==1)
+    { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=get_sys_stats($gns_controller['computes'][$i]['host']); }
+    else
+    { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+
+    if (($load1==-1) || ($load5==-1) || ($load15==-1))
+		{ print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+		else
+		{
+			if ($load1>75)       { $color="Red"; }
+			else if ($load1>50)  { $color="Orange"; }
+			else               { $color="Green"; }
+			print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+
+			if ($load5>75)       { $color="Red"; }
+			else if ($load5>50)  { $color="Orange"; }
+			else               { $color="Green"; }
+			print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
+
+			if ($load15>75)       { $color="Red"; }
+			else if ($load15>50)  { $color="Orange"; }
+			else               { $color="Green"; }
+			print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
+    }
+    
+    if ($cpu==-1)
+		{ print("<TD ALIGN=CENTER>N/A</TD>"); }
+		else
+		{
+			if ($cpu<10)       { $color="Red"; }
+			else if ($cpu<30)  { $color="Orange"; }
+			else               { $color="Green"; }
+			print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
+		}
+
+    if ($cores==-1)
+		{ print("<TD ALIGN=CENTER>N/A</TD>"); }
+		else
+		{
+			print("<TD ALIGN=CENTER>".$cores."</TD>");
+		}
+
+    if ($ram_free==-1)
+		{	print("<TD ALIGN=CENTER>N/A</TD>"); }
+		else
+		{
+			if ($ram_free<1048576)       { $color="Red"; }
+			else if ($ram_free<4194304)  { $color="Orange"; }
+			else                         { $color="Green"; }
+			// Set RAM & swap (units in bytes) to MB or GB
+			if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
+			else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
+			if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
+			else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
+			print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
+		}
+
+		if ($swap_free==-1)
+		{	print("<TD ALIGN=CENTER>N/A</TD>"); }
+		else
+		{
+			if ($swap_free<$swap_total)         { $color="Red"; }
+			else { $color="Green"; }
+			if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
+			else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
+			if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
+			else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
+			print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
+		}
+
+		if ($disk_df==-1)
+		{	print("<TD ALIGN=CENTER>N/A</TD>"); }
+		else
+		{
+      $f=preg_split("/\//",$disk_df);
+      $disk_free=$f[0];
+      $disk_total=$f[1];
+      
+			if ($disk_free<100000000)     { $color="Red"; } // Less than 100GB
+			elseif ($disk_free<150000000) { $color="Orange"; } // Less than 150GB
+			else { $color="Green"; }
+      
+			if ($disk_free/1000000000>1) { $disk_free=sprintf("%02.02f",$disk_free/1000000000); $disk_free_unit=" TB"; }
+			else { $disk_free=sprintf("%02.02f",$disk_free/1000000); $disk_free_unit=" GB"; }
+			if ($disk_total/1000000000>1) { $disk_total=sprintf("%02.02f",$disk_total/1000000000); $disk_total_unit=" TB"; }
+			else { $disk_total=sprintf("%02.02f",$disk_total/1000000); $disk_total_unit=" GB"; }
+      
+			print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$disk_free.$disk_free_unit." / ".$disk_total.$disk_total_unit."</FONT></TD>");
+		}
+		print("<TR>\n");
+	}
+	print("</TABLE><BR><BR>\n");
+	?>	
+	<H3>Projects</H3>
+	<TABLE NUMCOL=3 BORDER=1>
+	<TR><TD><B>Host name</B></TD><TD><B>Project name</B></TD><?php if ($dispid==1) { ?><TD><B>Project ID</B></TD> <?php } ?><TD><B>Nodes</B></TD><TR>
+	<TR><TD>preg filter:<BR><form><input type="text" name="regex_host" value="<?php print $_GET["regex_host"]; ?>"><?php getselfurl_controltower_form("regex_host"); ?></form></TD>
+	<TD>preg filter:<BR><form><input type="text" name="regex_project" value="<?php print $_GET["regex_project"]; ?>"><?php getselfurl_controltower_form("regex_project"); ?></form></TD>
+	<?php if ($dispid==1) { ?><TD></TD><?php } ?>
+	<TD>preg filter:<BR><form><input type="text" name="regex_node" value="<?php print $_GET["regex_node"]; ?>"><?php getselfurl_controltower_form("regex_node"); ?></form></TD><TR>
+	<?php
+	for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+	{
+	  // First ensure the host is up, else avoid it...
+		if ($ping[$gns_controller['computes'][$i]['host']]==1)
+		{
+			// if there is a GNS3 controller regex, restrict display to these
+			$display=0;
+			if ($_GET["regex_host"]!="")
+			{
+				if (preg_match("/".$_GET["regex_host"]."/",$gns_controller['computes'][$i]['name']))
+				{ $display=1; }
+			}
+			else { $display=1; }
+
+			if ($display==1)
+			{
+				$projects=gns_getprojects($gns_controller,$gns_controller['computes'][$i]['name']);
+				
+				// sort alpha computes...
+				usort($projects, 'compare_name');
+
+				// Displaying listed projects
+				for ($j=0;$j<sizeof($projects);$j++)
+				{
+					// if there is a GNS3 project regex, restrict display to these
+					$display=0;
+					if ($_GET["regex_project"]!="")
+					{
+						if (preg_match("/".$_GET["regex_project"]."/",$projects[$j]['name']))
+						{ $display=1; }
+					}
+					else { $display=1; }
+
+					if ($display==1)
+					{
+						print("<TR><TD>".$gns_controller['computes'][$i]['name']."</TD>");
+						
+						// snapshot by project ?
+						// print("<TD><A HREF=\"/manager/vigrid-snapshot.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gns_host=".$gns_controller['computes'][$i]['name']."&project_uuid=".$projects[$j]['project_id']."\" TARGET=_snapshot><IMG SRC=\"/images/photo.png\" WIDTH=20 HEIGHT=16></A>&nbsp;".$projects[$j]['name']."</TD>");
+						print("<TD>".$projects[$j]['name']."<BR><BR>");
+						$url_start="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".$projects[$j]['name']."&project_id=".$projects[$j]['project_id']."&status=stopped";
+						$url_stop="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".$projects[$j]['name']."&project_id=".$projects[$j]['project_id']."&status=started";
+
+						print("<A HREF=\"".$url_start."\"><IMG SRC=\"/images/start.png\" WIDTH=40 HEIGHT=40></A>&nbsp;&nbsp;<A HREF=\"".$url_stop."\"><IMG SRC=\"/images/stop.png\" WIDTH=40 HEIGHT=40></A></TD>\n");
+						
+						if ($dispid==1) { print("<TD>".    $projects[$j]['project_id']."</TD>"); }
+						print("<TD>");
+						?><TABLE NUMCOL=3 BORDER=1 WIDTH=100%>
+						<TR><TD><B>Node name</B></TD><?php if ($dispid==1) { ?><TD><B>Node ID</B></TD><?php } ?><TD><B>Console</B></TD><TD><B>Status</B></TD>
+						<?php if ($displinks==1) { print("<TD><B>Links DHCP/ARP</B></TD>"); } else { print("<TD><B>DHCP/ARP</B></TD><TR>"); }
+
+						// now get nodes details
+						gns_project_command($gns_controller,$gns_controller['computes'][$i]['name'],$projects[$j]['project_id'],"open");
+
+						$nodes=gns_getnodes($gns_controller,$gns_controller['computes'][$i]['name'],$projects[$j]['project_id']);
+			
+						// alpha sort nodes...
+						usort($nodes, 'compare_name');
+
+						for ($k=0;$k<sizeof($nodes);$k++)
+						{
+              $t=$nodes[$k]['command_line'];
+              $t=preg_replace("/^.*-smp /","",$t);
+              $t=preg_replace("/-.*$/","",$t);
+              
+              $cores=0;
+              if (preg_match("/cpus=/",$t))
+              { $cores=preg_replace("/^.*cpus=/","",$t); }
+              $cores=rtrim($cores);
+              
+							// if there is a GNS3 node regex, restrict display to these
+							$display=0;
+							if ($_GET["regex_node"]!="")
+							{
+								if (preg_match("/".$_GET["regex_node"]."/",$nodes[$k]['name']))
+								{ $display=1; }
+							}
+							else { $display=1; }
+
+							if ($display==1)
+							{
+								print("<TR><TD VALIGN=CENTER><A HREF=\"/manager/vigrid-snapshot.html?gns_host=".$gns_controller['computes'][$i]['name']."&project_uuid=".$projects[$j]['project_id']."&node_uuid=".$nodes[$k]['node_id']."\" TARGET=_snapshot><IMG SRC=\"/images/photo.png\" WIDTH=20 HEIGHT=16></A>&nbsp;");
+								// if gns server IP matches command line, runs locally, else runs on another host
+								if ($nodes[$k]['status']=="started") { print("<FONT COLOR=\"Green\">"); }
+								else { print("<FONT COLOR=\"Red\">"); }
+								// print("L=".gns_node_on_host($gns_controller['computes'][$i],$nodes[$k]));
+								if ((gns_node_on_host($gns_controller['computes'][$i],$nodes[$k])) && ($nodes[$k]['console_host']==""))
+								{	print("<B>".$nodes[$k]['name']."</B></FONT></TD>"); }
+								else
+								{
+                  print($nodes[$k]['name']);
+                  if ($cores!=0) { print(" (<IMG SRC=\"/images/core100x100.png\" WIDTH=12 HEIGHT=12>$cores)"); }
+                  print("</FONT></TD>");
+                }
+							
+								if ($dispid==1) { print("<TD>".    $nodes[$k]['node_id']."</TD>"); }
+								if ($nodes[$k]['console_host']=="")
+								{ print("<TD></TD>"); }
+								else
+								{
+									if ($nodes[$k]['console']!="")
+									{
+										// normal URI for consoles
+										$uri=$nodes[$k]['console_type'].":";
+                    
+                    // Console host = 0.0.0.0 unknown bug
+                    if ($nodes[$k]['console_host']=="0.0.0.0")
+                    { $nodes[$k]['console_host']=$gns_controller['computes'][$i]['host']; }
+
+										// VNC reg hack (not great)
+										if ($nodes[$k]['console_type']!="vnc") { $uri=$uri."//"; }
+										$uri=$uri.$nodes[$k]['console_host'].":".$nodes[$k]['console'];
+										
+										// noVNC | no TELNET hack
+										if (($nodes[$k]['console_type']=="vnc") || ($nodes[$k]['console_type']=="telnet"))
+										{
+											$rc=websockify_check($nodes[$k]['console_host'],$nodes[$k]['console']);
+											if ($rc>0)
+											{
+                        // Detect NGinx control tower
+                        if (preg_match("/\/manager\/vigrid-control_tower\.html/",$refresh_url))
+                        {
+                          $uri=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'];
+                          
+                          if ($nodes[$k]['console_type']=="vnc")
+                          { $uri=$uri."/noVNC/".$rc."/vnc.html"; } # ...?autoconnect=1&path=/noVNC/".$rc."/websockify";
+                          else { $uri=$uri."/noTELNET/".$rc."/"; }
+                        }
+                        else
+                        {
+                          $uri=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'].":".$rc;
+                          if ($nodes[$k]['console_type']=="vnc") { $uri=$uri."/vnc.html?autoconnect=1"; }
+                        }
+											}
+										}
+										
+										print("<TD>");
+										if (($nodes[$k]['status']=="started") && (gns_node_on_host($gns_controller['computes'][$i],$nodes[$k])))
+										{ print ("<A HREF=\"".$uri."\"");
+											if (preg_match("/^http/",$uri)) { print(" TARGET=\"console_$rc\""); }
+											print(">");
+										}
+										print($nodes[$k]['console_host'].":".$nodes[$k]['console']." (".$nodes[$k]['console_type'].")");
+										if (($nodes[$k]['status']=="started") && (gns_node_on_host($gns_controller['computes'][$i],$nodes[$k]))) { print("</A>"); }
+										print("</TD>");
+									}
+									else
+									{ print("<TD>".$nodes[$k]['console_host']."</TD>"); }
+								}
+								
+								// start/stop
+								$node_control_url="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".$projects[$j]['name']."&project_id=".$projects[$j]['project_id']."&node_name=".$nodes[$k]['name']."&node_id=".$nodes[$k]['node_id']."&status=".$nodes[$k]['status'];
+								if (($nodes[$k]['status']=="started") || ($nodes[$k]['status']=="stopped"))
+								{
+									// if (gns_node_on_host($gns_controller['computes'][$i],$nodes[$k]))
+									{ print("<TD><A HREF=\"".$node_control_url."\">".$nodes[$k]['status']."</A>"); }
+									// else
+									// { print("<TD>".$nodes[$k]['status']); }
+								}
+								else { print("<TD>".$nodes[$k]['status']); }
+								print("</TD>\n");
+
+								// display links ?
+								if ($displinks==1)
+								{ $links=gns_getlinks($gns_controller,$gns_controller['computes'][$i]['name'],$projects[$j]['project_id']); }
+
+								// network
+								if ($displinks==1) { print("<TD COLSPAN=2><TABLE>"); }
+								else { print("<TD>"); }
+								for ($pp=0;$pp<sizeof($nodes[$k]['ports']);$pp++)
+								{
+									// must match adapter_number & port_number, per end of link (2 ends)
+									for ($dl=0;$dl<sizeof($links);$dl++)
+									{
+										// display links ?
+										if ($displinks==1)
+										{
+											for ($le=0;$le<2;$le++)
+											{
+												if ($displinks==1)
+												{
+												 if (($links[$dl]['nodes'][$le]['node_id']==$nodes[$k]['node_id'])
+													&& ($nodes[$k]['ports'][$pp]['adapter_number']==$links[$dl]['nodes'][$le]['adapter_number'])
+													&& ($nodes[$k]['ports'][$pp]['port_number']==$links[$dl]['nodes'][$le]['port_number']))
+													{
+														print("<TR><TD><A HREF=\"/manager/vigrid-link_control.html?gnshost=".$gns_controller['computes'][$i]['name']."&project_id=".$projects[$j]['project_id']."&link_id=".$links[$dl]['link_id']."\" TARGET=\"link_".$links[$dl]['link_id']."\">".$nodes[$k]['ports'][$pp]['port_number']."/".$links[$dl]['nodes'][$le]['adapter_number']."</A></TD>");
+													}
+												}
+											}
+										}
+									}
+
+									// print("N=".$nodes[$k]['ports'][0]['mac_address']);
+									if ($nodes[$k]['ports'][0]['mac_address']!="")
+									{
+										$port_status=gns_getlinkstatus($gns_controller,$gns_controller['computes'][$i]['name'],$projects[$j]['project_id'],$nodes[$k]['node_id'],$nodes[$k]['ports'][$pp]['port_number']);
+										if ($dhcp_leases[$nodes[$k]['ports'][$pp]['mac_address']]!="")
+										{
+											if ($displinks==1) { print("<TD>"); }
+											if ($port_status==1) { print ("<IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15>&nbsp;"); }
+											else { print ("<IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15>&nbsp;"); }
+											// print($nodes[$k]['ports'][$pp]['mac_address']);
+											print($dhcp_leases[$nodes[$k]['ports'][$pp]['mac_address']]);
+											if ($displinks==1) { print("</TD></TR>"); }
+										}
+										else if ($displinks==1) { print("<TD></TD></TR>"); }
+									}
+								}
+								if ($displinks==1) { print("</TABLE>"); }
+								print("</TD></TR>");
+							}
+						}
+						print("</TABLE>\n");
+					}
+				}
+			}
+		} // ping
+	}
+	print("</TABLE><BR><BR>\n");
+
+	function getselfurl_controltower() // return self url with all arguments (GET)
+	{
+		$refresh_url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'].$_SERVER["PHP_SELF"];
+		$arg=0;
+		if ($_GET["regex_host"]!="")    { $refresh_url.="?regex_host=".$_GET["regex_host"]; $arg=1; }
+		if ($_GET["regex_project"]!="") { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_project=".$_GET["regex_project"]; }
+		if ($_GET["regex_node"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_node=".$_GET["regex_node"]; }
+		if ($_GET["refresh"]!="")       { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="refresh=".$_GET["refresh"]; }
+		if ($_GET["dispid"]!="")        { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="dispid=".$_GET["dispid"]; }
+		if ($_GET["links"]!="")         { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="links=".$_GET["links"]; }
+		if ($_GET["clone_owner"]!="")      { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="clone_owner=".$_GET["clone_owner"]; }
+		if ($_GET["clone_owner_pass"]!="") { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="clone_owner_pass=".$_GET["clone_owner_pass"]; }
+		return($refresh_url);
+	}
+
+	function getselfurl_controltower_form($arg) // create forms fields of all in URL but the one in $arg
+	{
+		$arg_fields=array("regex_host","regex_project","regex_node","refresh","dispid","links");
+		for ($field=0;$field<sizeof($arg_fields);$field++)
+		{
+			if ($arg_fields[$field] != $arg)
+			{ if ($_GET[$arg_fields[$field]]!="")
+				{ print("<input type=\"hidden\" name=\"$arg_fields[$field]\"; value=\"".$_GET[$arg_fields[$field]]."\">"); }
+			}
+		}
+	}
+	
+?>
+</html>

@@ -1,0 +1,35 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+
+PROGRESS=""
+#PROGRESS="--progress"
+
+DATE=`date +%Y%m%d`
+DATE_TIMET=`date +%s`
+
+ZFS_LIST=`/sbin/zfs list -r -o name Vstorage |tail -n+2`
+
+for i in $ZFS_LIST
+do
+  TARGET=`echo $i | sed 's/Vstorage/Vstorage_BKP/'`
+
+  [ "x$PROGRESS" != "x" ] && echo "Identified dataset: $i"
+
+  [ "x$PROGRESS" != "x" ] && echo "  Snaping shot: $i@$DATE-$DATE_TIMET"
+
+  echo "Snapshot: $i@$DATE-$DATE_TIMET"
+  zfs snapshot $i@$DATE-$DATE_TIMET
+done
+

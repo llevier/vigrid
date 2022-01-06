@@ -1,4 +1,7 @@
 # Vigrid
+
+<STRONG>Vigrid now exists in <A HREF="https://github.com/llevier/vigrid/tree/v1.0">v1.0, first stable version</A></STRONG>.
+
 Vigrid is an extension to the GNS3 Hypervisor to turn it to a Cyber Range or a industrial training platform.
 
 Once GNS3 is redesigned to Vigrid standards, trainings, Blue Team/Red Team or classical Capture The Flags will be possible through unlimited (upon hardware capabilities of servers) number of clones so each user or team can work on his own.
@@ -28,7 +31,7 @@ Recommendations:
   <ul><li>Either on NAS or standalone servers: add more disk(s) (the bigger the better) for data and others for cache (R/W speed++). These disks for Vigrid storage will be detected and managed by the install script.</li></ul></ul>
 <BR>
 
-If you want to build an infrastructure, please first install NAS launching:
+If you want to build an infrastructure <STRONG>(development version)</STRONG>, please first install NAS launching:
 <UL>
   <code>wget https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid1-nas-install.sh</code><BR>
   <code>sudo sh vigrid1-nas-install.sh</code>, then provide the user password.<BR>

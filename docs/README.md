@@ -52,7 +52,7 @@ To be able to install Vigrid, you must first understand the possible architectur
   </TR>
   <TR>
     <TD>Vigrid standalone server<BR>without NAS</TD>
-    <TD><IMG SRC="https://github.com/llevier/vigrid/blob/7cb4d17c8c960da5a0cc1f7aed365c5f008ec149/www/site/images/vigrid_type1.png" WIDTH=80></TD>
+    <TD><IMG SRC="/www/site/images/vigrid_type1.png" WIDTH=80></TD>
     <TD VALIGN=TOP>
       <LI>Easy+quick install via installation script</LI>
       <LI>Still Vigrid features (CPU/GPU, snapshot, cloning...) are available</LI>
@@ -65,7 +65,7 @@ To be able to install Vigrid, you must first understand the possible architectur
   </TR>
   <TR>
     <TD>Vigrid standalone server<BR>with NAS</TD>
-    <TD><IMG SRC="https://github.com/llevier/vigrid/blob/8e59343b2b8f39ddf2730d9e6b11905798a68901/www/site/images/vigrid_type2.png" WIDTH=80></TD>
+    <TD><IMG SRC="/www/site/images/vigrid_type2.png" WIDTH=80></TD>
     <TD VALIGN=TOP>
       <LI>Easy+quick NAS & server install via installation script</LI>
       <LI>Auto detection of available physical drives for Vigrid NAS secure storage</LI>
@@ -79,7 +79,7 @@ To be able to install Vigrid, you must first understand the possible architectur
   </TR>
   <TR>
     <TD>Vigrid Master server<BR>with NAS</TD>
-    <TD><IMG SRC="https://github.com/llevier/vigrid/blob/6d324ea1939e8edfc88e642d63c07e8df0b25101/www/site/images/vigrid_type3.png" WIDTH=80></TD>
+    <TD><IMG SRC="/www/site/images/vigrid_type3.png" WIDTH=80></TD>
     <TD VALIGN=TOP>
       <LI>Easy+quick NAS & server install via installation script</LI>
       <LI>Auto detection of available physical drives for Vigrid NAS secure storage</LI>

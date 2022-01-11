@@ -71,24 +71,21 @@ Feel free to contact me.
 ### TODO ###
 <ul>
 <li>Error handling by command in install scripts (failing command can be rerun endlessly)</li>
-<li>Add BTRfs management on servers</li>
+<li>Add BTRfs management on servers (tested/validated but not implemented in Vigrid)</li>
 <li>Change Control Tower display (project first column, then host) so start button automatically select best available host</li>
 <li>Check code for security issues (input controls etc)</li>
 <li>Test & validate 'projects with docker nodes' cloning</li>
 <li>Try to build a ZFS snapshot hierarchical tree to show dependencies</li>
-<li>Add ZFS hold/release management to snapshot page</li>
+<li>Add ZFS hold/release management on snapshot page</li>
 <li>Concurrent/conflicting action detector</li>
 <li>Try to make BTRfs much faster</li>
 <li>Finish snaping/cloning at nodes level</li>
 <li>eszm installed as well (in control_tower_mon)</li>
 <li>Add IPMI support for power control commands (only HP iLO for now)</li>
 <li>Add automatic ecological savings (power on/off slaves according to needs)</li>
-<li>NAS load (CPU/NFS/ZFS/BTRfs) as daemon to reduce time to get infos via ssh</li>
-<li>OpenVPN client restricted access for BlueAdmin, RedAdmin, BlueExposed & RedExposed</li>
-<li>OpenVPN LANtoLAN restricted access for BlueExposed & RedExposed</li>
 <li>Add control tower URL to VIGRIDclones.list query (for mail sent to clone owner)</li>
 <li>If GNS3v3 cant have RBAC in reasonable delay, integrate https://github.com/srieger1/gns3-proxy into Vigrid authentication</li>
 <li>Move from PHP to Javascript code so browser can control slaves directly (via Vigrid hybrid mode) with much faster web display response time</li>
-<li>Developing a scenario automation software (PuppetMaster) to control discrete agents (Ghosts) into project so they can perform actions. For now, only concept of a central server driving ghost nodes into projects has been proven.</li>
+<li>Developing a scenario automation software (PuppetMaster) to control discrete agents (Ghosts) into project so they can perform actions. For now, only concept of a central server controlling Ghost nodes into projects has been proven.</li>
 <li>Creating a life simulation systems so network behaves as if real users would be working (mail, surf etc).</li>
 </ul>

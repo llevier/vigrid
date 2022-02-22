@@ -248,8 +248,7 @@
     
     if ($project_name=="")
     {
-      ?><TR><TD COLSPAN=6><FONT COLOR=Red><B>GNS3 server seems down, cant get project names. Exiting page.</B></FONT></TD></TR></TABLE><BR><?php
-      exit;
+      ?><TR><TD COLSPAN=6><FONT COLOR=Red><B>Can't get name of project UUID=<?php print $project_uuid; ?></B></FONT></TD></TR></TABLE><BR><?php
     }
     else if (((($selected_project_uuid!="") && ($project_uuid==$selected_project_uuid))
       && (($selected_project_name!="") && ($project_name==$selected_project_name)))

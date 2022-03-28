@@ -29,8 +29,13 @@
 
   {
     "NAME": "VIGRID_GNS_VERSION",
-    "DESCRIPTION": "Please provide the GNS3 version, either 2 or 3.",
-    "VALUE_TEXT": "GNS3 version: ",
+    "DESCRIPTION": "GNS3 version, either 2 or 3.",
+    "VALUE_TEXT": "Please select a GNS3 version: ",
+    "VALUES":
+    {
+        "2": "GNS3 v2 (no RBAC)",
+        "3": "GNS3 v3 (with RBAC)"
+    },
     "PATTERN": "(2|3)",
     "FORM": "LIST"
   },

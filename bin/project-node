@@ -25,6 +25,8 @@ then
   exit 1
 fi
 
+[ "x$VIGRID_GNS_VERSION" != "x2" -a "x$VIGRID_GNS_VERSION" != "x3" ] && VIGRID_GNS_VERSION=2
+
 HOSTS_ALL="$ME_NAME:127.0.0.1:3080 $ME_NAME:$ME_IP:3080 $VIGRID_GNS_SLAVE_HOSTS"
 
 CURL="curl --user $VIGRID_GNS_USER:$VIGRID_GNS_PASS"
@@ -48,8 +50,8 @@ do
 
   # echo "Querying $GNS_HOST ($GNS_IP:$GNS_PORT)..."
 
-  #CHK=`$CURL "http://$GNS_IP:$GNS_PORT/v2/projects" 2>/dev/null|egrep "\"name\": \"$PRJ_NAME\","|wc -l`
-  PRJ_CURL=`$CURL "http://$GNS_IP:$GNS_PORT/v2/projects" 2>/dev/null|egrep "\"(name|project_id)\""`
+  #CHK=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"name\": \"$PRJ_NAME\","|wc -l`
+  PRJ_CURL=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"(name|project_id)\""`
   
   GNS_PRJ_NAME=`echo "$PRJ_CURL" | egrep -A1 "\"name\": \"$PRJ_NAME\","|head -1`
   GNS_PRJ_ID=`echo "$PRJ_CURL" | egrep -A1 "\"name\": \"$PRJ_NAME\","|tail -1| awk '{print $NF;}' | sed 's/[",]//g'`
@@ -59,7 +61,7 @@ do
     echo "  Project $PRJ_NAME (ID=$GNS_PRJ_ID) detected on GNS3 host $GNS_HOST ($GNS_IP:$GNS_PORT)."
     
     # Querying status, not opened, end of story
-    GNS_PRJ_OPEN=`$CURL "http://$GNS_IP:$GNS_PORT/v2/projects/$GNS_PRJ_ID" 2>/dev/null|grep "\"status\":"|awk '{print $NF;}' | sed 's/[",]//g'`
+    GNS_PRJ_OPEN=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID" 2>/dev/null|grep "\"status\":"|awk '{print $NF;}' | sed 's/[",]//g'`
     
     if [ "x$GNS_PRJ_OPEN" != "xopened" ]
     then
@@ -67,13 +69,13 @@ do
     else
       echo "  Running project, identifying nodes..."
 
-      NODES_ID=`$CURL "http://$GNS_IP:$GNS_PORT/v2/projects/$GNS_PRJ_ID/nodes" 2>/dev/null|grep "\"node_id\""| sed 's/^.*node_id": "//'| sed 's/".*$//'`
+      NODES_ID=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID/nodes" 2>/dev/null|grep "\"node_id\""| sed 's/^.*node_id": "//'| sed 's/".*$//'`
 
       NODE_MATCH=""
       NODES_NAMES=""
       for i in $NODES_ID
       do
-        NODE_DETAILS=`$CURL "http://$GNS_IP:$GNS_PORT/v2/projects/$GNS_PRJ_ID/nodes/$i" 2>/dev/null`
+        NODE_DETAILS=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID/nodes/$i" 2>/dev/null`
         
         NODE_NAME=`echo "$NODE_DETAILS"|grep "\"name\""| head -1| sed 's/^.*name": "//'| sed 's/".*$//'`
         NODE_STATUS=`echo "$NODE_DETAILS"|grep "\"status\""| sed 's/^.*status": "//'| sed 's/".*$//'`
@@ -123,8 +125,8 @@ do
           echo "Requested action: $ACTION"
 
           echo "$ACTION""ing node (NAME=$NODE_NAME, ID=$NODE_ID)..."
-            # $CURL "http://$GNS_IP:$GNS_PORT/v2/projects/$GNS_PRJ_ID/nodes/$i
-            NODE_STATUS=`$CURL -v -X POST "http://$NODE_CONSOLE_HOST:3080/v2/projects/$NODE_PROJECT/nodes/$NODE_ID/$ACTION" -d "{}" 2>/dev/null |grep "\"status\""| sed 's/^.*status": "//'| sed 's/".*$//'`
+            # $CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID/nodes/$i
+            NODE_STATUS=`$CURL -v -X POST "http://$NODE_CONSOLE_HOST:3080/v$VIGRID_GNS_VERSION/projects/$NODE_PROJECT/nodes/$NODE_ID/$ACTION" -d "{}" 2>/dev/null |grep "\"status\""| sed 's/^.*status": "//'| sed 's/".*$//'`
           echo "New status: $NODE_STATUS"
           ;;
         "status")
@@ -151,7 +153,7 @@ do
       for i in $NODES
       do
         echo "Starting node $i"
-        STATUS=`$CURL "http://$HOST:3080/v2/projects/$PROJECT_ID/nodes/$i/$ACTION" -d "{}" 2>/dev/null`
+        STATUS=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes/$i/$ACTION" -d "{}" 2>/dev/null`
 
         CHK=`echo "$STATUS" | grep "status.*started"`
         if [ "x$CHK" != "x" ]

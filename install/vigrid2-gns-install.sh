@@ -2220,6 +2220,29 @@ server {
     proxy_pass http://127.0.0.1:3080;
   }
 
+  # GNS Heavy client
+  location /v3
+  {
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
+
+    proxy_set_header Host \$host;
+    proxy_set_header Authorization \$auth_header;
+
+    # GNS3 maximum timeout = 1h
+    proxy_connect_timeout       3600;
+    proxy_send_timeout          3600;
+    proxy_read_timeout          3600;
+    send_timeout                3600;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \"Upgrade\";
+
+    proxy_pass http://127.0.0.1:3080;
+  }
+
   # noTELNET: http://host/console/port/ -> http://host:port (websocket)
   location /noTELNET
   {
@@ -3026,7 +3049,7 @@ Points you might wish to review/consider:
 - Add at login '/home/gns3/vigrid/bin:/home/gns3/bin' (**/home/gns3/vigrid/bin must be first**) to your PATH
 - Postfix or SMTP relay configuration to be able to send email to clone owners
 - PHP FPM pool 'request_terminate_timeout' on big infrastructures
-- NGinx configuration for location /v2, timeouts again but for GNS3 this time:  proxy_connect_timeout, proxy_send_timeout, proxy_read_timeout & send_timeout for big appliance images upload
+- NGinx configuration for location /v2 & /v3, timeouts again but for GNS3 this time:  proxy_connect_timeout, proxy_send_timeout, proxy_read_timeout & send_timeout for big appliance images upload
 
 - Network configuration (DHCP client vs static, conflicting DHCP servers, default route, DNS resolving etc)
 - NTP synchronization of server(s)"

@@ -64,7 +64,7 @@
 		$hostnum=gns_gethostnumbyname($gns_controller,$hostname);
 		if ($hostnum==-1) { return(null); }
 
-		$url=$gns_controller['computes'][$hostnum]['protocol']."://".$gns_controller['computes'][$hostnum]['host'].":".$gns_controller['computes'][$hostnum]['port']."/v2/projects/".$project_id;
+		$url=$gns_controller['computes'][$hostnum]['protocol']."://".$gns_controller['computes'][$hostnum]['host'].":".$gns_controller['computes'][$hostnum]['port']."/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id;
 		// print("URL=$url\n");
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

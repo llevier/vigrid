@@ -28,6 +28,14 @@
   },
 
   {
+    "NAME": "VIGRID_GNS_VERSION",
+    "DESCRIPTION": "Please provide the GNS3 version, either 2 or 3.",
+    "VALUE_TEXT": "GNS3 version: ",
+    "PATTERN": "(2|3)",
+    "FORM": "LIST"
+  },
+
+  {
     "NAME": "VIGRID_GNS_USER",
     "DESCRIPTION": "Please provide the GNS3 admin user, as specified by the 'user' parameter in gns3_server.conf.",
     "VALUE_TEXT": "Please provide a user login: ",

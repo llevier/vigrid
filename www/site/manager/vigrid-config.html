@@ -272,6 +272,7 @@ function VIGRIDchecklist($vigrid_values)
   // Vigrid parameters:
     // VIGRID_TYPE VIGRID_NETWORK
     // VIGRID_GNS_USER VIGRID_GNS_PASS VIGRID_GNS_SLAVE_HOSTS VIGRID_SSHKEY_GNS
+    // VIGRID_GNS_VERSION
     // VIGRID_WEBSOCKIFY_OPTIONS
     // VIGRID_NAS_SERVER VIGRID_SSHKEY_NAS
     // VIGRID_DHCP_SERVER VIGRID_SSHKEY_DHCP
@@ -286,6 +287,12 @@ function VIGRIDchecklist($vigrid_values)
 
   if (($vigrid_values['VIGRID_NETWORK']<1) || ($vigrid_values['VIGRID_NETWORK']>3))
   { $ok=0; print("<FONT COLOR=Red><LI><B>VIGRID_NETWORK: bad value (".$vigrid_values['VIGRID_NETWORK'].")</B></LI></FONT>\n"); }
+
+  if (($vigrid_values['VIGRID_GNS_VERSION']!=2) && ($vigrid_values['VIGRID_GNS_VERSION']!=3))
+  { 
+    print("<FONT COLOR=Red><LI><B>VIGRID_GNS_VERSION: bad value (".$vigrid_values['VIGRID_GNS_VERSION']."), assuming v2.</B></LI></FONT>\n");
+    $vigrid_values['VIGRID_GNS_VERSION']=2;
+  }
 
   // VIGRID_GNS_USER VIGRID_GNS_PASS VIGRID_GNS_SLAVE_HOSTS VIGRID_SSHKEY_GNS
   

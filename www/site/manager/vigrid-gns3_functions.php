@@ -559,7 +559,7 @@
   function gns_getcomputes($gns_controller,$hostname)
   {
     
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/computes");
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/computes");
     if ($url=="") { return(null); }
 
     // print("Connecting to url: $url\n<BR>");
@@ -614,7 +614,7 @@
     for ($s=0;$s<sizeof($vigrid_slave_hosts);$s++)
     {
       $f=explode(":",$vigrid_slave_hosts[$s]);
-      $url[$s]="http://".$f[1].":".$f[2]."/v2/computes";
+      $url[$s]="http://".$f[1].":".$f[2]."/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/computes";
       
       $ch[$s] = curl_init();
       curl_setopt($ch[$s], CURLOPT_SSL_VERIFYPEER, false);
@@ -705,7 +705,7 @@
 	function gns_project_command($gns_controller,$hostname,$project_id,$order,$order_data=null)
 	{
 
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/".$order);
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/".$order);
     if ($url=="") { return(null); }
 
 		// print("URL=$url\n");
@@ -734,7 +734,7 @@
 
 	function gns_project_delete($gns_controller,$hostname,$project_id)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/".$order);
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/".$order);
     if ($url=="") { return(null); }
 
 		// print("URL=$url\n");
@@ -755,7 +755,7 @@
 	
 	function gns_getprojects($gns_controller,$hostname)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects");
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects");
     if ($url=="") { return(null); }
 
 		$ch = curl_init();
@@ -774,7 +774,7 @@
 
 	function gns_getprojectsASYNC($gns_controller,$hostname)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects");
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects");
     if ($url=="") { return(null); }
 
 		$ch = curl_init();
@@ -793,7 +793,7 @@
 	
 	function gns_getnodes($gns_controller,$hostname,$project_id)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/nodes");
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/nodes");
     if ($url=="") { return(null); }
 
 		// print("getnodesURL=$url\n");
@@ -814,7 +814,7 @@
 
 	function gns_getlinks($gns_controller,$hostname,$project_id)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/links");
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/links");
     if ($url=="") { return(null); }
 
 		// print("getlinksURL=$url\n");
@@ -835,7 +835,7 @@
 
 	function gns_link_command($gns_controller,$hostname,$project_id,$link_id,$filter_array)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/links/".$link_id);
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/links/".$link_id);
     if ($url=="") { return(null); }
 
 		// print("gns_link_commandURL=$url<BR>\n");
@@ -885,7 +885,7 @@
 
 	function gns_getnode_info($gns_controller,$hostname,$project_id,$node_id)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/nodes/".$node_id);
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/nodes/".$node_id);
     if ($url=="") { return(null); }
 
 		// print("getnodesURL=$url\n");
@@ -906,7 +906,7 @@
 
 	function gns_getlinkstatus($gns_controller,$hostname,$project_id,$node_id,$port_number)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/links");
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/links");
     if ($url=="") { return(null); }
 
 		// print("getlinksURL=$url\n");
@@ -942,7 +942,7 @@
 
 	function gns_node_command($gns_controller,$hostname,$project_id,$node_id,$order)
 	{
-    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v2/projects/".$project_id."/nodes/".$node_id."/".$order);
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/nodes/".$node_id."/".$order);
     if ($url=="") { return(null); }
         
 		// print("gns_node_commandURL=$url\n");
@@ -1425,7 +1425,7 @@
               if ($data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['status']=="opened")
               {
                 $url="http://".$ip_address.":".$ip_port;
-                $url.="/v2/projects/".$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']."/nodes";
+                $url.="/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']."/nodes";
 
                 $ch[$j] = curl_init();
                 curl_setopt($ch[$j], CURLOPT_SSL_VERIFYPEER, false);

@@ -63,29 +63,49 @@ A v1 version is planned ASAP so versionning can be properly performed.
 You can report your issues via github. For each issue, please at least provide the Vigrid Type (standalone, master etc) and the Vigrid network design (your concern, TINY of FULL cyber range).
 
 ### CONTRIBUTIONS ###
-Vigrid layer is only developped by a single person on best effort. All contributors to add new features are welcome.  
+Vigrid layer is only developped by a single person on best effort on personal time. All contributors to add new features are welcome.  
 Some most wanted features for a Cyber Range are in the TODO list: Cloning with docker nodes + PuppetMaster.  
 
 Feel free to contact me.
 
-### TODO ###
-<ul>
-<li>Error handling by command in install scripts (failing command can be rerun endlessly)</li>
-<li>Add BTRfs management on servers (tested/validated but not implemented in Vigrid)</li>
-<li>Change Control Tower display (project first column, then host) so start button automatically select best available host</li>
-<li>Check code for security issues (input controls etc)</li>
-<li>Test & validate 'projects with docker nodes' cloning</li>
-<li>Try to build a ZFS snapshot hierarchical tree to show dependencies</li>
-<li>Add ZFS hold/release management on snapshot page</li>
-<li>Concurrent/conflicting action detector</li>
-<li>Try to make BTRfs much faster</li>
-<li>Finish snaping/cloning at nodes level</li>
-<li>eszm installed as well (in control_tower_mon)</li>
-<li>Add IPMI support for power control commands (only HP iLO for now)</li>
-<li>Add automatic ecological savings (power on/off slaves according to needs)</li>
-<li>Add control tower URL to VIGRIDclones.list query (for mail sent to clone owner)</li>
-<li>If GNS3v3 cant have RBAC in reasonable delay, integrate https://github.com/srieger1/gns3-proxy into Vigrid authentication</li>
-<li>Move from PHP to Javascript code so browser can control slaves directly (via Vigrid hybrid mode) with much faster web display response time</li>
-<li>Developing a scenario automation software (PuppetMaster) to control discrete agents (Ghosts) into project so they can perform actions. For now, only concept of a central server controlling Ghost nodes into projects has been proven.</li>
-<li>Creating a life simulation systems so network behaves as if real users would be working (mail, surf etc).</li>
-</ul>
+### TODO with status ###
+<TABLE>
+  <TR><TD><B>TODO</B></TD>
+  <TD><B>Status</B></TD></TR>
+  <TR><TD>Error handling by command in install scripts (failing command can be rerun endlessly)</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Add BTRfs management on servers (tested/validated but not implemented in Vigrid)</TD>
+  <TD>Validated, queued</TD></TR>
+  <TR><TD>Change Control Tower display (project first column, then host) so start button automatically select best available host</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Check code for security issues (input controls etc)</TD>
+  <TD>To redo</TD></TR>
+  <TR><TD>Test & validate 'projects with docker nodes' cloning</TD>
+  <TD>Validated (limitations now known), queued</TD></TR>
+  <TR><TD>Try to build a ZFS snapshot hierarchical tree to show dependencies</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Add ZFS hold/release management on snapshot page</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Concurrent/conflicting action detector</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Try to make BTRfs much faster</TD>
+  <TD>Study to perform</TD></TR>
+  <TR><TD>Finish snaping/cloning at nodes level</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>eszm installed as well (in control_tower_mon)</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Add IPMI support for power control commands (only HP iLO for now)</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>Add automatic ecological savings (power on/off slaves according to needs)</TD>
+  <TD>Validated, queued</TD></TR>
+  <TR><TD>Add control tower URL to VIGRIDclones.list query (for mail sent to clone owner)</TD>
+  <TD>Queued</TD></TR>
+  <TR><TD>If GNS3v3 cant have RBAC in reasonable delay, integrate https://github.com/srieger1/gns3-proxy into Vigrid authentication</TD>
+  <TD>Waiting for GNS3v3 (planned 04/2022)</TD></TR>
+  <TR><TD>Move from PHP to Javascript code so browser can control slaves directly (via Vigrid hybrid mode) with much faster web display response time</TD>
+  <TD>Hybrid mode validated, queued</TD></TR>
+  <TR><TD>Developing a scenario automation software (PuppetMaster) to control discrete agents (Ghosts) into project so they can perform actions. For now, only concept of a central server controlling Ghost nodes into projects has been proven.</TD>
+  <TD>Ongoing</TD></TR>
+  <TR><TD>Creating a life simulation systems so network behaves as if real users would be working (mail, surf etc).</TD>
+  <TD>Ongoing</TD></TR>
+</TABLE>

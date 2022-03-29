@@ -70,7 +70,7 @@ Feel free to contact me.
 
 ### TODO with status ###
 <TABLE>
-  <TR><TD><B>TODO</B></TD>
+  <TR><TD><B>Topic</B></TD>
   <TD><B>Status</B></TD></TR>
   <TR><TD>Error handling by command in install scripts (failing command can be rerun endlessly)</TD>
   <TD>Queued</TD></TR>

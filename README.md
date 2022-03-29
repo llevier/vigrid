@@ -104,6 +104,8 @@ Feel free to contact me.
   <TD>Waiting for GNS3v3 (planned 04/2022)</TD></TR>
   <TR><TD>Move from PHP to Javascript code so browser can control slaves directly (via Vigrid hybrid mode) with much faster web display response time</TD>
   <TD>Hybrid mode validated, queued</TD></TR>
+  <TR><TD>Move Vigrid NAS so it can satisfy requirements + provide parallel network sharing (major risk of projects launch failures)</TD>
+  <TD>Study ongoing</TD></TR>
   <TR><TD>Developing a scenario automation software (PuppetMaster) to control discrete agents (Ghosts) into project so they can perform actions. For now, only concept of a central server controlling Ghost nodes into projects has been proven.</TD>
   <TD>Ongoing</TD></TR>
   <TR><TD>Creating a life simulation systems so network behaves as if real users would be working (mail, surf etc).</TD>

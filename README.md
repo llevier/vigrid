@@ -91,7 +91,7 @@ Feel free to contact me.
   <TR><TD>Try to make BTRfs much faster</TD>
   <TD>Study to perform</TD></TR>
   <TR><TD>Finish snaping/cloning at nodes level</TD>
-  <TD>Queued</TD></TR>
+  <TD>Validated with both FS, queued</TD></TR>
   <TR><TD>eszm installed as well (in control_tower_mon)</TD>
   <TD>Queued</TD></TR>
   <TR><TD>Add IPMI support for power control commands (only HP iLO for now)</TD>

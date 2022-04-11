@@ -2832,6 +2832,34 @@ COMMIT
 -A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i Nsuperadmin0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -s $NET_Nsuperadmin0 -i Nsuperadmin0 -j ACCEPT
+# From OpenVPN
+-A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nsuperadmin0 -j ACCEPT
+-A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nblue_admin0 -i Nblue_admin0 -j ACCEPT
+-A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nred_admin0 -i Nred_admin0 -j ACCEPT
+-A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nblue_exposed0 -i Nblue_exposed0 -j ACCEPT
+-A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nred_exposed0 -i Nred_exposed0 -j ACCEPT
+# OpenVPN: VIGRIDteleports
+# From REDusers/servers
+-A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_REDusers -j ACCEPT
+-A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_REDservers -j ACCEPT
+-A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_REDservers -j ACCEPT
+-A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_REDusers -j ACCEPT
+-A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_Nred_exposed0 -j ACCEPT
+-A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_Nred_exposed0 -j ACCEPT
+# to BLUE
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_Nblue_exposed0 -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_Nblue_exposed0 -j ACCEPT
+# From BLUEusers/servers
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers   -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers   -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers     -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers     -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers  -d $NET_Nblue_exposed0 -j ACCEPT
+-A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers    -d $NET_Nblue_exposed0 -j ACCEPT
 -A INPUT -j LOGGING
 -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT

@@ -2776,8 +2776,11 @@ then
   
   Display "Adding Vigrid Firewall rules..."
   
-  echo "#
-# Vigrid Firewall rules
+  # Master FW rules
+  if [ $VIGRID_TYPE -eq 4 -o $VIGRID_TYPE -eq 5 ] # Vigrid slave, different rules since not router/OpenVPN
+  then
+    echo "#
+# Vigrid Slave Firewall rules
 #
 # MANGLE
 *mangle
@@ -2786,8 +2789,6 @@ then
 :FORWARD ACCEPT [4471:471508]
 :OUTPUT ACCEPT [385253:836508043]
 :POSTROUTING ACCEPT [386992:836802374]
--A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
--A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
 -A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
 COMMIT
 # FILTER
@@ -2803,8 +2804,115 @@ COMMIT
 -A INPUT -i virbr0 -p icmp -j ACCEPT
 -A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+# Temporary for Vigrid install, should be removed later
+-A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+#
+-A INPUT -i Ninternet0 -p icmp -j ACCEPT
+# Internet responses
+-A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+# Finally log & drop
+-A INPUT -i Ninternet0 -j LOG
+-A INPUT -i Ninternet0 -j REJECT
+#
+-A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 67 -j ACCEPT
+-A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -i Nred_exposed0 -j DROP
+-A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 67 -j ACCEPT
+-A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -i Nblue_exposed0 -j DROP
+-A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 67 -j ACCEPT
+-A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -i Nred_admin0 -j DROP
+-A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 67 -j ACCEPT
+-A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -i Nblue_admin0 -j DROP
+-A INPUT -i lo -j ACCEPT
+-A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i Nsuperadmin0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -s $NET_Nsuperadmin0 -i Nsuperadmin0 -j ACCEPT
+-A INPUT -j LOGGING
+-A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT
+# From Nred_exposed0
+-A FORWARD -i Nred_exposed0 -o Nsuperadmin0 -j DROP
+-A FORWARD -i Nred_exposed0 -o Nblue_admin0 -j DROP
+-A FORWARD -i Nred_exposed0 -o Nred_admin0 -j DROP
+-A FORWARD -s $NET_Nred_exposed0 -d $NET_Nblue_exposed0 -i Nred_exposed0 -o Nblue_exposed0 -j ACCEPT
+# From Nblue_exposed0
+-A FORWARD -i Nblue_exposed0 -o Nsuperadmin0 -j DROP
+-A FORWARD -i Nblue_exposed0 -o Nred_admin0 -j DROP
+-A FORWARD -i Nblue_exposed0 -o Nblue_admin0 -j DROP
+-A FORWARD -s $NET_Nblue_exposed0 -d $NET_Nred_exposed0 -i Nblue_exposed0 -o Nred_exposed0 -j ACCEPT
+# From Nred_admin0
+-A FORWARD -i Nred_admin0 -o Nsuperadmin0 -j DROP
+-A FORWARD -i Nred_admin0 -o Nblue_admin0 -j DROP
+-A FORWARD -i Nred_admin0 -o Nblue_exposed0 -j DROP
+# From Nblue_admin0
+-A FORWARD -i Nblue_admin0 -o Nsuperadmin0 -j DROP
+-A FORWARD -i Nblue_admin0 -o Nred_admin0 -j DROP
+-A FORWARD -i Nblue_admin0 -o Nred_exposed0 -j DROP
+# Policy
+-A FORWARD -j DROP
+-A LOGGING -m limit --limit 2/min -j LOG --log-prefix \"IPTables Packet Dropped: \" --log-level 7
+-A LOGGING -j DROP
+COMMIT
+# NAT
+*nat
+:PREROUTING ACCEPT [211:11626]
+:INPUT ACCEPT [6:636]
+:OUTPUT ACCEPT [118:7455]
+:POSTROUTING ACCEPT [115:7252]
+:DOCKER - [0:0]
+-A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+-A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER
+-A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+-A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+-A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
+-A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+-A DOCKER -i docker0 -j RETURN
+COMMIT" >/etc/iptables/rules.vigrid
+  else # Master FW rules, acting as Router, OpenVPN gateway...
+    echo "#
+# Vigrid Master Firewall rules
+#
+# MANGLE
+*mangle
+:PREROUTING ACCEPT [398669:81946452]
+:INPUT ACCEPT [389581:81245374]
+:FORWARD ACCEPT [4471:471508]
+:OUTPUT ACCEPT [385253:836508043]
+:POSTROUTING ACCEPT [386992:836802374]
+-A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
+COMMIT
+# FILTER
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [28002:3907426]
+:DOCKER - [0:0]
+:DOCKER-ISOLATION-STAGE-1 - [0:0]
+:DOCKER-ISOLATION-STAGE-2 - [0:0]
+:DOCKER-USER - [0:0]
+:LOGGING - [0:0]
+-A INPUT -i virbr0 -p icmp -j ACCEPT
+-A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 # Temporary for Vigrid install, should be removed later
 -A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
@@ -2933,6 +3041,7 @@ COMMIT
 -A POSTROUTING -o Ninternet0 -j MASQUERADE
 -A DOCKER -i docker0 -j RETURN
 COMMIT" >/etc/iptables/rules.vigrid
+  fi
 
   FW_RULES_SIZE=`cat /etc/iptables/rules.vigrid  2>/dev/null | wc -l`
   [ $FW_RULES_SIZE -lt 30 ] && Error 'Firewall rules are less than 30 lines, that is not normal,'

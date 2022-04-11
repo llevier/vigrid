@@ -475,7 +475,7 @@ do
   
     
   Display "Now creating Vigrid datasets:"
-  LIST="Backups ISOimages GNS3 GNS3/GNS3repos GNS3/GNS3farm GNS3/GNS3farm/GNS3 GNS3/GNS3farm/GNS3/projects NFS"
+  LIST="Backups ISOimages GNS3 GNS3/GNS3repos GNS3/GNS3farm GNS3/GNS3farm/GNS3 GNS3/GNS3farm/GNS3/images GNS3/GNS3farm/GNS3/projects NFS"
   for i in $LIST
   do
     Display -h "$i..."
@@ -512,6 +512,7 @@ echo "#
 
 # GNS3 Farm: GNS3 shared + docker per host
 /$FS_ROOT/GNS3/GNS3farm/GNS3                  *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check) 
+/$FS_ROOT/GNS3/GNS3farm/GNS3/images           *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check) 
 /$FS_ROOT/GNS3/GNS3farm/GNS3/projects         *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check) 
 
 # GNS3 independant host using NAS: 

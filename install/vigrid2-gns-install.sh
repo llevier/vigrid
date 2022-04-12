@@ -2776,12 +2776,13 @@ then
   
   Display "Adding Vigrid Firewall rules..."
   
-  # Master FW rules
+  # FW rules
   if [ $VIGRID_TYPE -eq 4 -o $VIGRID_TYPE -eq 5 ] # Vigrid slave, different rules since not router/OpenVPN
   then
     echo "#
 # Vigrid Slave Firewall rules
 #
+# A slave does not route, even if multi homed between Admin & Internet
 # MANGLE
 *mangle
 :PREROUTING ACCEPT [398669:81946452]
@@ -2808,79 +2809,21 @@ COMMIT
 -A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 # Temporary for Vigrid install, should be removed later
 -A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
-#
+# Ping Master
 -A INPUT -i Ninternet0 -p icmp -j ACCEPT
 # Internet responses
 -A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 # Finally log & drop
 -A INPUT -i Ninternet0 -j LOG
 -A INPUT -i Ninternet0 -j REJECT
-#
--A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -i Nred_exposed0 -j DROP
--A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -i Nblue_exposed0 -j DROP
--A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -i Nred_admin0 -j DROP
--A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -i Nblue_admin0 -j DROP
+# Opened networks
 -A INPUT -i lo -j ACCEPT
--A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i Nsuperadmin0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A INPUT -s $NET_Nsuperadmin0 -i Nsuperadmin0 -j ACCEPT
-# From OpenVPN
--A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nsuperadmin0 -j ACCEPT
--A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nblue_admin0 -i Nblue_admin0 -j ACCEPT
--A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nred_admin0 -i Nred_admin0 -j ACCEPT
--A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nblue_exposed0 -i Nblue_exposed0 -j ACCEPT
--A INPUT -s $NET_Nsuperadmin_users0 -d $NET_Nred_exposed0 -i Nred_exposed0 -j ACCEPT
-# OpenVPN: VIGRIDteleports
-# From REDusers/servers
--A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_REDusers -j ACCEPT
--A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_REDservers -j ACCEPT
--A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_REDservers -j ACCEPT
--A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_REDusers -j ACCEPT
--A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_Nred_exposed0 -j ACCEPT
--A INPUT -i Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_Nred_exposed0 -j ACCEPT
-# to BLUE
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_Nblue_exposed0 -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_Nblue_exposed0 -j ACCEPT
-# From BLUEusers/servers
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers   -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers   -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers     -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers     -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers  -d $NET_Nblue_exposed0 -j ACCEPT
--A INPUT -i Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers    -d $NET_Nblue_exposed0 -j ACCEPT
+-A INPUT -i Nsuperadmin0 -j ACCEPT
+# Policy
 -A INPUT -j LOGGING
+# Forwarding
 -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT
-# From Nred_exposed0
--A FORWARD -i Nred_exposed0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nred_exposed0 -o Nblue_admin0 -j DROP
--A FORWARD -i Nred_exposed0 -o Nred_admin0 -j DROP
--A FORWARD -s $NET_Nred_exposed0 -d $NET_Nblue_exposed0 -i Nred_exposed0 -o Nblue_exposed0 -j ACCEPT
-# From Nblue_exposed0
--A FORWARD -i Nblue_exposed0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nblue_exposed0 -o Nred_admin0 -j DROP
--A FORWARD -i Nblue_exposed0 -o Nblue_admin0 -j DROP
--A FORWARD -s $NET_Nblue_exposed0 -d $NET_Nred_exposed0 -i Nblue_exposed0 -o Nred_exposed0 -j ACCEPT
-# From Nred_admin0
--A FORWARD -i Nred_admin0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nred_admin0 -o Nblue_admin0 -j DROP
--A FORWARD -i Nred_admin0 -o Nblue_exposed0 -j DROP
-# From Nblue_admin0
--A FORWARD -i Nblue_admin0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nblue_admin0 -o Nred_admin0 -j DROP
--A FORWARD -i Nblue_admin0 -o Nred_exposed0 -j DROP
 # Policy
 -A FORWARD -j DROP
 -A LOGGING -m limit --limit 2/min -j LOG --log-prefix \"IPTables Packet Dropped: \" --log-level 7
@@ -2956,15 +2899,19 @@ COMMIT
 #
 -A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 67 -j ACCEPT
 -A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -s $NET_Nred_exposed0 -i Nred_exposed0 -p icmp -j ACCEPT
 -A INPUT -i Nred_exposed0 -j DROP
 -A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 67 -j ACCEPT
 -A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -s $NET_Nblue_exposed0 -i Nblue_exposed0 -p icmp -j ACCEPT
 -A INPUT -i Nblue_exposed0 -j DROP
 -A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 67 -j ACCEPT
 -A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -s $NET_Nred_admin0 -i Nred_admin0 -p icmp -j ACCEPT
 -A INPUT -i Nred_admin0 -j DROP
 -A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 67 -j ACCEPT
 -A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 68 -j ACCEPT
+-A INPUT -s $NET_Nblue_admin0 -i Nblue_admin0 -p icmp -j ACCEPT
 -A INPUT -i Nblue_admin0 -j DROP
 -A INPUT -i lo -j ACCEPT
 -A INPUT -i tun0 -j ACCEPT

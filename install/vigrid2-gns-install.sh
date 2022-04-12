@@ -2783,61 +2783,80 @@ then
 # Vigrid Slave Firewall rules
 #
 # A slave does not route, even if multi homed between Admin & Internet
-# MANGLE
-*mangle
-:PREROUTING ACCEPT [398669:81946452]
-:INPUT ACCEPT [389581:81245374]
-:FORWARD ACCEPT [4471:471508]
-:OUTPUT ACCEPT [385253:836508043]
-:POSTROUTING ACCEPT [386992:836802374]
--A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
-COMMIT
 # FILTER
 *filter
 :INPUT ACCEPT [0:0]
 :FORWARD ACCEPT [0:0]
-:OUTPUT ACCEPT [28002:3907426]
+:OUTPUT ACCEPT [0:0]
 :DOCKER - [0:0]
 :DOCKER-ISOLATION-STAGE-1 - [0:0]
 :DOCKER-ISOLATION-STAGE-2 - [0:0]
 :DOCKER-USER - [0:0]
 :LOGGING - [0:0]
+# On Slaves, all Network interfaces are opened
+-A INPUT -i lo -j ACCEPT
+-A INPUT -i Nred_exposed0 -j ACCEPT
+-A INPUT -i Nblue_exposed0 -j ACCEPT
+-A INPUT -i Nsuperadmin0 -j ACCEPT
+-A INPUT -i Nblue_admin0 -j ACCEPT
+-A INPUT -i Nred_admin0 -j ACCEPT
+# NAT Cloud
 -A INPUT -i virbr0 -p icmp -j ACCEPT
 -A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
-# Temporary for Vigrid install, should be removed later
+# If Ninternet0 is plugged, direct SSH to Slave is possible
 -A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
-# Ping Master
+# as well as pinging it
 -A INPUT -i Ninternet0 -p icmp -j ACCEPT
-# Internet responses
+# Returning outgoing traffic
 -A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-# Finally log & drop
--A INPUT -i Ninternet0 -j LOG
--A INPUT -i Ninternet0 -j REJECT
-# Opened networks
--A INPUT -i lo -j ACCEPT
--A INPUT -i Nsuperadmin0 -j ACCEPT
-# Policy
+# Default policy : Drop & log
 -A INPUT -j LOGGING
-# Forwarding
--A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+# Docker stuff
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-ISOLATION-STAGE-1
+-A FORWARD -o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -o docker0 -j DOCKER
+-A FORWARD -i docker0 ! -o docker0 -j ACCEPT
+-A FORWARD -i docker0 -o docker0 -j ACCEPT
+# NAT Cloud towards Ninternet0 only
 -A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT
-# Policy
--A FORWARD -j DROP
--A LOGGING -m limit --limit 2/min -j LOG --log-prefix \"IPTables Packet Dropped: \" --log-level 7
+-A FORWARD -i virbr0 ! -o Ninternet0 -j DROP
+# Default Policy
+-A FORWARD -j LOGGING
+# On Slaves, all Network interfaces are opened
+-A OUTPUT -o lo -j ACCEPT
+-A OUTPUT -o Nred_exposed0 -j ACCEPT
+-A OUTPUT -o Nblue_exposed0 -j ACCEPT
+-A OUTPUT -o Nsuperadmin0 -j ACCEPT
+-A OUTPUT -o Nblue_admin0 -j ACCEPT
+-A OUTPUT -o Nred_admin0 -j ACCEPT
+# Default policy
+-A OUTPUT -j LOGGING
+# Docker stuff
+-A DOCKER-ISOLATION-STAGE-1 -i docker0 ! -o docker0 -j DOCKER-ISOLATION-STAGE-2
+-A DOCKER-ISOLATION-STAGE-1 -j RETURN
+-A DOCKER-ISOLATION-STAGE-2 -o docker0 -j DROP
+-A DOCKER-ISOLATION-STAGE-2 -j RETURN
+-A DOCKER-USER -j RETURN
+# Logging & drop
+-A LOGGING -m limit --limit 2/min -j LOG --log-prefix \"IPtables Drops: \" --log-level 7
 -A LOGGING -j DROP
 COMMIT
 # NAT
 *nat
-:PREROUTING ACCEPT [211:11626]
-:INPUT ACCEPT [6:636]
-:OUTPUT ACCEPT [118:7455]
-:POSTROUTING ACCEPT [115:7252]
+:PREROUTING ACCEPT [3:180]
+:INPUT ACCEPT [3:180]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
 :DOCKER - [0:0]
+# Docker stuff
 -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
 -A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+# NAT Cloud
 -A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
 -A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
 -A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
@@ -2845,16 +2864,15 @@ COMMIT
 -A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
 -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
 -A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
--A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
--A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
--A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
--A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
--A POSTROUTING -s 192.168.122.0/24 -d 224.0.0.0/24 -j RETURN
--A POSTROUTING -s 192.168.122.0/24 -d 255.255.255.255/32 -j RETURN
--A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
--A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
--A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
 -A DOCKER -i docker0 -j RETURN
+COMMIT
+# MANGLE
+*mangle
+:PREROUTING ACCEPT [7012915:35979202658]
+:INPUT ACCEPT [6817123:35399584140]
+:FORWARD ACCEPT [195801:579621588]
+:OUTPUT ACCEPT [4464499:58782466335]
+:POSTROUTING ACCEPT [4660300:59362087923]
 COMMIT" >/etc/iptables/rules.vigrid
   else # Master FW rules, acting as Router, OpenVPN gateway...
     echo "#
@@ -2894,7 +2912,7 @@ COMMIT
 # -A OUTPUT -o Ninternet0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 # Finally log & drop
--A INPUT -i Ninternet0 -j LOG
+-A INPUT -i Ninternet0 -j LOGGING
 -A INPUT -i Ninternet0 -j REJECT
 #
 -A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 67 -j ACCEPT

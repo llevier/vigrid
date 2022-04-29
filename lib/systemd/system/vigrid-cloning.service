@@ -1,7 +1,7 @@
 [Unit]
 Description=Vigrid Cloning Daemon
 Wants=network-online.target
-After=network.target network-online.target gns3.target
+After=network.target network-online.target gns3.service
 
 [Service]
 Type=forking

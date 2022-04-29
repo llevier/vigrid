@@ -2792,58 +2792,144 @@ then
 :DOCKER-ISOLATION-STAGE-1 - [0:0]
 :DOCKER-ISOLATION-STAGE-2 - [0:0]
 :DOCKER-USER - [0:0]
-:LOGGING - [0:0]
+:LOG_ACCEPT - [0:0]
+:LOG_DROP - [0:0]
+
 # On Slaves, all Network interfaces are opened
--A INPUT -i lo -j ACCEPT
--A INPUT -i Nred_exposed0 -j ACCEPT
--A INPUT -i Nblue_exposed0 -j ACCEPT
--A INPUT -i Nsuperadmin0 -j ACCEPT
--A INPUT -i Nblue_admin0 -j ACCEPT
--A INPUT -i Nred_admin0 -j ACCEPT
+-A INPUT -i lo             -j LOG_ACCEPT
+-A INPUT -i Nsuperadmin0   -j LOG_ACCEPT
+-A INPUT -i Nblue_admin0   -j LOG_ACCEPT
+-A INPUT -i Nred_admin0    -j LOG_ACCEPT
+-A INPUT -i Nblue_exposed0 -j LOG_ACCEPT
+-A INPUT -i Nred_exposed0  -j LOG_ACCEPT
+
 # NAT Cloud
--A INPUT -i virbr0 -p icmp -j ACCEPT
--A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i virbr0 -p icmp -j LOG_ACCEPT
+-A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+
 # If Ninternet0 is plugged, direct SSH to Slave is possible
--A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
 # as well as pinging it
--A INPUT -i Ninternet0 -p icmp -j ACCEPT
-# Returning outgoing traffic
--A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i Ninternet0 -p icmp -j LOG_ACCEPT
+
+# Responses
+-A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j LOG_ACCEPT
+
 # Default policy : Drop & log
--A INPUT -j LOGGING
+-A INPUT -j LOG_DROP
+
 # Docker stuff
 -A FORWARD -j DOCKER-USER
 -A FORWARD -j DOCKER-ISOLATION-STAGE-1
--A FORWARD -o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j LOG_ACCEPT
 -A FORWARD -o docker0 -j DOCKER
--A FORWARD -i docker0 ! -o docker0 -j ACCEPT
--A FORWARD -i docker0 -o docker0 -j ACCEPT
+-A FORWARD -i docker0 ! -o docker0 -j LOG_ACCEPT
+-A FORWARD -i docker0 -o docker0   -j LOG_ACCEPT
 # NAT Cloud towards Ninternet0 only
--A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT
--A FORWARD -i virbr0 ! -o Ninternet0 -j DROP
-# Default Policy
--A FORWARD -j LOGGING
+-A FORWARD -i virbr0 -o Ninternet0 -j LOG_ACCEPT
+-A FORWARD -i virbr0 ! -o Ninternet0 -j LOG_DROP
+
+# Cyber range Policy
+-A FORWARD -i Ninternet0     -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nred_exposed0  -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nblue_exposed0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nblue_admin0   -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nred_admin0    -o Nsuperadmin0 -j LOG_DROP
+
+-A FORWARD -i Ninternet0     -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -i Nblue_exposed0 -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -i Nred_exposed0  -o Nblue_admin0 -j LOG_DROP
+
+-A FORWARD -i Ninternet0     -o Nred_admin0 -j LOG_DROP
+-A FORWARD -i Nblue_exposed0 -o Nred_admin0  -j LOG_DROP
+-A FORWARD -i Nred_exposed0  -o Nred_admin0  -j LOG_DROP
+
+-A FORWARD -j LOG_ACCEPT
+
 # On Slaves, all Network interfaces are opened
--A OUTPUT -o lo -j ACCEPT
--A OUTPUT -o Nred_exposed0 -j ACCEPT
--A OUTPUT -o Nblue_exposed0 -j ACCEPT
--A OUTPUT -o Nsuperadmin0 -j ACCEPT
--A OUTPUT -o Nblue_admin0 -j ACCEPT
--A OUTPUT -o Nred_admin0 -j ACCEPT
+-A OUTPUT -o lo             -j LOG_ACCEPT
+
+-A OUTPUT -o Ninternet0     -j LOG_ACCEPT
+
+-A OUTPUT -o Nsuperadmin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -s $NET_Nsuperadmin0 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -j LOG_DROP
+
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_exposed0 -s $NET_Nblue_exposed0 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_exposed0 -j LOG_DROP
+
+-A OUTPUT -o Nred_exposed0 -d $NET_Nsuperadmin0        -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d $NET_Nsuperadmin_users0  -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d $NET_Nred_admin0         -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d $NET_Nblue_admin0        -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nred_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nred_exposed0 -s $NET_Nred_exposed0 -j LOG_ACCEPT
+-A OUTPUT -o Nred_exposed0 -j LOG_DROP
+
+-A OUTPUT -o Nblue_users0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_users0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_users0 -s $NET_Nblue_users0 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_users0 -j LOG_DROP
+
+-A OUTPUT -o Nred_users0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nred_users0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nred_users0 -s $NET_Nred_users0 -j LOG_ACCEPT
+-A OUTPUT -o Nred_users0 -j LOG_DROP
+
+-A OUTPUT -o Nred_admin0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d $NET_Nblue_exposed0     -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nred_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nred_admin0 -s $NET_Nred_admin0 -j LOG_ACCEPT
+-A OUTPUT -o Nred_admin0 -j LOG_DROP
+
+-A OUTPUT -o Nblue_admin0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d $NET_Nred_exposed0      -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_admin0 -s $NET_Nblue_admin0 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_admin0 -j LOG_DROP
+
 # Default policy
--A OUTPUT -j LOGGING
+-A OUTPUT -j LOG_DROP
+
 # Docker stuff
 -A DOCKER-ISOLATION-STAGE-1 -i docker0 ! -o docker0 -j DOCKER-ISOLATION-STAGE-2
 -A DOCKER-ISOLATION-STAGE-1 -j RETURN
 -A DOCKER-ISOLATION-STAGE-2 -o docker0 -j DROP
 -A DOCKER-ISOLATION-STAGE-2 -j RETURN
 -A DOCKER-USER -j RETURN
-# Logging & drop
--A LOGGING -m limit --limit 2/min -j LOG --log-prefix \"IPtables Drops: \" --log-level 7
--A LOGGING -j DROP
+
+# log & drop
+-A LOG_DROP -m limit --limit 30/min -j LOG --log-prefix \"IPtables DROP: \" --log-level 7
+-A LOG_DROP -j DROP
+# log & accept
+#-A LOG_ACCEPT -m limit --limit 30/min -j LOG --log-prefix \"IPtables ACCEPT: \" --log-level 7
+-A LOG_ACCEPT -j ACCEPT
+
 COMMIT
 # NAT
 *nat
@@ -2887,6 +2973,7 @@ COMMIT" >/etc/iptables/rules.vigrid
 :POSTROUTING ACCEPT [386992:836802374]
 -A POSTROUTING -o virbr0 -p udp -m udp --dport 68 -j CHECKSUM --checksum-fill
 COMMIT
+
 # FILTER
 *filter
 :INPUT ACCEPT [0:0]
@@ -2896,103 +2983,250 @@ COMMIT
 :DOCKER-ISOLATION-STAGE-1 - [0:0]
 :DOCKER-ISOLATION-STAGE-2 - [0:0]
 :DOCKER-USER - [0:0]
-:LOGGING - [0:0]
--A INPUT -i virbr0 -p icmp -j ACCEPT
--A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+:LOG_ACCEPT - [0:0]
+:LOG_DROP - [0:0]
+
+-A INPUT -i virbr0 -p icmp -j LOG_ACCEPT
+-A INPUT -i virbr0 -p tcp -m tcp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 53 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 67 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i virbr0 -p udp -m udp --dport 68 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+
+-A INPUT -i lo -j LOG_ACCEPT
+
 # Temporary for Vigrid install, should be removed later
--A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -i Ninternet0 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+# Vigrid HTTPS/SSH/OpenVPN
+-A INPUT -i Ninternet0 -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i Ninternet0 -p icmp -j LOG_ACCEPT
 #
--A INPUT -i Ninternet0 -p tcp -m tcp --dport 443 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i Ninternet0 -p icmp -j ACCEPT
-# Internet responses
-# -A OUTPUT -o Ninternet0 -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
--A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-# Finally log & drop
--A INPUT -i Ninternet0 -j LOGGING
--A INPUT -i Ninternet0 -j REJECT
+-A INPUT -i Ninternet0 -m conntrack --ctstate RELATED,ESTABLISHED -j LOG_ACCEPT
+-A INPUT -i Ninternet0 -j LOG_DROP
 #
--A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nred_exposed0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -s $NET_Nred_exposed0 -i Nred_exposed0 -p icmp -j ACCEPT
--A INPUT -i Nred_exposed0 -j DROP
--A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nblue_exposed0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -s $NET_Nblue_exposed0 -i Nblue_exposed0 -p icmp -j ACCEPT
--A INPUT -i Nblue_exposed0 -j DROP
--A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nred_admin0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -s $NET_Nred_admin0 -i Nred_admin0 -p icmp -j ACCEPT
--A INPUT -i Nred_admin0 -j DROP
--A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 67 -j ACCEPT
--A INPUT -d 255.255.255.255/32 -i Nblue_admin0 -p udp -m udp --dport 68 -j ACCEPT
--A INPUT -s $NET_Nblue_admin0 -i Nblue_admin0 -p icmp -j ACCEPT
--A INPUT -i Nblue_admin0 -j DROP
--A INPUT -i lo -j ACCEPT
--A INPUT -i tun0 -j ACCEPT
--A INPUT -s $NET_Nsuperadmin0 -i Nsuperadmin0 -j ACCEPT
--A INPUT -j LOGGING
--A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -i virbr0 -o Ninternet0 -j ACCEPT
-# From Nred_exposed0
--A FORWARD -i Nred_exposed0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nred_exposed0 -o Nblue_admin0 -j DROP
--A FORWARD -i Nred_exposed0 -o Nred_admin0 -j DROP
--A FORWARD -s $NET_Nred_exposed0 -d $NET_Nblue_exposed0 -i Nred_exposed0 -o Nblue_exposed0 -j ACCEPT
-# From Nblue_exposed0
--A FORWARD -i Nblue_exposed0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nblue_exposed0 -o Nred_admin0 -j DROP
--A FORWARD -i Nblue_exposed0 -o Nblue_admin0 -j DROP
--A FORWARD -s $NET_Nblue_exposed0 -d $NET_Nred_exposed0 -i Nblue_exposed0 -o Nred_exposed0 -j ACCEPT
-# From Nred_admin0
--A FORWARD -i Nred_admin0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nred_admin0 -o Nblue_admin0 -j DROP
--A FORWARD -i Nred_admin0 -o Nblue_exposed0 -j DROP
-# From Nblue_admin0
--A FORWARD -i Nblue_admin0 -o Nsuperadmin0 -j DROP
--A FORWARD -i Nblue_admin0 -o Nred_admin0 -j DROP
--A FORWARD -i Nblue_admin0 -o Nred_exposed0 -j DROP
-# From OpenVPN
--A FORWARD -s $NET_Nsuperadmin_users0 -d $NET_Nsuperadmin0 -i tun0 -o Nsuperadmin0 -j ACCEPT
--A FORWARD -s $NET_Nsuperadmin_users0 -d $NET_Nblue_admin0 -i tun0 -o Nblue_admin0 -j ACCEPT
--A FORWARD -s $NET_Nsuperadmin_users0 -d $NET_Nred_admin0 -i tun0 -o Nred_admin0 -j ACCEPT
--A FORWARD -s $NET_Nsuperadmin_users0 -d $NET_Nblue_exposed0 -i tun0 -o Nblue_exposed0 -j ACCEPT
--A FORWARD -s $NET_Nsuperadmin_users0 -d $NET_Nred_exposed0 -i tun0 -o Nred_exposed0 -j ACCEPT
-# OpenVPN: VIGRIDteleports
-# From REDusers/servers
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_REDusers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_REDservers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDusers     -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_REDservers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_REDusers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_REDservers   -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A FORWARD -i tun0 -o Nred_exposed0   -s $NET_VIGRIDteleport_REDservers   -d $NET_Nred_exposed0 -j ACCEPT
--A FORWARD -i tun0 -o Nred_exposed0   -s $NET_VIGRIDteleport_REDusers     -d $NET_Nred_exposed0 -j ACCEPT
--A FORWARD -i tun0 -o Nblue_exposed0  -s $NET_VIGRIDteleport_REDservers   -d $NET_Nblue_exposed0 -j ACCEPT
--A FORWARD -i tun0 -o Nblue_exposed0  -s $NET_VIGRIDteleport_REDusers     -d $NET_Nblue_exposed0 -j ACCEPT
-# From BLUEusers/servers
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_BLUEservers   -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_BLUEservers   -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_BLUEusers     -d $NET_VIGRIDteleport_BLUEservers -j ACCEPT
--A FORWARD -i tun0 -o tun0            -s $NET_VIGRIDteleport_BLUEusers     -d $NET_VIGRIDteleport_BLUEusers -j ACCEPT
--A FORWARD -i tun0 -o Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEservers  -d $NET_Nblue_exposed0 -j ACCEPT
--A FORWARD -i tun0 -o Nblue_exposed0  -s $NET_VIGRIDteleport_BLUEusers    -d $NET_Nblue_exposed0 -j ACCEPT
-# To Internet
--A FORWARD -i tun0 -o Ninternet0 -j ACCEPT
--A FORWARD -s $NET_Nsuperadmin0 -i Nsuperadmin0 -o Ninternet0 -j ACCEPT
--A FORWARD -s $NET_Nred_exposed0 -i Nred_exposed0 -o Ninternet0 -j ACCEPT
--A FORWARD -s $NET_Nblue_exposed0 -i Nblue_exposed0 -o Ninternet0 -j ACCEPT
--A FORWARD -s $NET_Nred_admin0 -i Nred_admin0 -o Ninternet0 -j ACCEPT
--A FORWARD -s $NET_Nblue_admin0 -i Nblue_admin0 -o Ninternet0 -j ACCEPT
+-A INPUT -i Nsuperadmin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nsuperadmin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin0       -j LOG_ACCEPT
+-A INPUT -i Nsuperadmin0 -s $NET_Nsuperadmin_users0 -j LOG_ACCEPT
+-A INPUT -i Nsuperadmin0 -j LOG_DROP
+
+-A INPUT -i Nblue_exposed0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A INPUT -i Nblue_exposed0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A INPUT -i Nblue_exposed0 -d $NET_Nred_admin0        -j LOG_DROP
+-A INPUT -i Nblue_exposed0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A INPUT -i Nblue_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nblue_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nblue_exposed0 -s $NET_Nblue_exposed0 -j LOG_ACCEPT
+-A INPUT -i Nblue_exposed0 -j LOG_DROP
+
+-A INPUT -i Nred_exposed0 -d $NET_Nsuperadmin0        -j LOG_DROP
+-A INPUT -i Nred_exposed0 -d $NET_Nsuperadmin_users0  -j LOG_DROP
+-A INPUT -i Nred_exposed0 -d $NET_Nred_admin0         -j LOG_DROP
+-A INPUT -i Nred_exposed0 -d $NET_Nblue_admin0        -j LOG_DROP
+-A INPUT -i Nred_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nred_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nred_exposed0 -s $NET_Nred_exposed0 -j LOG_ACCEPT
+-A INPUT -i Nred_exposed0 -j LOG_DROP
+
+-A INPUT -i Nblue_users0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A INPUT -i Nblue_users0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A INPUT -i Nblue_users0 -d $NET_Nred_admin0        -j LOG_DROP
+-A INPUT -i Nblue_users0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A INPUT -i Nblue_users0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nblue_users0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nblue_users0 -s $NET_Nblue_users0 -j LOG_ACCEPT
+-A INPUT -i Nblue_users0 -j LOG_DROP
+
+-A INPUT -i Nred_users0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A INPUT -i Nred_users0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A INPUT -i Nred_users0 -d $NET_Nred_admin0        -j LOG_DROP
+-A INPUT -i Nred_users0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A INPUT -i Nred_users0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nred_users0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nred_users0 -s $NET_Nred_users0 -j LOG_ACCEPT
+-A INPUT -i Nred_users0 -j LOG_DROP
+
+-A INPUT -i Nred_admin0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A INPUT -i Nred_admin0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A INPUT -i Nred_admin0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A INPUT -i Nred_admin0 -d $NET_Nblue_exposed0     -j LOG_DROP
+-A INPUT -i Nred_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nred_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nred_admin0 -s $NET_Nred_admin0 -j LOG_ACCEPT
+-A INPUT -i Nred_admin0 -j LOG_DROP
+
+-A INPUT -i Nblue_admin0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A INPUT -i Nblue_admin0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A INPUT -i Nblue_admin0 -d $NET_Nred_admin0        -j LOG_DROP
+-A INPUT -i Nblue_admin0 -d $NET_Nred_exposed0      -j LOG_DROP
+-A INPUT -i Nblue_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A INPUT -i Nblue_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A INPUT -i Nblue_admin0 -s $NET_Nblue_admin0 -j LOG_ACCEPT
+-A INPUT -i Nblue_admin0 -j LOG_DROP
+
+-A INPUT -i tun0 -s $NET_Nsuperadmin_users0         -j LOG_ACCEPT
+-A INPUT -i tun0 -s $NET_VIGRIDteleport_BLUEusers   -j LOG_ACCEPT
+-A INPUT -i tun0 -s $NET_VIGRIDteleport_BLUEservers -j LOG_ACCEPT
+-A INPUT -i tun0 -s $NET_VIGRIDteleport_REDusers    -j LOG_ACCEPT
+-A INPUT -i tun0 -s $NET_VIGRIDteleport_REDservers  -j LOG_ACCEPT
+
 # Policy
--A FORWARD -j DROP
--A LOGGING -m limit --limit 2/min -j LOG --log-prefix \"IPTables Packet Dropped: \" --log-level 7
--A LOGGING -j DROP
+-A INPUT -j LOG_DROP
+
+-A FORWARD -i virbr0 -o Ninternet0 -j LOG_ACCEPT
+
+# From Nred_exposed0
+-A FORWARD -i Nred_exposed0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nred_exposed0 -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -i Nred_exposed0 -o Nred_admin0  -j LOG_DROP
+-A FORWARD -i Nred_exposed0 -o Nblue_exposed0 -s $NET_Nred_exposed0 -d $NET_Nblue_exposed0 -j LOG_ACCEPT
+
+# From Nblue_exposed0
+-A FORWARD -i Nblue_exposed0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nblue_exposed0 -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -i Nblue_exposed0 -o Nred_admin0  -j LOG_DROP
+-A FORWARD -i Nblue_exposed0 -o Nred_exposed0 -s $NET_Nblue_exposed0 -d $NET_Nred_exposed0 -j LOG_ACCEPT
+
+# From Nred_users0
+-A FORWARD -i Nred_users0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nred_users0 -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -i Nred_users0 -o Nred_admin0  -j LOG_DROP
+-A FORWARD -i Nred_users0 -o Nblue_users0 -s $NET_Nred_users0 -d $NET_Nblue_users0 -j LOG_ACCEPT
+
+# From Nblue_users0
+-A FORWARD -i Nblue_users0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -i Nblue_users0 -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -i Nblue_users0 -o Nred_admin0  -j LOG_DROP
+-A FORWARD -i Nblue_users0 -o Nred_users0 -s $NET_Nblue_users0 -d $NET_Nred_users0 -j LOG_ACCEPT
+
+# From Nred_admin0
+-A FORWARD -i Nred_admin0 -o Nsuperadmin0   -j LOG_DROP
+-A FORWARD -i Nred_admin0 -o Nblue_admin0   -j LOG_DROP
+-A FORWARD -i Nred_admin0 -o Nblue_exposed0 -j LOG_DROP
+
+# From Nblue_admin0
+-A FORWARD -i Nblue_admin0 -o Nsuperadmin0  -j LOG_DROP
+-A FORWARD -i Nblue_admin0 -o Nred_admin0   -j LOG_DROP
+-A FORWARD -i Nblue_admin0 -o Nred_exposed0 -j LOG_DROP
+
+# From OpenVPN to OpenVPN
+-A FORWARD -i tun0 -o tun0  -s $NET_VIGRIDteleport_BLUEservers -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A FORWARD -i tun0 -o tun0  -s $NET_VIGRIDteleport_BLUEusers   -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A FORWARD -i tun0 -o tun0  -s $NET_VIGRIDteleport_REDservers  -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A FORWARD -i tun0 -o tun0  -s $NET_VIGRIDteleport_REDusers    -d $NET_Nsuperadmin_users0 -j LOG_DROP
+
+# From OpenVPN to NIC
+-A FORWARD -s $NET_VIGRIDteleport_BLUEservers -i tun0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -s $NET_VIGRIDteleport_BLUEusers   -i tun0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -s $NET_VIGRIDteleport_BLUEservers -i tun0 -o Nred_admin0  -j LOG_DROP
+-A FORWARD -s $NET_VIGRIDteleport_BLUEusers   -i tun0 -o Nred_admin0  -j LOG_DROP
+
+-A FORWARD -s $NET_VIGRIDteleport_REDservers  -i tun0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -s $NET_VIGRIDteleport_REDusers    -i tun0 -o Nsuperadmin0 -j LOG_DROP
+-A FORWARD -s $NET_VIGRIDteleport_REDservers  -i tun0 -o Nblue_admin0 -j LOG_DROP
+-A FORWARD -s $NET_VIGRIDteleport_REDusers    -i tun0 -o Nblue_admin0 -j LOG_DROP
+
+# From NIC to OpenVPN
+-A FORWARD -d $NET_VIGRIDteleport_BLUEservers -i Nred_admin0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_VIGRIDteleport_BLUEusers   -i Nred_admin0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_Nsuperadmin_users0         -i Nred_admin0 -o tun0 -j LOG_DROP
+
+-A FORWARD -d $NET_VIGRIDteleport_REDservers -i Nblue_admin0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_VIGRIDteleport_REDusers   -i Nblue_admin0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_Nsuperadmin_users0        -i Nblue_admin0 -o tun0 -j LOG_DROP
+
+-A FORWARD -d $NET_VIGRIDteleport_BLUEservers -i Nred_exposed0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_VIGRIDteleport_BLUEusers   -i Nred_exposed0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_Nsuperadmin_users0         -i Nred_exposed0 -o tun0 -j LOG_DROP
+
+-A FORWARD -d $NET_VIGRIDteleport_REDservers -i Nblue_exposed0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_VIGRIDteleport_REDusers   -i Nblue_exposed0 -o tun0 -j LOG_DROP
+-A FORWARD -d $NET_Nsuperadmin_users0        -i Nblue_exposed0 -o tun0 -j LOG_DROP
+
+# Policy
+-A FORWARD -j LOG_ACCEPT
+
+# Outputs
+-A OUTPUT -o lo  -j LOG_ACCEPT
+
+-A OUTPUT -o Ninternet0 -j LOG_ACCEPT
+
+-A OUTPUT -o Nsuperadmin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -d $NET_Nsuperadmin0 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -d $NET_Nsuperadmin_users0 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -s $NET_Nsuperadmin0 -j LOG_ACCEPT
+-A OUTPUT -o Nsuperadmin0 -j LOG_DROP
+
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nblue_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_exposed0 -s $NET_Nblue_exposed0 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_exposed0 -j LOG_DROP
+
+-A OUTPUT -o Nred_exposed0 -d $NET_Nsuperadmin0        -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d $NET_Nsuperadmin_users0  -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d $NET_Nred_admin0         -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d $NET_Nblue_admin0        -j LOG_DROP
+-A OUTPUT -o Nred_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nred_exposed0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nred_exposed0 -s $NET_Nred_exposed0 -j LOG_ACCEPT
+-A OUTPUT -o Nred_exposed0 -j LOG_DROP
+
+-A OUTPUT -o Nblue_users0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nblue_users0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_users0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_users0 -s $NET_Nblue_users0 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_users0 -j LOG_DROP
+
+-A OUTPUT -o Nred_users0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nred_users0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nred_users0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nred_users0 -s $NET_Nred_users0 -j LOG_ACCEPT
+-A OUTPUT -o Nred_users0 -j LOG_DROP
+
+-A OUTPUT -o Nred_admin0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d $NET_Nblue_admin0       -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d $NET_Nblue_exposed0     -j LOG_DROP
+-A OUTPUT -o Nred_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nred_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nred_admin0 -s $NET_Nred_admin0 -j LOG_ACCEPT
+-A OUTPUT -o Nred_admin0 -j LOG_DROP
+
+-A OUTPUT -o Nblue_admin0 -d $NET_Nsuperadmin0       -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d $NET_Nsuperadmin_users0 -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d $NET_Nred_admin0        -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d $NET_Nred_exposed0      -j LOG_DROP
+-A OUTPUT -o Nblue_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 67 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_admin0 -d 255.255.255.255/32 -p udp -m udp --dport 68 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_admin0 -s $NET_Nblue_admin0 -j LOG_ACCEPT
+-A OUTPUT -o Nblue_admin0 -j LOG_DROP
+
+-A OUTPUT -o tun0 -d $NET_Nsuperadmin_users0         -j LOG_ACCEPT
+-A OUTPUT -o tun0 -d $NET_VIGRIDteleport_BLUEusers   -j LOG_ACCEPT
+-A OUTPUT -o tun0 -d $NET_VIGRIDteleport_BLUEservers -j LOG_ACCEPT
+-A OUTPUT -o tun0 -d $NET_VIGRIDteleport_REDusers    -j LOG_ACCEPT
+-A OUTPUT -o tun0 -d $NET_VIGRIDteleport_REDservers  -j LOG_ACCEPT
+
+# Default policy
+-A OUTPUT -j LOG_DROP
+
+# log & drop
+-A LOG_DROP -m limit --limit 30/min -j LOG --log-prefix \"IPtables DROP: \" --log-level 7
+-A LOG_DROP -j DROP
+# log & accept
+#-A LOG_ACCEPT -m limit --limit 30/min -j LOG --log-prefix \"IPtables ACCEPT: \" --log-level 7
+-A LOG_ACCEPT -j ACCEPT
+
 COMMIT
 # NAT
 *nat
@@ -3019,19 +3253,23 @@ COMMIT
 -A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p tcp -j MASQUERADE --to-ports 1024-65535
 -A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -p udp -j MASQUERADE --to-ports 1024-65535
 -A POSTROUTING -s 192.168.122.0/24 ! -d 192.168.122.0/24 -j MASQUERADE
+
 # Cyber Range flows
--A POSTROUTING -s $NET_Nsuperadmin0 -o Nblue_admin0 -j MASQUERADE
--A POSTROUTING -s $NET_Nsuperadmin0 -o Nred_admin0 -j MASQUERADE
--A POSTROUTING -s $NET_Nsuperadmin0 -o Nred_exposed0 -j MASQUERADE
--A POSTROUTING -s $NET_Nsuperadmin0 -o Nblue_exposed0 -j MASQUERADE
--A POSTROUTING -s $NET_Nsuperadmin0 -o Ninternet0 -j MASQUERADE
--A POSTROUTING -s $NET_Nred_admin0 -o Nred_exposed0 -j MASQUERADE
--A POSTROUTING -s $NET_Nred_admin0 -o Ninternet0 -j MASQUERADE
--A POSTROUTING -s $NET_Nblue_admin0 -o Nblue_exposed0 -j MASQUERADE
--A POSTROUTING -s $NET_Nblue_admin0 -o Ninternet0 -j MASQUERADE
--A POSTROUTING -s $NET_Nblue_exposed0 -o Ninternet0 -j MASQUERADE
--A POSTROUTING -s $NET_Nred_exposed0 -o Ninternet0 -j MASQUERADE
--A POSTROUTING -o Ninternet0 -j MASQUERADE
+-A POSTROUTING -s $NET_Nsuperadmin0   -o Nblue_admin0   -j MASQUERADE
+-A POSTROUTING -s $NET_Nsuperadmin0   -o Nred_admin0    -j MASQUERADE
+-A POSTROUTING -s $NET_Nsuperadmin0   -o Nred_exposed0  -j MASQUERADE
+-A POSTROUTING -s $NET_Nsuperadmin0   -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s $NET_Nsuperadmin0   -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -s $NET_Nred_admin0    -o Nred_exposed0  -j MASQUERADE
+-A POSTROUTING -s $NET_Nred_admin0    -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -s $NET_Nblue_admin0   -o Nblue_exposed0 -j MASQUERADE
+-A POSTROUTING -s $NET_Nblue_admin0   -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -s $NET_Nblue_exposed0 -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -s $NET_Nred_exposed0  -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -s $NET_Nblue_users0   -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -s $NET_Nred_users0    -o Ninternet0     -j MASQUERADE
+-A POSTROUTING -o Ninternet0                            -j MASQUERADE
+
 -A DOCKER -i docker0 -j RETURN
 COMMIT" >/etc/iptables/rules.vigrid
   fi

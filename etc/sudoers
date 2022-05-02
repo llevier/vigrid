@@ -30,6 +30,7 @@ VIGRID       ALL = (root) NOPASSWD: /usr/sbin/service gns3 reload
 VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/vigrid-run -M -A '/usr/sbin/service gns3 reload'
 VIGRID       ALL = (gns3) NOPASSWD: /home/gns3/vigrid/bin/vigrid-sshcheck
 VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/bin/vigrid-run
+VIGRID       ALL = (root) NOPASSWD: /home/gns3/vigrid/etc/init.d/vigrid start
 
 ############# OBSOLETE ##########################################################################
 # Snapshot management (BTRfs, too slow, obsolete)

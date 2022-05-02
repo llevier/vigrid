@@ -12,7 +12,7 @@ PermissionsStartOnly=true
 
 PIDFile=/run/gns3/gns3.pid
 
-ExecStartPre=/home/gns3/vigrid/etc/init.d/vigrid start
+ExecStartPre=sudo /home/gns3/vigrid/etc/init.d/vigrid start
 ExecStart=/usr/bin/gns3server --config /home/gns3/.config/GNS3/gns3_server.conf --log /var/log/gns3/gns3.log --pid /run/gns3/gns3.pid --daemon
 Restart=on-abort
 

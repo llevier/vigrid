@@ -51,9 +51,10 @@ You can read the <A HREF="/docs/">documentation</A> for further explanations abo
 When Vigrid is in NAS mode, it means many projects/clones could be launched at a time.
 One must keep in mind that a NAS has not infinite disk or network bandwidth.
 Despite all my efforts, growing timeouts etc, if you launch too many nodes at a time with virtual hard drives stored on central NAS, network or disk saturation could lead to node failure or virtual machine disk I/O errors.
-For now I have no other cooking recipe than checking each node load time, then put enough delays between project/nodes launches to avoid this situation.
+For now I have no other (yet) cooking recipe than checking each node load time, then put enough delays between project/nodes launches to avoid this situation.
 With local data risk strong reduces, so I prepared Vigrid in a new design: Hybrid. In such a design, Vigrid keeps controlling centrally but projects are restricted to specific hosts where data is stored.
 Of course, this risk can be manage also with better network, storage devices etc, as well as using different network interfaces and NASes.
+Promissing study: ZFS over GlusterFS, itself sharing over NFS 4.2 (multipath). At the moment changes on ZFS are not propagated to GlusterFS :-(
 
 ### VERSIONS ###
 For now, Vigrid is updated at high frequency and there is no starting version yet. Best method to be up to date is to regularly launch 'vigrid-update', considering this might generate short time issues.

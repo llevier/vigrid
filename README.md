@@ -112,4 +112,6 @@ Feel free to contact me.
   <TD>Ongoing</TD></TR>
   <TR><TD>Creating a life simulation systems so network behaves as if real users would be working (mail, surf etc).</TD>
   <TD>Ongoing</TD></TR>
+  <TR><TD>Add a shortcut on each Qemu node to 'qemu rebase' node disk (thus removing appliance image dependancy) or 'qemu commit' node disk to have appliance disk updated (thus failing all other nodes depending on it).</TD>
+  <TD>Queued</TD></TR>
 </TABLE>

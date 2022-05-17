@@ -23,7 +23,7 @@ Vigrid extension is copyrighted to Laurent LEVIER, licensed under Creative Commo
 ### QUICK INSTALL ###
 
 First, install the last Ubuntu server LTS version on your hosts(s).
-<STRONG>Nota: install is validated until Ubuntu 20 LTS. Current version, Ubuntu 22 LTS, has some errors</STRONG>
+<BR><STRONG>Nota: install is validated until Ubuntu 20 LTS. Current version, Ubuntu 22 LTS, has some errors</STRONG>
 
 Recommendations:
 <ul><li>Ubuntu:</li>

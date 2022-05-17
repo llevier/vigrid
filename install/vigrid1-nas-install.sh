@@ -139,6 +139,12 @@ apt full-upgrade -y || Error "Command exited with an error,"
 apt autoclean -y || Error "Command exited with an error,"
 apt autoremove -y || Error "Command exited with an error,"
 
+# Display "Adding Zrepl repository & tool..."
+# curl -fsSL https://zrepl.cschwarz.com/apt/apt-key.asc | tee | gpg --dearmor | apt-key add -
+# echo "deb https://zrepl.cschwarz.com/apt/ubuntu `lsb_release -cs` main" | tee /etc/apt/sources.list.d/zrepl.list || Error 'Update failed,'
+# apt update -y || Error "Command exited with an error,"
+# apt install -y zrepl
+
 Display "Install misc tools..."
 apt install -y ipcalc
 

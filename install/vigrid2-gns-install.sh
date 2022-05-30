@@ -2732,6 +2732,11 @@ push \"setenv-safe VIGRID_DHCP_IP $VIGRID_DHCP_IP\"
       cat $i 2>/dev/null |grep -v "^ProtectHome" >/tmp/tmp$$
       cat /tmp/tmp$$ 2>/dev/null >$i
       rm /tmp/tmp$$ >/dev/null 2>/dev/null
+      
+      Display -h "  Setting LimitNPROC=infinite in $i..."
+      cat $i 2>/dev/null | sed 's/^LimitNPROC=.*/LimitNPROC=infinite/i' >/tmp/tmp$$
+      cat /tmp/tmp$$ 2>/dev/null >$i
+      rm /tmp/tmp$$ >/dev/null 2>/dev/null
     done
     systemctl daemon-reload
 

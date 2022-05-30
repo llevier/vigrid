@@ -76,12 +76,10 @@ Feel free to contact me.
   <TD><B>Status</B></TD></TR>
   <TR><TD>Error handling by command in install scripts (failing command can be rerun endlessly)</TD>
   <TD>Queued</TD></TR>
-  <TR><TD>Add BTRfs management on servers (tested/validated but not implemented in Vigrid)</TD>
-  <TD>Validated, queued</TD></TR>
   <TR><TD>Change Control Tower display (project first column, then host) so start button automatically select best available host</TD>
   <TD>Queued</TD></TR>
   <TR><TD>Check code for security issues (input controls etc)</TD>
-  <TD>To redo</TD></TR>
+  <TD>Periodic action</TD></TR>
   <TR><TD>Test & validate 'projects with docker nodes' cloning</TD>
   <TD>Validated (limitations now known), queued</TD></TR>
   <TR><TD>Try to build a ZFS snapshot hierarchical tree to show dependencies</TD>
@@ -92,6 +90,8 @@ Feel free to contact me.
   <TD>Queued</TD></TR>
   <TR><TD>Try to make BTRfs much faster</TD>
   <TD>Study to perform</TD></TR>
+  <TR><TD>Add BTRfs management on servers (tested/validated but not implemented in Vigrid)</TD>
+  <TD>Validated, queued</TD></TR>
   <TR><TD>Finish snaping/cloning at nodes level</TD>
   <TD>Validated with both FS, queued</TD></TR>
   <TR><TD>eszm installed as well (in control_tower_mon)</TD>

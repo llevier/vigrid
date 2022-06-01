@@ -142,7 +142,7 @@
   // To log to vigrid.log file
   function VIGRIDlogging($text)
   {
-    $fd=fopen("/var/log/gns3/vigrid.log","a");
+    $fd=fopen("/var/log/gns3/vigrid.log","a+");
     if (!$fd) { print("Cant write to /var/log/gns3/vigrid.log\n"); return(-1); }
     $host=gethostname();
     $date=date("M j G:i:s");
@@ -560,7 +560,8 @@
   {
     
     $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/computes");
-    if ($url=="") { return(null); }
+    
+    if ($url=="") { VIGRIDlogging("Cant find VIGRID_GNS_VERSION into vigrid.conf"); return(null); }
 
     // print("Connecting to url: $url\n<BR>");
     $ch = curl_init();

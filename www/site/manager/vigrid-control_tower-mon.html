@@ -290,6 +290,8 @@
       
       if (isset($data_vigrid['GNS3'][$host_ip]))
       { print("<TD ALIGN=CENTER>".$data_vigrid['GNS3'][$host_ip]['COMPUTES'][0]['capabilities']['version']."</TD>"); }
+      else if if (isset($data_vigrid['GNS3'][$host_name]))
+      { print("<TD ALIGN=CENTER>".$data_vigrid['GNS3'][$host_name]['COMPUTES'][0]['capabilities']['version']."</TD>"); }
       else
       { print("<TD ALIGN=CENTER>N/A</TD>"); }
 

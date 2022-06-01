@@ -1542,7 +1542,12 @@
         elseif (strcasecmp($var_name,"VIGRID_GNS_SLAVE_HOSTS")==0)
         {
           # hostname:IPaddress:port
-          $var_ip=gethostbyname(gethostname());
+          $_tmp_gns_server=gns_getserver_config();
+          $var_ip=$_tmp_gns_server['host'];
+
+          if ($var_ip=="")
+          { $var_ip=gethostbyname(gethostname()); }
+
           if ($var_ip=="") { $var_value=gethostname().":127.0.0.1:3080 ".$var_value; }
           else { $var_value=gethostname().":$var_ip:3080 ".$var_value; }
         }

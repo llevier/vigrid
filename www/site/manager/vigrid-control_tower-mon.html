@@ -290,6 +290,8 @@
       
       if (isset($data_vigrid['GNS3'][$host_ip]))
       { print("<TD ALIGN=CENTER>".$data_vigrid['GNS3'][$host_ip]['COMPUTES'][0]['capabilities']['version']."</TD>"); }
+      else
+      { print("<TD ALIGN=CENTER>N/A</TD>"); }
 
       if ($dispid==1)
       {
@@ -335,9 +337,7 @@
       if ($cores==-1)
       { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
       else
-      {
-        print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>");
-      }
+      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>"); }
 
       if ($ram_free==-1)
       {	print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }

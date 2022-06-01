@@ -143,7 +143,7 @@
   function VIGRIDlogging($text)
   {
     $fd=fopen("/var/log/gns3/vigrid.log","a+");
-    if (!$fd) { print("Cant write to /var/log/gns3/vigrid.log\n"); return(-1); }
+    if (!$fd) { print("Cant write to vigrid.log file. Make sure it is owned by NGinx user who must be granted to write.\n"); return(-1); }
     $host=gethostname();
     $date=date("M j G:i:s");
 

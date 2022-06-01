@@ -559,9 +559,10 @@
   function gns_getcomputes($gns_controller,$hostname)
   {
     
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")=="")
+    { VIGRIDlogging("Cant find VIGRID_GNS_VERSION into vigrid configuration file"); return(null); }
+  
     $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/computes");
-    
-    if ($url=="") { VIGRIDlogging("Cant find VIGRID_GNS_VERSION into vigrid.conf"); return(null); }
 
     // print("Connecting to url: $url\n<BR>");
     $ch = curl_init();

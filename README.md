@@ -114,6 +114,6 @@ Feel free to contact me.
   <TD>Ongoing</TD></TR>
   <TR><TD>Add a shortcut on each Qemu node to 'qemu rebase' node disk (thus removing appliance image dependancy) or 'qemu commit' node disk to have appliance disk updated (thus failing all other nodes depending on it).</TD>
   <TD>Queued</TD></TR>
-  <TR><TD>ISSUE: upon *major* GNS3 load (100s of projects with until 500 Qemu at a time), Vigrid NAS has a very high load (>150%). FreeBSD behaves much better (25%), but has permission issues with ZFS over NFS. To benchmark NFS-Ganesha that might be a solution.</TD>
+  <TR><TD>ISSUE: upon *major* GNS3 load (100s of projects with until 500 Qemu at a time), Vigrid NAS has a very high CPU load (>150%), even with no load at network or disk IO levels. FreeBSD behaves much better (25%), but has permission issues with ZFS over NFS. To benchmark NFS-Ganesha that might be a solution.</TD>
   <TD>Queued</TD></TR>
 </TABLE>

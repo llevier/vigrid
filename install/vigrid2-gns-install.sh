@@ -356,10 +356,10 @@ then
 
     Display -h "  Adding Vigrid shares to /etc/exports..."
     echo "
-    /Vstorage/NFS/$HOSTNAME/GNS3mount                $HOSTNAME.GNS3(rw,no_root_squash,no_subtree_check)
-    /Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3           $HOSTNAME.GNS3(rw,no_root_squash,no_subtree_check)
-    /Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3/projects  $HOSTNAME.GNS3(rw,no_root_squash,no_subtree_check)
-    /Vstorage/NFS/$HOSTNAME/var-lib-docker           $HOSTNAME.GNS3(rw,no_root_squash,no_subtree_check)
+    /Vstorage/NFS/$HOSTNAME/GNS3mount                $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
+    /Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3           $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
+    /Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3/projects  $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
+    /Vstorage/NFS/$HOSTNAME/var-lib-docker           $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
     " | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS $VIGRID_NAS_SERVER_IP 'cat >>/etc/exports'
     
     Display -h  "Refreshing exports..."
@@ -578,7 +578,7 @@ else
 # Vigrid autoFS configuration
 #
 # NFSv4+nolock to solve forgotten locks in nfs-kernel-server
-* -vers=4,nolock,rw,hard,relatime,rsize=1048576,wsize=1048576,timeo=600,retrans=3,lookupcache=pos $VIGRID_NAS_SERVER_NAME:$NAS_MOUNT/&" >/etc/auto.vigrid  || Error 'Creation failed,'
+* -vers=4,nolock,rw,async,hard,relatime,rsize=1048576,wsize=1048576,timeo=600,retrans=3,lookupcache=pos $VIGRID_NAS_SERVER_NAME:$NAS_MOUNT/&" >/etc/auto.vigrid  || Error 'Creation failed,'
 fi
 
 Display -h "Moving home to Vstorage..."
@@ -596,7 +596,7 @@ then
   ln -s /Vstorage/GNS3-automounts/GNS3 /home/gns3/GNS3 || Error 'Link failed,'
 
   Display -h "Adding NAS Docker share to /etc/fstab"
-  echo "$VIGRID_NAS_SERVER_NAME:/Vstorage/NFS/$HOST/var-lib-docker /Vstorage/var-lib-docker        nfs     rw,hard,relatime,rsize=1048576,wsize=1048576,timeo=600,retrans=3,lookupcache=pos 0 0" >>/etc/fstab
+  echo "$VIGRID_NAS_SERVER_NAME:/Vstorage/NFS/$HOST/var-lib-docker /Vstorage/var-lib-docker        nfs     rw,async,hard,relatime,rsize=1048576,wsize=1048576,timeo=600,retrans=3,lookupcache=pos 0 0" >>/etc/fstab
 
   Display -h "Mounting /var/lib/docker..."
   mount /Vstorage/var-lib-docker || Display -h "Cant mount /var/lib/docker, might generate issues later."

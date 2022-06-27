@@ -333,7 +333,7 @@ Server CPU load: $top_load%/$van_cpu%
     if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
 
     $size="%-".$name_len."s";
-    printf("NIC:  $size OUT=%4d%2s/s (MAX=%4d%2s/s), IN=%4d%2s/s (MAX=%4d%2s/s), NIC MAX=%4dMB/s\n",$name,$rate_out,$unit_out,$max_out,$max_unit_out,$rate_in,$unit_in,$max_in,$max_unit_in,$nic_speed[$name]);
+    printf("NIC:  $size OUT=%4d%2s/s (MAX=%4d%2s/s), IN=%4d%2s/s (MAX=%4d%2s/s), NIC MAX=%4dMb/s\n",$name,$rate_out,$unit_out,$max_out,$max_unit_out,$rate_in,$unit_in,$max_in,$max_unit_in,$nic_speed[$name]);
   }
 
   sleep(1);

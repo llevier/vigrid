@@ -514,18 +514,18 @@ echo "#
 # Vigrid NAS NFS exports file
 #
 # GLOBAL: GNS3 repositories. Should be shared to Vigrid master GNS3 host only.
-/$FS_ROOT/GNS3/GNS3repos                      *.GNS3(rw,no_root_squash,no_subtree_check)
+/$FS_ROOT/GNS3/GNS3repos                      *.GNS3(rw,no_root_squash,async,no_subtree_check)
 
 # GNS3 Farm: GNS3 shared + docker per host
-/$FS_ROOT/GNS3/GNS3farm/GNS3                  *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check) 
-/$FS_ROOT/GNS3/GNS3farm/GNS3/images           *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check) 
-/$FS_ROOT/GNS3/GNS3farm/GNS3/projects         *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check) 
+/$FS_ROOT/GNS3/GNS3farm/GNS3                  *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check) 
+/$FS_ROOT/GNS3/GNS3farm/GNS3/images           *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check) 
+/$FS_ROOT/GNS3/GNS3farm/GNS3/projects         *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check) 
 
 # GNS3 independant host using NAS: 
-# /$FS_ROOT/NFS/[per_host]/GNS3mount                [per_host].GNS3(rw,no_root_squash,no_subtree_check)
-# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3           [per_host].GNS3(rw,no_root_squash,no_subtree_check)
-# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3/projects  [per_host].GNS3(rw,no_root_squash,no_subtree_check)
-# /$FS_ROOT/NFS/[per_host]/var-lib-docker           [per_host].GNS3(rw,no_root_squash,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/GNS3mount                [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3           [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3/projects  [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/var-lib-docker           [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
 
 " >/etc/exports
 
@@ -610,10 +610,10 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
       
       echo "
 # Shares for $GNS_NAME
-/$FS_ROOT/NFS/$GNS_NAME/GNS3mount                $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check)
-/$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check)
-/$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3/projects  $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check)
-/$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,sync,no_subtree_check)" >>/etc/exports
+/$FS_ROOT/NFS/$GNS_NAME/GNS3mount                $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)
+/$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)
+/$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3/projects  $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)
+/$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)" >>/etc/exports
     done
 
     Display "Ok, your /etc/hosts file is now:"
@@ -653,16 +653,16 @@ $FS_CREATE
    
    For a Farm with a MASTER server + 2 slaves and 2 GNS3 independant servers, the below would do:
    # GNS3 Farm
-   /$FS_ROOT/NFS/gns3master/GNS3mount/GNS3 gns3master.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)
-   /$FS_ROOT/NFS/gns3slave1/var-lib-docker gns3slave1.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)
-   /$FS_ROOT/NFS/gns3slave2/var-lib-docker gns3slave2.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)   
+   /$FS_ROOT/NFS/gns3master/GNS3mount/GNS3 gns3master.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3slave1/var-lib-docker gns3slave1.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3slave2/var-lib-docker gns3slave2.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)   
    
    # GNS3 independant hosts: gns3independant1 & gns3independant2
-   /$FS_ROOT/NFS/gns3independant1/GNS3mount/GNS3 gns3independant1.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)
-   /$FS_ROOT/NFS/gns3independant1/var-lib-docker gns3independant1.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant1/GNS3mount/GNS3 gns3independant1.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant1/var-lib-docker gns3independant1.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
 
-   /$FS_ROOT/NFS/gns3independant2/GNS3mount/GNS3 gns3independant2.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)
-   /$FS_ROOT/NFS/gns3independant2/var-lib-docker gns3independant2.GNS3(rw,crossmnt,no_root_squash,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant2/GNS3mount/GNS3 gns3independant2.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant2/var-lib-docker gns3independant2.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
 
 "
     break

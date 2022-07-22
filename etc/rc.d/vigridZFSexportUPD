@@ -23,13 +23,24 @@ stop_cmd="vigridZFSexportUPD_stop"
 
 vigridZFSexportUPD_start()
 {
-  $command_path/$command $command_flags || echo -n "($command_path/$command $command_flags) start failed"
+  chk=`ps waxo command | egrep "$command_path/$command $command_flags" | grep -v grep`
+  if [ "x$chk" != "x" ]
+  then
+    echo -n "(already running)"
+  else
+    $command_path/$command $command_flags || echo -n "($command_path/$command $command_flags) start failed"
+  fi
 }
 
 vigridZFSexportUPD_stop()
 {
-  /bin/pkill -f "^${command_path}/${command} ${command_flags}\$" || \
-    echo -n "(not running)"
+  list=`ps waxo pid,command | egrep "$command_path/$command $command_flags" | grep -v grep | awk '{print $1;}'`
+
+  for i in $list
+  do
+    echo "killing $i..."
+    kill $i
+  done
 }
 
 load_rc_config $name

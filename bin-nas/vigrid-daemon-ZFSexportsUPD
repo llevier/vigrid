@@ -188,7 +188,7 @@ while (1)
 
   // Now writing the new export file, saving the old one
   unlink("/etc/exports.old");
-  rename("/etc/exports /etc/exports.old");
+  rename("/etc/exports","/etc/exports.old");
 
   $fd=fopen("/etc/exports","w");
   if (!$fd) { report("###ERROR: Cant open /etc/exports for writing !\n"); }

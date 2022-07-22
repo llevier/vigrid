@@ -10,14 +10,16 @@
 #
 #################################################################################################################################
 
-USAGE="Usage: $0 -a start|stop -i net|disk [ -T type ] [ -R Storage_ROOT ] [ -I Net_or_Disk_filters ]"
+USAGE="Usage: $0 -a start|stop -i net|disk [ -T type ] [ -R Storage_ROOT ] [ -I Net_or_Disk_filters ] [ -F ]"
 
 DAEMON=0
+FREEBSD=0
 
-while getopts 'a:i:I:T:R:D' OPTIONS
+while getopts 'a:i:I:T:R:DF' OPTIONS
 do
   case "$OPTIONS" in
   D)  DAEMON=1;;
+  F)  FREEBSD=1;;
   a)  ACTION="$OPTARG";;
   i)  BWM_SOURCE="$OPTARG";;
   T)  BWM_TYPE="$OPTARG";;
@@ -46,15 +48,28 @@ fi
 # Needed for stat filename
 [ "x$BWM_TYPE" = "x" ] && BWM_TYPE="rate"
 
-COMMON_NET=" /usr/bin/bwm-ng -i proc -t 1000 -o csv -D 1 -C ; -N -d --procfile /proc/net/dev $VIGRID_NETS"
-COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d MB --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
+if [ $FREEBSD -eq 0 ]
+then
+  COMMON_NET=" /usr/bin/bwm-ng -i proc -t 1000 -o csv -D 1 -C ; -N -d --procfile /proc/net/dev $VIGRID_NETS"
+  COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d MB --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
+elif [ $FREEBSD -eq 1 ]
+then
+  COMMON_NET=" /usr/local/bin/bwm-ng -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N $VIGRID_NETS"
+  COMMON_DISK="/usr/local/bin/bwm-ng -i devstat -t 1000 -o csv -D 1 -C ';' -N -d MB"
+fi
 
 # Detect existing Vigrid nets...
 if [ "x$BWM_SOURCE" = "xnet" ]
 then
   if [ "x$FILTERS" = "x" ]
   then
-    VIGRID_NETS=`ip link | grep "^[0-9]" | awk '{print $2;}' | sed 's/://g' | grep "^N"`
+    if [ $FREEBSD -eq 0 ]
+    then
+      VIGRID_NETS=`ip link | grep "^[0-9]" | awk '{print $2;}' | sed 's/://g' | grep "^N"`
+    elif [ $FREEBSD -eq 1 ]
+    then
+      VIGRID_NETS=`ifconfig | egrep -i "^[a-z]{2,}[0-9]:" | awk -F ':' '{print $1;}' | grep "^N"`
+    fi
     [ "x$VIGRID_NETS" != "x" ] && VIGRID_NETS=`echo -I $VIGRID_NETS`
   else
     VIGRID_NETS="-I $FILTERS"

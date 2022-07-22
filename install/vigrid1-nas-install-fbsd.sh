@@ -749,6 +749,7 @@ Display "Setting gns3 owner of /Vstorage..." && chown -R gns3:gns3 /Vstorage || 
 
 Display -h -n "Adding miscellaneous packages..."
 pkg install -y bwm-ng rsync rclone fio || Error "Failed,"
+ln -s /usr/local/bin/bwm-ng /usr/bin/bwm-ng || Error 'Symlink of bwm-ng to /usr/bin failed,'
 
 # Adding bwm monitoring
 Display "Installing & enabling bwm monitors..."

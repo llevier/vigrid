@@ -134,7 +134,6 @@ Display -h -n "I see I am launched on a $OS_RELEASE, "
 # Server update
 Display "Lets update your server first"
 
-pkg install pkg || Error "Command exited with an error,"
 pkg update || Error "Command exited with an error,"
 pkg upgrade || Error "Command exited with an error,"
 
@@ -590,10 +589,10 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
       
       echo "
 # Shares for $GNS_NAME
-/$FS_ROOT/NFS/$GNS_NAME/GNS3mount                -mapall 777:777 -alldirs $i
-/$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3           -mapall 777:777 -alldirs $i
-/$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3/projects  -mapall 777:777 -alldirs $i
-/$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           -mapall 777:777 -alldirs $i" >>/etc/exports
+  /$FS_ROOT/NFS/$GNS_NAME/GNS3mount                -mapall 777:777 -alldirs $i
+  /$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3           -mapall 777:777 -alldirs $i
+  /$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3/projects  -mapall 777:777 -alldirs $i
+  /$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           -mapall 777:777 -alldirs $i" >>/etc/exports
     done
 
     Display "Ok, your /etc/hosts file is now:"
@@ -678,7 +677,7 @@ which git >/dev/null 2>/dev/null
 
 if [ -d /Vstorage/GNS3/vigrid ]
 then
-  cd /Vstorage/GNS3/vigrid && git config pull.rebase false && git pull || echo Vigrid update failed
+  cd /Vstorage/GNS3/vigrid && git config --global --add safe.directory /Vstorage/GNS3/vigrid && git config pull.rebase false && git pull || echo Vigrid update failed
 else
   cd /Vstorage/GNS3 && git clone https://github.com/llevier/vigrid.git || echo Vigrid update failed
 fi
@@ -686,7 +685,7 @@ fi
 echo "Resetting /Vstorage/GNS3 permissions (need root privilege)..."
 chown -R gns3:gns3 /Vstorage/GNS3  >/dev/null 2>/dev/null
 
-cp /Vstorage/GNS3/vigrid/etc/rc.d/vigrid-daemon-ZFSexportsUPD /usr/local/etc/rc.d/ 2>/dev/null
+cp /Vstorage/GNS3/vigrid/etc/rc.d/vigridZFSexportUPD /usr/local/etc/rc.d/ 2>/dev/null
 
 echo
 echo Restarting services...
@@ -719,16 +718,31 @@ echo All done
   Display -h "  Launching vigrid-update..."
   /Vstorage/GNS3/bin/vigrid-update || Error 'vigrid-update failed,'  
   
-  PHP_CLI=`pkg search php | egrep "^php[0-9]+-[0-9]" | sort | tail -1|awk '{print $1;}'`
-  Display "Installing PHP CLI..." && pkg install -y $PHP_CLI || Error 'Install of $PHP_CLI failed,'
+  PHP_CLI=`pkg search php | egrep "^php[0-9]+-[0-9]" | sort | awk '{print $1;}'`
+  for i in $PHP_CLI
+  do
+    DEPRECATED=`pkg search -Q annotations "^$i"|grep deprecated`
+    if [ "x$DEPRECATED" = "x" ]
+    then
+      PHP_CLI_FINAL=$i
+      break
+    fi
+  done
+  Display "Installing PHP CLI $PHP_CLI_FINAL..." && pkg install -y $PHP_CLI_FINAL || Error 'Install of $PHP_CLI failed,'
+  ln -s /usr/local/bin/php /usr/bin/php || Error 'Symlink of $PHP_CLI_FINAL to /usr/bin failed,'
+  
+  PHP_VERSION=`echo $PHP_CLI_FINAL|sed 's/-.*$//'`
+  PHP_EXTENSIONS="$PHP_VERSION-pcntl $PHP_VERSION-posix"
+  Display "Installing PHP CLI $PHP_CLI_FINAL..." && pkg install -y $PHP_EXTENSIONS || Error 'Installs of $PHP_EXTENSIONS failed,'
+  
   
   Display -h "  Installing vigridZFSexportUPD service..."
-  mkdir -p /usr/local/etc/rc.d || Error 'Cant mkdir /usr/local/etc/rc.d,'
+  mkdir -p /usr/local/etc/rc.d 2>/dev/null
   cp /Vstorage/GNS3/vigrid/etc/rc.d/vigridZFSexportUPD /usr/local/etc/rc.d/ || Error 'Install failed,'
   echo "# Vigrid ZFS update daemon
 vigridZFSexportUPD_enable=\"YES\"
 " >>/etc/rc.conf
-  service vigrid-ZFSexportUPD start || Error 'Cant start vigrid-ZFSexportUPD,'
+  service vigridZFSexportUPD start || Error 'Cant start vigrid-ZFSexportUPD,'
 fi
 
 Display "Setting gns3 owner of /Vstorage..." && chown -R gns3:gns3 /Vstorage || Error 'chown gns3:gns3 /Vstorage failed,'

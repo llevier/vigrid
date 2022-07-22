@@ -131,6 +131,10 @@ Display -h -n "I see I am launched on a $OS_RELEASE, "
 [ $OS_CHK -ge 1 ] && Display -h "perfect to me !"
 [ $OS_CHK -ge 1 ] || Display -h "not the one I expected, not sure I will work fine over it."
 
+Display "Now let's check how much RAM server has"
+RAM=`free -g|head -2|tail -1|awk '{print $2;}'`
+[ $RAM -le 32 ] && Display -h "Server has less than 32GB of physical RAM. With ZFS, it is advise to have much more. I advise 128GB of RAM"
+
 # Server update
 Display "Lets update your server first"
 
@@ -338,9 +342,24 @@ do
       done      
     fi
     
-    Display -h "  Setting compression..."
+    Display -h "  Setting ZFS compression..."
     zfs set compression=lz4 $FS_ROOT || Error "Cant set lz4 compression on $FS_ROOT,"
-    
+
+    Display -h "  Setting ZFS sync to standard..."
+    zfs set sync=standard $FS_ROOT || Error "Cant set value on $FS_ROOT,"
+
+    Display -h "  Setting ZFS atime to off..."
+    zfs set atime=off $FS_ROOT || Error "Cant set value on $FS_ROOT,"
+
+    Display -h "  Setting ZFS xattr to sa..."
+    zfs set xattr=sa $FS_ROOT || Error "Cant set value on $FS_ROOT,"
+
+    Display -h "  Setting ZFS redundant_metadata to most..."
+    zfs set redundant_metadata=most $FS_ROOT || Error "Cant set value on $FS_ROOT,"
+
+    Display -h "  Disabling ZFS prefetch..."
+    echo "options zfs zfs_prefetch_disable=1" >>/etc/modprobe.d/zfs.conf
+
     until false
     do
       Display -h "Checking Zpool $FS_ROOT exists..."
@@ -376,6 +395,9 @@ do
           fi
         done      
       fi
+      
+      Display -h "Tuning L2ARC ZFS values..."
+      echo "options zfs l2arc_write_max=1048576000" >>/etc/modprobe.d/zfs.conf
     fi  
 
     echo -n "To add ZIL, please provide a partition name, else [RETURN]: "
@@ -403,6 +425,8 @@ do
           fi
         done      
       fi
+      Display -h "With ZIL, checksum can be turned off for $FS_ROOT..."
+      zfs set checksum=off Vstorage
     fi  
     
     echo
@@ -514,7 +538,7 @@ echo "#
 # Vigrid NAS NFS exports file
 #
 # GLOBAL: GNS3 repositories. Should be shared to Vigrid master GNS3 host only.
-/$FS_ROOT/GNS3/GNS3repos                      *.GNS3(rw,no_root_squash,async,no_subtree_check)
+/$FS_ROOT/GNS3/GNS3repos                      *.GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
 
 # GNS3 Farm: GNS3 shared + docker per host
 /$FS_ROOT/GNS3/GNS3farm/GNS3                  *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check) 
@@ -522,10 +546,10 @@ echo "#
 /$FS_ROOT/GNS3/GNS3farm/GNS3/projects         *.GNS3(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check) 
 
 # GNS3 independant host using NAS: 
-# /$FS_ROOT/NFS/[per_host]/GNS3mount                [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
-# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3           [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
-# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3/projects  [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
-# /$FS_ROOT/NFS/[per_host]/var-lib-docker           [per_host].GNS3(rw,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/GNS3mount                [per_host].GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3           [per_host].GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3/projects  [per_host].GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
+# /$FS_ROOT/NFS/[per_host]/var-lib-docker           [per_host].GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
 
 " >/etc/exports
 
@@ -554,7 +578,7 @@ do
         CHK=`cat /etc/hosts | grep "^$GNS_IP"`
         if [ "x$CHK" != "x" ]
         then
-          Display -h "I am sorry but that IP address is alreadying present in /etc/hosts."
+          Display -h "I am sorry but that IP address is already present in /etc/hosts."
         else
           until false
           do
@@ -622,8 +646,8 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
     Display -h "When your /etc/exports file contains:"
     cat /etc/exports
     
-    Display -h "Changing /Vstorage tree ownership to Vigrid"
-    chown -R vigrid:vigrid /Vstorage || Error 'chown vigrid:vigrid /Vstorage failed,'
+    Display -h "Changing /Vstorage tree ownership to gns3"
+    chown -R gns3:gns3 /Vstorage || Error 'chown gns3:gns3 /Vstorage failed,'
 
     break
   elif [ "x$ANS" = "xn" -o "x$ANS" = "xN" -o "x$ANS" = "x" ]
@@ -653,16 +677,16 @@ $FS_CREATE
    
    For a Farm with a MASTER server + 2 slaves and 2 GNS3 independant servers, the below would do:
    # GNS3 Farm
-   /$FS_ROOT/NFS/gns3master/GNS3mount/GNS3 gns3master.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
-   /$FS_ROOT/NFS/gns3slave1/var-lib-docker gns3slave1.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
-   /$FS_ROOT/NFS/gns3slave2/var-lib-docker gns3slave2.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)   
+   /$FS_ROOT/NFS/gns3master/GNS3mount/GNS3 gns3master.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3slave1/var-lib-docker gns3slave1.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3slave2/var-lib-docker gns3slave2.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)   
    
    # GNS3 independant hosts: gns3independant1 & gns3independant2
-   /$FS_ROOT/NFS/gns3independant1/GNS3mount/GNS3 gns3independant1.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
-   /$FS_ROOT/NFS/gns3independant1/var-lib-docker gns3independant1.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant1/GNS3mount/GNS3 gns3independant1.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant1/var-lib-docker gns3independant1.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)
 
-   /$FS_ROOT/NFS/gns3independant2/GNS3mount/GNS3 gns3independant2.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
-   /$FS_ROOT/NFS/gns3independant2/var-lib-docker gns3independant2.GNS3(rw,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant2/GNS3mount/GNS3 gns3independant2.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)
+   /$FS_ROOT/NFS/gns3independant2/var-lib-docker gns3independant2.GNS3(rw,nohide,crossmnt,no_root_squash,async,no_subtree_check)
 
 "
     break

@@ -31,13 +31,13 @@ error_reporting(E_ERROR | E_PARSE);
 // turn off output buffering
 ob_implicit_flush();
 
-
-$usage="Vigrid-daemon-ZFSexportsUPD -R VigridStorageRoot [ -v ] | -d ] [ -l logfile ]";
+$usage="Vigrid-daemon-ZFSexportsUPD -R VigridStorageRoot [ -v ] | -d ] [ -F ] [ -l logfile ]";
 $host=gethostname();
 
-$opt=getopt("R:l:vd");
+$opt=getopt("R:l:Fvd");
 if (isset($opt['v'])) { $verbose=1; }
 if (isset($opt['d'])) { $daemon=1; }
+if (isset($opt['F'])) { $freebsd=1; }
 
 $vigrid_storage_root=$opt['R'];
 $log_file=$opt['l'];
@@ -203,8 +203,13 @@ while (1)
   fclose($fd);
   
   // Finally re-exporting new shares
-  list($rc,$res)=get_exec("exportfs -ra","",false);
-  if ($rc!=0) { report("###ERROR, exportfs -ra failed\n"); }
+  if ($freebsd==1)
+  { $command="service mountd reload"; }
+  else
+  { $command="exportfs -ra"; }
+  
+  list($rc,$res)=get_exec($command,"",false);
+  if ($rc!=0) { report("###ERROR, $command failed\n"); }
 
   sleep(5);
 }

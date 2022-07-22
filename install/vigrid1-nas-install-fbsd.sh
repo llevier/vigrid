@@ -105,8 +105,8 @@ Upon any issue, script will pause, proposing to (force) continue, run a sub shel
 Everything will be logged to $LOG_FILE.
 
 Upon any question with default answer, validate the choice.
-IMPORTANT: if this server is using DHCP, I'll set the IP address to the one obtained. This IP might change in the future,
-especially if you select CyberRange designs.
+IMPORTANT: if this server is using DHCP, I'll set the IP address to the one obtained.
+This IP might change in the future, especially if you select CyberRange designs.
 
 Press [RETURN] to start..."
 read ANS
@@ -134,6 +134,7 @@ Display -h -n "I see I am launched on a $OS_RELEASE, "
 # Server update
 Display "Lets update your server first"
 
+pkg install pkg || Error "Command exited with an error,"
 pkg update || Error "Command exited with an error,"
 pkg upgrade || Error "Command exited with an error,"
 
@@ -144,7 +145,7 @@ pkg upgrade || Error "Command exited with an error,"
 # pkg install -y zrepl
 
 Display "Install misc tools..."
-pkg install -y ipcalc bash-static
+pkg install -y ipcalc bash-static lsblk
 
 # Filesystem selection
 
@@ -415,7 +416,14 @@ do
   
   Display "Now checking a Vstorage Zpool exists"
   CHK=`zfs list | grep "^Vstorage "|wc -l`
-  [ $CHK -lt 1 ] && Error "Vstorage Zpool does not exist, I am blocked. Please build it or provide free partitions so I can do it."
+  if [ $CHK -lt 1 ]
+  then
+    Display "None found, trying to import possible existing Zpools..."
+    zpool import -f -a
+  fi
+  
+  CHK=`zfs list | grep "^Vstorage "|wc -l`
+  [ $CHK -lt 1 ]&& Error "Vstorage Zpool does not exist, I am blocked. Please build it or provide free partitions so I can do it."
   
     
   Display "Now creating Vigrid datasets:"
@@ -440,15 +448,17 @@ Display "Ok, Vigrid NAS is ready for storing, let's turn it to NFS server now"
 
 Display "Creating /etc/exports file with Vigrid GNS3 farm & repo shared"
 echo "#
-# Vigrid NAS NFS exports file
+# Vigrid NAS NFS exports file, v4 format
 #
 # GLOBAL: GNS3 repositories. Should be shared to Vigrid master GNS3 host only.
-/$FS_ROOT/GNS3/GNS3repos                      -mapall 777:777 -alldirs [list of GNS3 hosts]
+
+V4: /
+  /$FS_ROOT/GNS3/GNS3repos                      -mapall 777:777 -alldirs GNS3hosts
 
 # GNS3 Farm: GNS3 shared + docker per host
-/$FS_ROOT/GNS3/GNS3farm/GNS3                  -mapall 777:777 -alldirs [list of GNS3 hosts]
-/$FS_ROOT/GNS3/GNS3farm/GNS3/images           -mapall 777:777 -alldirs [list of GNS3 hosts]
-/$FS_ROOT/GNS3/GNS3farm/GNS3/projects         -mapall 777:777 -alldirs [list of GNS3 hosts]
+  /$FS_ROOT/GNS3/GNS3farm/GNS3                  -mapall 777:777 -alldirs GNS3hosts
+  /$FS_ROOT/GNS3/GNS3farm/GNS3/images           -mapall 777:777 -alldirs GNS3hosts
+  /$FS_ROOT/GNS3/GNS3farm/GNS3/projects         -mapall 777:777 -alldirs GNS3hosts
 
 # GNS3 independant host using NAS: 
 # /$FS_ROOT/NFS/[per_host]/GNS3mount                -mapall 777:777 -alldirs [per_host]
@@ -459,29 +469,36 @@ echo "#
 " >/etc/exports
 
 NCPU=`sysctl hw.ncpu | awk '{print $NF;}'`
-NCPU=$((NCPU-1))
+NCPU=$((NCPU-2))
 
-Display "Activating NFS Server on $NCPU threads..."
-
+Display "Enabling NFS Server"
 echo "# Vigrid required services
 rpcbind_enable=\"YES\"
-rpc_lockd_enable=\"YES\"
-rpc_statd_enable=\"YES\"
 
+nfs_client_enable=\"YES\"
+nfs_client_flags=\"-n 4\"
+#
 nfs_server_flags=\"-u -t -n $NCPU\"
 nfs_server_enable=\"YES\"
 nfs4_server_enable=\"YES\"
+nfsv4_server_only=\"YES\"
 
 mountd_enable=\"YES\"
 mountd_flags=\"-r\"
 " >>/etc/rc.conf
 
-Display -h "Starting RPCbind..."
-service rpcbind start
-Display -h "Starting NFSd..."
+Display -h "Setting NFSd to v3.0-4.2..."
+echo "# NFS set to v3.0-4.2
+vfs.nfsd.server_max_nfsvers: 4
+vfs.nfsd.server_min_nfsvers: 3
+vfs.nfsd.server_max_minorversion4: 2
+vfs.nfsd.server_min_minorversion4: 0
+" >>/etc/sysctl.conf
+
+Display -h "Starting nfsd..."
 service nfsd start
-Display -h "Starting mountd..."
-service mountd start
+Display -h "Starting nfsclient..."
+service nfsclient start
 
 until false
 do
@@ -508,7 +525,7 @@ do
         CHK=`cat /etc/hosts | grep "^$GNS_IP"`
         if [ "x$CHK" != "x" ]
         then
-          Display -h "I am sorry but that IP address is alreadying present in /etc/hosts."
+          Display -h "I am sorry but that IP address is already present in /etc/hosts."
         else
           until false
           do
@@ -528,6 +545,22 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
                 if [ "x$ANS" = "xy" -o "x$ANS" = "xY" -o "x$ANS" = "x" ]
                 then
                   echo "$GNS_IP $GNS_NAME $GNS_NAME.GNS3" >>/etc/hosts
+                  touch /etc/netgroup
+                  GNS3HOSTS=`cat /etc/netgroup | egrep "^GNS3hosts\s+"`
+                  
+                  if [ "x$GNS3HOSTS" = "x" ]
+                  then
+                    GNS3HOSTS="GNS3hosts ($GNS_NAME,,)"
+                    echo "$GNS3HOSTS" >>/etc/netgroup
+                  else
+                    CHK=`echo "$GNS3HOSTS" | egrep "($GNS_NAME,,)"`
+                    if [ "x$CHK" = "x" ]
+                    then
+                      GNS3HOSTS="$GNS3HOSTS ($GNS_NAME,,)"
+                      cat /etc/netgroup | sed "s/^GNS3hosts.*$/$GNS3HOSTS/" >/etc/netgroup.tmp || Error 'Cant update GNS3hosts into /etc/netgroup,'
+                      mv /etc/netgroup.tmp /etc/netgroup || Error 'Cant update GNS3hosts into /etc/netgroup,'
+                    fi
+                  fi
                   break
                 elif [ "x$ANS" = "xn" -o "x$ANS" = "xN" ]
                 then
@@ -569,8 +602,8 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
     Display -h "When your /etc/exports file contains:"
     cat /etc/exports
     
-    Display -h "Changing /Vstorage tree ownership to Vigrid"
-    chown -R vigrid:vigrid /Vstorage || Error 'chown vigrid:vigrid /Vstorage failed,'
+    Display -h "Changing /Vstorage tree ownership to gns3"
+    chown -R gns3:gns3 /Vstorage || Error 'chown gns3:gns3 /Vstorage failed,'
 
     break
   elif [ "x$ANS" = "xn" -o "x$ANS" = "xN" -o "x$ANS" = "x" ]
@@ -583,7 +616,7 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
 To share resources on a Vigrid NAS, as root:
 
 1- You will have to define into /etc/hosts each of the GNS3 slaves complying with this logic:
-[IPaddress]   [gns3hostname].GNS3
+[IPaddress]   [gns3hostname]
 
 2- Then you must create the associated ZFS datasets for these hosts, launching as root per host:
 $FS_CREATE
@@ -593,27 +626,28 @@ $FS_CREATE
    
    For a Farm with a MASTER server + 2 slaves and 2 GNS3 independant servers, the below would do:
    # GNS3 Farm
-   /$FS_ROOT/NFS/gns3master/GNS3mount/GNS3 -mapall 777:777 -alldirs gns3master.GNS3
-   /$FS_ROOT/NFS/gns3slave1/var-lib-docker -mapall 777:777 -alldirs gns3slave1.GNS3
-   /$FS_ROOT/NFS/gns3slave2/var-lib-docker -mapall 777:777 -alldirs gns3slave2.GNS3
+   /$FS_ROOT/NFS/gns3master/GNS3mount/GNS3 -mapall 777:777 -alldirs GNS3master
+   /$FS_ROOT/NFS/gns3slave1/var-lib-docker -mapall 777:777 -alldirs GNS3slave1
+   /$FS_ROOT/NFS/gns3slave2/var-lib-docker -mapall 777:777 -alldirs GNS3slave2
    
    # GNS3 independant hosts: gns3independant1 & gns3independant2
-   /$FS_ROOT/NFS/gns3independant1/GNS3mount/GNS3 -mapall 777:777 -alldirs gns3independant1.GNS3
-   /$FS_ROOT/NFS/gns3independant1/var-lib-docker -mapall 777:777 -alldirs gns3independant1.GNS3
+   /$FS_ROOT/NFS/gns3independant1/GNS3mount/GNS3 -mapall 777:777 -alldirs GNS3independant1
+   /$FS_ROOT/NFS/gns3independant1/var-lib-docker -mapall 777:777 -alldirs GNS3independant1
 
-   /$FS_ROOT/NFS/gns3independant2/GNS3mount/GNS3 -mapall 777:777 -alldirs gns3independant2.GNS3
-   /$FS_ROOT/NFS/gns3independant2/var-lib-docker -mapall 777:777 -alldirs gns3independant2.GNS3
+   /$FS_ROOT/NFS/gns3independant2/GNS3mount/GNS3 -mapall 777:777 -alldirs GNS3independant2
+   /$FS_ROOT/NFS/gns3independant2/var-lib-docker -mapall 777:777 -alldirs GNS3independant2
 
+4- To regroup GNS3 hosts, you can use /etc/netgoup with the following format:
+   GNS3hosts (GNS3master,,) (GNS3slave1,,) (GNS3slave2,,) ...
+   Then use 'GNS3hosts' as keyword
+   
 "
     break
   fi
 done
 
 Display "Updating exports..."
-kill -s HUP `cat /var/run/mountd.pid` || Error "It failed,"
-
-Display -h -n "Detected "
-showmount -e `hostname`
+service mountd reload
 
 Display -h "
 Creating /var/log/gns3 directory for logging..."
@@ -650,7 +684,7 @@ else
 fi
 
 echo "Resetting /Vstorage/GNS3 permissions (need root privilege)..."
-chown -R root:root /Vstorage/GNS3  >/dev/null 2>/dev/null
+chown -R gns3:gns3 /Vstorage/GNS3  >/dev/null 2>/dev/null
 
 cp /Vstorage/GNS3/vigrid/etc/rc.d/vigrid-daemon-ZFSexportsUPD /usr/local/etc/rc.d/ 2>/dev/null
 
@@ -661,7 +695,7 @@ for i in $LIST
 do
   echo "  $i..."
   
-  CHK=`ps ax|grep "vigrid-daemon-ZFSexportsUPD"|wc -l`
+  CHK=`ps ax|grep "vigrid-daemon-ZFSexportsUPD-FreeBSD"|wc -l`
   if [ $CHK -eq 0 ]
   then
     echo "    does not exist in unit files, no action"
@@ -669,8 +703,8 @@ do
     if [ "x$CHK" = "xenabled" ]
     then
       echo "    enabled, restarting it"
-      /usr/local/etc/rc.d/$i stop
-      /usr/local/etc/rc.d/$i start
+      service vigridZFSexportUPD stop
+      service vigridZFSexportUPD start
     else
       echo "    disabled, no action"
     fi
@@ -688,9 +722,13 @@ echo All done
   PHP_CLI=`pkg search php | egrep "^php[0-9]+-[0-9]" | sort | tail -1|awk '{print $1;}'`
   Display "Installing PHP CLI..." && pkg install -y $PHP_CLI || Error 'Install of $PHP_CLI failed,'
   
-  Display -h "  Enabling vigrid-ZFSexportUPD service..."
-  # cp /Vstorage/GNS3/vigrid/lib/systemd/system/vigrid-ZFSexportUPD.service /lib/systemd/system/ || Error 'Install failed,'
-  # systemctl enable vigrid-ZFSexportUPD || Error 'Cant enable vigrid-ZFSexportUPD,'
+  Display -h "  Installing vigridZFSexportUPD service..."
+  mkdir -p /usr/local/etc/rc.d || Error 'Cant mkdir /usr/local/etc/rc.d,'
+  cp /Vstorage/GNS3/vigrid/etc/rc.d/vigridZFSexportUPD /usr/local/etc/rc.d/ || Error 'Install failed,'
+  echo "# Vigrid ZFS update daemon
+vigridZFSexportUPD_enable=\"YES\"
+" >>/etc/rc.conf
+  service vigrid-ZFSexportUPD start || Error 'Cant start vigrid-ZFSexportUPD,'
 fi
 
 Display "Setting gns3 owner of /Vstorage..." && chown -R gns3:gns3 /Vstorage || Error 'chown gns3:gns3 /Vstorage failed,'

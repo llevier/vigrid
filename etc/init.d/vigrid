@@ -47,8 +47,8 @@ case "$1" in
 
     echo "  Changing ownerships..."
     chown -R gns3:gns3 /var/log/gns3 /run/gns3 /home/gns3/GNS3/* || /bin/true  >/dev/null 2>/dev/null
-    chown gns3:gns3 /home/gns3/GNS3 || /bin/true >/dev/null 2>/dev/null
     find /home/gns3 -depth -mount -exec chown gns3:gns3 {} \; || /bin/true  2>/dev/null
+    chown gns3:gns3 /home/gns3/GNS3 || /bin/true >/dev/null 2>/dev/null
     chown root:root /home/gns3/vigrid/etc/sudoers >/dev/null || /bin/true  2>/dev/null
     chmod o+r /var/log/syslog || /bin/true  >/dev/null 2>/dev/null
     

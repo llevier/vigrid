@@ -783,7 +783,7 @@ fi # VIGRIDsolo
 Display "Ok, let's start the GNS3 and associated software now..."
 
 Display -h "Adding miscellaneous packages..."
-apt install -y bwm-ng sysstat rsync rclone openntpd ntpdate jq || Error "Failed,"
+apt install -y bwm-ng sysstat rsync rclone openntpd ntpdate jq libimage-imlib2-perl libnet-vnc-perl || Error "Failed,"
 
 Display "Creating gns3 group..." && groupadd -g 777 -f gns3  2>/dev/null || Error 'Group creation failed,'
 Display -h "Creating gns3 user..." && useradd -u 777 -d /home/gns3 -m -g gns3 gns3 2>/dev/null || Error 'User creation failed,'

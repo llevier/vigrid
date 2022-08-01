@@ -20,7 +20,7 @@ include "/Vstorage/GNS3/bin/nas-project-lowlevel-functions";
 // turn off output buffering
 ob_implicit_flush();
 
-if (!function_exists(report))
+if (!function_exists('report'))
 {
   function report($level,$text)
   {
@@ -87,7 +87,7 @@ if (!function_exists(dirTOzdataset))
   }
 }
 
-if (!function_exists(zdatasetTOdir))
+if (!function_exists('zdatasetTOdir'))
 {
   function zdatasetTOdir($zdataset)
   {
@@ -110,7 +110,7 @@ if (!function_exists(zdatasetTOdir))
   }
 }
 
-if (!function_exists(get_exec))
+if (!function_exists('get_exec'))
 {
   function get_exec($command,$prefix,$display)
   {
@@ -129,7 +129,7 @@ if (!function_exists(get_exec))
   }
 }
 
-if (!function_exists(gen_uuid))
+if (!function_exists('gen_uuid'))
 {
   function gen_uuid()
   {
@@ -151,7 +151,7 @@ if (!function_exists(gen_uuid))
   }
 }
 
-if (!function_exists(find_all_files))
+if (!function_exists('find_all_files'))
 {
   function find_all_files($mode,$dir, &$results = array())
   {
@@ -316,7 +316,7 @@ list($rc,$res)=get_exec($command,"",false);
 for ($i=0;$i<sizeof($res);$i++)
 { $res[$i]=ltrim(rtrim($res[$i])); }
 
-$consoles_all=preg_grep("/\"console\": /",$res);
+$consoles_all=preg_grep("/\"console\": [0-9]*/",$res);
 $consoles_all=array_values($consoles_all);
 for ($u=0;$u<sizeof($consoles_all);$u++)
 {
@@ -332,7 +332,8 @@ report(2,$www_ok."  I found $consoles_total unique console ports on target host.
 
 $command="cat $config_file";
 list($rc,$res)=get_exec($command,"",false);
-$consoles_project=preg_grep("/\"console\": /",$res);
+$consoles_project=preg_grep("/\"console\": [0-9]*/",$res);
+
 sort($consoles_project);
 $consoles_project=array_unique($consoles_project);
 $console_needs=sizeof($consoles_project);

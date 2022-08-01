@@ -144,7 +144,7 @@ pkg upgrade || Error "Command exited with an error,"
 # pkg install -y zrepl
 
 Display "Install misc tools..."
-pkg install -y ipcalc bash-static lsblk
+pkg install -y ipcalc bash-static lsblk arc_summary ioping
 
 # Filesystem selection
 

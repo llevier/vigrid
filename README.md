@@ -37,13 +37,14 @@ If you want to build an infrastructure <STRONG>(development version)</STRONG>, p
   <code>wget https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid1-nas-install.sh</code><BR>
   <code>sudo sh vigrid1-nas-install.sh</code>, then provide the user password.<BR>
   Nota: all script input/output is logged to a file into /tmp..<BR>
-  Vigrid NAS design: in NAS, the main ennemy is disk I/O. Roughly, is considered a mecanical drive is able to perform 100 IOps. Accordingly, recommandations to have best NAS are:<BR>
-  - Rely on hardware RAID (check possible performance issues related to ReadAhead & WriteBack)<BR>
+  <STRONG>Vigrid NAS design</STRONG>: the main ennemy of NAS is disk I/O. Roughly, it is considered a mecanical drive is able to perform 100 IOps. Accordingly, recommandations to have best NAS are:<BR>
+  - Rely on hardware RAID (check possible performance issues related to ReadAhead & WriteBack).<BR>
+  - Use RAID-1 or RAID-5, not RAID6 and more parity drives (loss of performance at writings).<BR>
   - Use as maximum of physical hard drives to spread the load, dont care about too much disk space.<BR>
-  - Use SSD drives as cache, as with RAID, dont be afraid to have RAID-1 virtual drive as cache.<BR>
+  - Use SSD drives as cache, as with RAID, dont be afraid to have RAID-1 virtual drive as cache, spreading will raise IOps.<BR>
   - Disable all hardware optimisation mecanisms for cache drives (again ReadAhead & WriteBack).<BR>
   - Of course, obviously, if all hard drives are SSD, you will tremendously increase performance.<BR><BR>
-  As an example: server with 2xe6-2620v3+128GB RAM, hardware RAID5 of 8x6TB HD + RAID1 of 2x400GB SSD as cache can handle around 800 32GB GNS3 VM simultaneously over a 10Gb/s network link.
+  As an example: server with 2xe6-2620v3/128GB RAM, hardware RAID5 of 8x6TB HD + RAID1 of 2x400GB SSD as cache handled around 800 32GB GNS3 VM simultaneously over a 10Gb/s network link.
 </UL>
 
 Else or to install Vigrid server(s) (standalone, scalable or cloning farm), launch:  

@@ -33,7 +33,8 @@ bwmNGnetrate_start()
 
 bwmNGnetrate_stop()
 {
-  list=`ps waxo pid,command | egrep "$command_path/$command $command_flags" | grep -v grep | awk '{print $1;}'`
+  # /var/log/bwmNG-net-rate.log -T rate
+  list=`ps waxo pid,command | egrep "/var/log/bwmNG-net-rate.log -T rate" | grep -v grep | awk '{print $1;}'`
 
   for i in $list
   do

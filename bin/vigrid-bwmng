@@ -54,8 +54,10 @@ then
   COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d 1 --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
 elif [ $FREEBSD -eq 1 ]
 then
-  COMMON_NET=" /usr/local/bin/bwm-ng -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N -d 1 $VIGRID_NETS"
-  COMMON_DISK="/usr/local/bin/bwm-ng -i devstat -t 1000 -o csv -D 1 -C ';' -N -d 1"
+  # bwm-ng option -z comes from a personal patch to force fflush() upon outfile writing. Else update is per 5mn.
+  # Patch submitted to vgropp (bwm-ng owner). Upon no answer, will be submitted to FreeBSD port maintainer.
+  COMMON_NET=" /usr/local/bin/bwm-ng -z -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N -d 1 $VIGRID_NETS"
+  COMMON_DISK="/usr/local/bin/bwm-ng -z -i devstat -t 1000 -o csv -D 1 -C ';' -N -d 1"
 fi
 
 # Detect existing Vigrid nets...

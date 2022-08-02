@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: bwmNGdiskrate
+# BEFORE: DAEMON
+# KEYWORD: nojail shutdown
+
+. /etc/rc.subr
+
+name="bwmNGdiskrate"
+desc="Vigrid bwmNG monitoring (disk rate)"
+rcvar="bwmNGdiskrate_enable"
+
+command_path="/Vstorage/GNS3/vigrid/bin"
+command="vigrid-bwmng"
+command_flags="-F -a start -R /Vstorage -i disk -T rate"
+
+start_cmd="bwmNGdiskrate_start"
+stop_cmd="bwmNGdiskrate_stop"
+
+bwmNGdiskrate_start()
+{
+  chk=`ps waxo command | egrep "$command_path/$command $command_flags" | grep -v grep`
+  if [ "x$chk" != "x" ]
+  then
+    echo -n "(already running)"
+  else
+    $command_path/$command $command_flags || echo -n "($command_path/$command $command_flags) start failed"
+  fi
+}
+
+bwmNGdiskrate_stop()
+{
+  list=`ps waxo pid,command | egrep "$command_path/$command $command_flags" | grep -v grep | awk '{print $1;}'`
+
+  for i in $list
+  do
+    echo "killing $i..."
+    kill $i
+  done
+}
+
+load_rc_config $name
+run_rc_command "$1"

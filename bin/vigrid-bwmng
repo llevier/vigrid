@@ -54,7 +54,7 @@ then
   COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d MB --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
 elif [ $FREEBSD -eq 1 ]
 then
-  COMMON_NET=" /usr/local/bin/bwm-ng -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N $VIGRID_NETS"
+  COMMON_NET=" /usr/local/bin/bwm-ng -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N -d $VIGRID_NETS"
   COMMON_DISK="/usr/local/bin/bwm-ng -i devstat -t 1000 -o csv -D 1 -C ';' -N -d MB"
 fi
 
@@ -128,7 +128,11 @@ case "$ACTION" in
   stop)
     echo "Stopping Vigrid bwmNG ($BWM_SOURCE $BWM_TYPE)..."
     
-    [ "x$BWM_SOURCE" = "xnet" ] && BWM_SOURCE="proc"
+    [ $FREEBSD -eq 0 -a "x$BWM_SOURCE" = "xnet" ] && BWM_SOURCE="proc"
+
+    [ $FREEBSD -eq 1 -a "x$BWM_SOURCE" = "xnet" ] && BWM_SOURCE="getifaddrs"
+    [ $FREEBSD -eq 1 -a "x$BWM_SOURCE" = "xdisk" ] && BWM_SOURCE="devstat"
+    
     PID=`ps ax|egrep "bwm-ng.*-i $BWM_SOURCE .* -T $BWM_TYPE"|grep -v grep | awk '{print $1;}'`
     
     [ "x$PID" != "x" ] && echo -n "$PID..." && kill -9 $PID && echo 

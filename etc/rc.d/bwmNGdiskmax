@@ -10,7 +10,7 @@
 . /etc/rc.subr
 
 name="bwmNGdiskmax"
-desc="Vigrid bwmNG moniroting (disk max)"
+desc="Vigrid bwmNG monitoring (disk max)"
 rcvar="bwmNGdiskmax_enable"
 
 command_path="/Vstorage/GNS3/vigrid/bin"

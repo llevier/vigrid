@@ -50,12 +50,12 @@ fi
 
 if [ $FREEBSD -eq 0 ]
 then
-  COMMON_NET=" /usr/bin/bwm-ng -i proc -t 1000 -o csv -D 1 -C ; -N -d --procfile /proc/net/dev $VIGRID_NETS"
-  COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d MB --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
+  COMMON_NET=" /usr/bin/bwm-ng -i proc -t 1000 -o csv -D 1 -C ; -N -d 1 --procfile /proc/net/dev $VIGRID_NETS"
+  COMMON_DISK="/usr/bin/bwm-ng -i disk -t 1000 -o csv -D 1 -C ; -N -d 1 --diskstatsfile /proc/diskstats --partitionsfile /proc/partitions"
 elif [ $FREEBSD -eq 1 ]
 then
-  COMMON_NET=" /usr/local/bin/bwm-ng -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N -d $VIGRID_NETS"
-  COMMON_DISK="/usr/local/bin/bwm-ng -i devstat -t 1000 -o csv -D 1 -C ';' -N -d MB"
+  COMMON_NET=" /usr/local/bin/bwm-ng -i getifaddrs -t 1000 -o csv -D 1 -C ';' -N -d 1 $VIGRID_NETS"
+  COMMON_DISK="/usr/local/bin/bwm-ng -i devstat -t 1000 -o csv -D 1 -C ';' -N -d 1"
 fi
 
 # Detect existing Vigrid nets...

@@ -36,7 +36,14 @@ If you want to build an infrastructure <STRONG>(development version)</STRONG>, p
 <UL>
   <code>wget https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid1-nas-install.sh</code><BR>
   <code>sudo sh vigrid1-nas-install.sh</code>, then provide the user password.<BR>
-  Nota: all script input/output is logged to a file into /tmp.
+  Nota: all script input/output is logged to a file into /tmp..<BR>
+  Vigrid NAS design: in NAS, the main ennemy is disk I/O. Roughly, is considered a mecanical drive is able to perform 100 IOps. Accordingly, recommandations to have best NAS are:<BR>
+  - Rely on hardware RAID (check possible performance issues related to ReadAhead & WriteBack)<BR>
+  - Use as maximum of physical hard drives to spread the load, dont care about too much disk space.<BR>
+  - Use SSD drives as cache, as with RAID, dont be afraid to have RAID-1 virtual drive as cache.<BR>
+  - Disable all hardware optimisation mecanisms for cache drives (again ReadAhead & WriteBack).<BR>
+  - Of course, obviously, if all hard drives are SSD, you will tremendously increase performance.<BR><BR>
+  As an example: server with 2xe6-2620v3+128GB RAM, hardware RAID5 of 8x6TB HD + RAID1 of 2x400GB SSD as cache can handle around 800 32GB GNS3 VM simultaneously over a 10Gb/s network link.
 </UL>
 
 Else or to install Vigrid server(s) (standalone, scalable or cloning farm), launch:  
@@ -113,7 +120,5 @@ Feel free to contact me.
   <TR><TD>Creating a life simulation systems so network behaves as if real users would be working (mail, surf etc).</TD>
   <TD>Ongoing</TD></TR>
   <TR><TD>Add a shortcut on each Qemu node to 'qemu rebase' node disk (thus removing appliance image dependancy) or 'qemu commit' node disk to have appliance disk updated (thus failing all other nodes depending on it).</TD>
-  <TD>Queued</TD></TR>
-  <TR><TD>ISSUE: upon *major* GNS3 load (100s of projects with until 500 Qemu at a time), Vigrid NAS has a very high CPU load (>150%), even with no load at network or disk IO levels. FreeBSD behaves much better (25%), but has permission issues with ZFS over NFS. To benchmark NFS-Ganesha that might be a solution.</TD>
   <TD>Queued</TD></TR>
 </TABLE>

@@ -12,11 +12,11 @@
 
 VIGRID_CONF="/home/gns3/etc/vigrid.conf"
 
-USAGE="Usage: $0 -a list|size|CONVproject|ADDclone|DELclone|ADDhistory|DELhistory|SWAPsnap|ROLLback -p ProjectUUID [ -r ] [ -P ProjectName ] [ -b BaseGNSdir ] [ -n NodeUUID ] [ -s SnapshotID ] [ -S ]"
+USAGE="Usage: $0 -a list|size|CONVproject|ADDclone|DELclone|ADDhistory|DELhistory|SWAPsnap|ROLLback -p ProjectUUID [ -P ProjectName ] [ -b BaseGNSdir ] [ -n NodeUUID ] [ -s SnapshotID ] [ -S ]"
 
 SHOW_SIZE=0
 
-while getopts 'a:p:P:n:s:b:h:rS' OPTIONS
+while getopts 'a:p:P:n:s:b:h:S' OPTIONS
 do
   case "$OPTIONS" in
 	h)	GNS_HOST="$OPTARG";;
@@ -25,7 +25,6 @@ do
 	p)	PROJECT_UUID="$OPTARG";;
 	P)	PROJECT_NAME="$OPTARG";;
 	n)	NODE_UUID="$OPTARG";;
-  r)  NODE_RECURSION=1;;
 	s)	SNAPSHOT_ID="$OPTARG";;
 	S)	SHOW_SIZE=1;;
 	[?])
@@ -162,14 +161,12 @@ then
   # Actions to convert:
   # 1- Stopping & closing project
   # 2- Renaming project dir to .old
-  # 3- If -r is set, extract all directories with an uuid as name
-  # 4- Creating ZFS dataset(s) (multiples if -r) for project dirname
-  # 5- Xfering data...
-  # 6- Checking file per file
-  # 7- Deleting old directory
-  
-  # 20230922: useless ?
-  # [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ] && HOST="172.29.0.254"
+  # 3- Creating ZFS dataset for project dirname
+  # 4- Xfering data...
+  # 5- Checking file per file
+  # 6- Deleting old directory
+
+  [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ] && HOST="172.29.0.254"
 
   # 1
   # If on NAS, no action
@@ -186,24 +183,6 @@ then
   echo "OK=Renaming $DIR_PROJECT to .old done"
 
   # 3
-  # Extract sub uuid list
-  ZFS_SUBDATASETS=""
-  if [ $NODE_RECURSION -eq 1 ]
-  then
-    echo "OK=Recursive mode requested, extracting sub directories from project..."
-    DIR_PROJECT_SUBLIST=`find $DIR_PROJECT.old/ -type d | egrep '\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' | sort -u`
-    COUNT=`echo -n "$DIR_PROJECT_SUBLIST" | wc -l`
-    echo "OK=  Found $COUNT subdirectories"
-
-    echo "OK=Building sub datasets list to be created..."
-    for i in $DIR_PROJECT_SUBLIST
-    do
-      Z=`echo "$i" | sed "s,^.*$PROJECT_UUID.old/,$PROJECT_UUID/,"`
-      ZFS_SUBDATASETS="$ZFS_SUBDATASETS $Z"
-    done
-  fi
-
-  # 4
   echo "OK=Creating ZFS dataset '$ZFS_DATASET_PARENT/$PROJECT_UUID'"
   zfs create -p "$ZFS_DATASET_PARENT/$PROJECT_UUID"
   if [ $? -ne 0 ]
@@ -217,22 +196,8 @@ then
     exit 1
   fi
   echo "OK=$ZFS_DATASET_PARENT/$PROJECT_UUID ZFS dataset created"
-
-  if [ $NODE_RECURSION -eq 1 ]
-  then
-    echo "OK=Creating ZFS sub datasets..."
-    for zfs_sub in $ZFS_SUBDATASETS
-    do
-      echo "OK=  -> $ZFS_DATASET_PARENT/$zfs_sub..."
-      zfs create -p "$ZFS_DATASET_PARENT/$zfs_sub" 2>/dev/null
-      if [ $? -ne 0 ]
-      then
-        echo "BAD=Cant create ZFS dataset '$ZFS_DATASET_PARENT/$zfs_sub', continuing to preserve safety"
-      fi
-    done
-  fi
   
-  # 5
+  # 4
   # rsync -az --inplace $DIR_PROJECT.old/* $DIR_PROJECT/
   # rclone is *much* faster
   rclone sync $DIR_PROJECT.old $DIR_PROJECT
@@ -241,12 +206,12 @@ then
   [ $? -ne 0 ] && echo "BAD=Cant chown replicated project data" && exit 1
   echo "OK=$DIR_PROJECT data replicated & ownership changed"
   
-  # 6
+  # 5
   # diff -r $DIR_PROJECT.old $DIR_PROJECT
   # [ $? -ne 0 ] && echo "BAD=Directory content is not matching" && exit 1
   # echo "OK=Directory contents are matching"
   
-  # 7
+  # 6
   rm -rf $DIR_PROJECT.old
   [ $? -ne 0 ] && echo "Cant delete .old directory" && exit 1
   echo "OK=.old directory now erased"

@@ -12,26 +12,28 @@
 
 VIGRID_CONF="/home/gns3/etc/vigrid.conf"
 
-USAGE="Usage: $0 -a list|size|CONVproject|ADDclone|DELclone|ADDhistory|DELhistory|SWAPsnap|ROLLback -p ProjectUUID [ -P ProjectName ] [ -b BaseGNSdir ] [ -n NodeUUID ] [ -s SnapshotID ] [ -S ]"
+USAGE="Usage: $0 -a list|size|CONVproject|ADDclone|DELclone|ADDhistory|DELhistory|SWAPsnap|ROLLback -p ProjectUUID [ -r ] [ -P ProjectName ] [ -b BaseGNSdir ] [ -n NodeUUID ] [ -s SnapshotID ] [ -S ]"
 
 SHOW_SIZE=0
+NODE_RECURSION=0
 
-while getopts 'a:p:P:n:s:b:h:S' OPTIONS
+while getopts 'a:p:P:n:s:b:h:rS' OPTIONS
 do
   case "$OPTIONS" in
-	h)	GNS_HOST="$OPTARG";;
-	b)	BASE_DIR="$OPTARG";;
-	a)	ACTION="$OPTARG";;
-	p)	PROJECT_UUID="$OPTARG";;
-	P)	PROJECT_NAME="$OPTARG";;
-	n)	NODE_UUID="$OPTARG";;
-	s)	SNAPSHOT_ID="$OPTARG";;
-	S)	SHOW_SIZE=1;;
-	[?])
-		echo $USAGE
-		exit 1
-		;;
-	esac
+        h)      GNS_HOST="$OPTARG";;
+        b)      BASE_DIR="$OPTARG";;
+        a)      ACTION="$OPTARG";;
+        p)      PROJECT_UUID="$OPTARG";;
+        P)      PROJECT_NAME="$OPTARG";;
+        n)      NODE_UUID="$OPTARG";;
+        r)      NODE_RECURSION=1;;
+        s)      SNAPSHOT_ID="$OPTARG";;
+        S)      SHOW_SIZE=1;;
+        [?])
+                echo $USAGE
+                exit 1
+                ;;
+        esac
 done
 
 shift "$(($OPTIND -1))"
@@ -43,7 +45,7 @@ USAGE_SHOW=0
 if [ $USAGE_SHOW -eq 1 ]
 then
   echo $USAGE
-	exit 1
+        exit 1
 fi
 
 if [ "x$BASE_DIR" = "x" ]
@@ -161,12 +163,14 @@ then
   # Actions to convert:
   # 1- Stopping & closing project
   # 2- Renaming project dir to .old
-  # 3- Creating ZFS dataset for project dirname
-  # 4- Xfering data...
-  # 5- Checking file per file
-  # 6- Deleting old directory
+  # 3- If -r is set, extract all directories with an uuid as name
+  # 4- Creating ZFS dataset(s) (multiples if -r) for project dirname
+  # 5- Xfering data...
+  # 6- Checking file per file
+  # 7- Deleting old directory
 
-  [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ] && HOST="172.29.0.254"
+  # 20230922 -> Useless ??
+  # [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ] && HOST="172.29.0.254"
 
   # 1
   # If on NAS, no action
@@ -175,7 +179,7 @@ then
   # echo "OK=Stopping & closing $PROJECT_UUID done"
 
   echo "OK=Conversion of project $PROJECT_UUID starting..."
-
+  
   # 2
   mv $DIR_PROJECT $DIR_PROJECT.old 
   [ $? -ne 0 ] && echo "BAD=Renaming of $DIR_PROJECT failed" && exit 1
@@ -183,8 +187,26 @@ then
   echo "OK=Renaming $DIR_PROJECT to .old done"
 
   # 3
+  # Extract sub uuid list
+  ZFS_SUBDATASETS=""
+  if [ $NODE_RECURSION -eq 1 ]
+  then
+    echo "OK=Recursive mode requested, extracting sub directories from project..."
+    DIR_PROJECT_SUBLIST=`find $DIR_PROJECT.old/ -type d | egrep '\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' | sort -u`
+    COUNT=`echo -n "$DIR_PROJECT_SUBLIST" | wc -l`
+    echo "OK=  Found $COUNT subdirectories"
+
+    echo "OK=Building sub datasets list to be created..."
+    for i in $DIR_PROJECT_SUBLIST
+    do
+      Z=`echo "$i" | sed "s,^.*$PROJECT_UUID.old/,$PROJECT_UUID/,"`
+      ZFS_SUBDATASETS="$ZFS_SUBDATASETS $Z"
+    done
+  fi
+
+  # 4
   echo "OK=Creating ZFS dataset '$ZFS_DATASET_PARENT/$PROJECT_UUID'"
-  zfs create -p "$ZFS_DATASET_PARENT/$PROJECT_UUID"
+  zfs create -p "$ZFS_DATASET_PARENT/$PROJECT_UUID" 2>/dev/null
   if [ $? -ne 0 ]
   then
     echo "BAD=Cant create ZFS dataset '$ZFS_DATASET_PARENT/$PROJECT_UUID'"
@@ -197,7 +219,23 @@ then
   fi
   echo "OK=$ZFS_DATASET_PARENT/$PROJECT_UUID ZFS dataset created"
   
-  # 4
+  if [ $NODE_RECURSION -eq 1 ]
+  then
+    echo "OK=Creating ZFS sub datasets..."
+    for zfs_sub in $ZFS_SUBDATASETS
+    do
+      echo "OK=  -> $ZFS_DATASET_PARENT/$zfs_sub..."
+      zfs create -p "$ZFS_DATASET_PARENT/$zfs_sub" 2>/dev/null
+      if [ $? -ne 0 ]
+      then
+        echo "BAD=Cant create ZFS dataset '$ZFS_DATASET_PARENT/$zfs_sub', continuing to preserve safety"
+      fi
+    done
+  fi
+  
+exit
+  
+  # 5
   # rsync -az --inplace $DIR_PROJECT.old/* $DIR_PROJECT/
   # rclone is *much* faster
   rclone sync $DIR_PROJECT.old $DIR_PROJECT
@@ -206,12 +244,12 @@ then
   [ $? -ne 0 ] && echo "BAD=Cant chown replicated project data" && exit 1
   echo "OK=$DIR_PROJECT data replicated & ownership changed"
   
-  # 5
+  # 6
   # diff -r $DIR_PROJECT.old $DIR_PROJECT
   # [ $? -ne 0 ] && echo "BAD=Directory content is not matching" && exit 1
   # echo "OK=Directory contents are matching"
   
-  # 6
+  # 7
   rm -rf $DIR_PROJECT.old
   [ $? -ne 0 ] && echo "Cant delete .old directory" && exit 1
   echo "OK=.old directory now erased"
@@ -352,47 +390,47 @@ case "$ACTION" in
     done
     exit 0
     ;;
-	"ADDclone")
+        "ADDclone")
     echo "OK=Now creating clone mark $SNAPSHOT_ID"
     OUT=`zfs snapshot -r $ZFS_DATASET@clonesource_$SNAPSHOT_ID 2>&1`
     RC=$?
     [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
     [ $RC -eq 0 ] && echo "OK=SUCCESS"
     break;
-		;;
-	"DELclone")
+                ;;
+        "DELclone")
     echo "OK=Now deleting clone mark $SNAPSHOT_ID"
     OUT=`zfs destroy $ZFS_DATASET@clonesource_$SNAPSHOT_ID 2>&1`
     RC=$?
     [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
     [ $RC -eq 0 ] && echo "OK=SUCCESS"
     break;
-		;;
-	"ADDhistory")
+                ;;
+        "ADDhistory")
     echo "OK=Now creating history mark $SNAPSHOT_ID"
     OUT=`zfs snapshot -r $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
     RC=$?
     [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
     [ $RC -eq 0 ] && echo "OK=SUCCESS"
     break;
-		;;
-	"DELhistory")
+                ;;
+        "DELhistory")
     echo "OK=Now deleting history mark $SNAPSHOT_ID"
     OUT=`zfs destroy $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
     RC=$?
     [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
     [ $RC -eq 0 ] && echo "OK=SUCCESS"
     break;
-		;;
-	"ROLLback")
+                ;;
+        "ROLLback")
     echo "OK=Now rolling back project $PROJECT_NAME ($PROJECT_UUID) to snapshot $SNAPSHOT_ID"
     OUT=`zfs rollback $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
     RC=$?
     [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
     [ $RC -eq 0 ] && echo "OK=SUCCESS"
     break;
-		;;
-	"SWAPsnap")
+                ;;
+        "SWAPsnap")
     echo "OK=Now switching format of mark $SNAPSHOT_ID"
     echo "OK=  Identifying format of mark $SNAPSHOT_ID"
     OUT=`zfs list -r -t snapshot -o name $ZFS_DATASET | grep "$SNAPSHOT_ID$"`
@@ -419,9 +457,9 @@ case "$ACTION" in
       [ $RC -eq 0 ] && echo "OK=SUCCESS"
     done
     break;
-		;;
+                ;;
   *)
-		echo "BAD=Unknown action ($action)"
-		exit 1
-		;;
+                echo "BAD=Unknown action ($action)"
+                exit 1
+                ;;
 esac

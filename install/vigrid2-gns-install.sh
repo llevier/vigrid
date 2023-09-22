@@ -43,7 +43,7 @@ VIGRID_CONF="/home/gns3/etc/vigrid.conf"
 # Functions
 #
 
-# Error dispay & management
+# Error display & management
 Error()
 {
   TXT=$*

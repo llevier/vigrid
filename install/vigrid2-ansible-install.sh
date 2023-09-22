@@ -204,5 +204,4 @@ You might find into /home/gne3/vigrid/lib/ansible_collections/vigrid useful play
 
 "
 
-
 ) 2>&1 | tee -a $LOG_FILE

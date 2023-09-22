@@ -18,7 +18,7 @@ LOG_FILE="/tmp/$SCRIPT_NAME-log.out"
 # Functions
 #
 
-# Error dispay & management
+# Error display & management
 Error()
 {
   TXT=$*

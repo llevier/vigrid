@@ -1,0 +1,168 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+PRJ_NAME=$1
+NAME_NODE=$2
+ACTION=$3
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+ME_NAME=`hostname`
+ME_IP=`ping -c 1 $ME_NAME 2>/dev/null|tail -n+2|head -1|awk '{print $5;}'| tr -d /\(\):/`
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+[ "x$VIGRID_GNS_VERSION" != "x2" -a "x$VIGRID_GNS_VERSION" != "x3" ] && VIGRID_GNS_VERSION=2
+
+HOSTS_ALL="$ME_NAME:127.0.0.1:3080 $ME_NAME:$ME_IP:3080 $VIGRID_GNS_SLAVE_HOSTS"
+
+CURL="curl --user $VIGRID_GNS_USER:$VIGRID_GNS_PASS"
+
+if [ "x$1" = "x" -o "x$2" = "x" -o "x$3" = "x" ]
+then
+  echo "Usage: $0 ProjectName ProjectNode [ start|stop|status|reload|console ]"
+  exit 1
+fi
+
+echo "Searching where project $PRJ_NAME is running..."
+
+PRJ_HOST=""
+PRJ_DUPS=0
+
+for i in $HOSTS_ALL
+do
+  GNS_HOST=`echo $i| awk 'BEGIN { FS=":"; } { print $1;}'`
+  GNS_IP=`echo $i| awk 'BEGIN { FS=":"; } { print $2;}'`
+  GNS_PORT=`echo $i| awk 'BEGIN { FS=":"; } { print $3;}'`
+
+  # echo "Querying $GNS_HOST ($GNS_IP:$GNS_PORT)..."
+
+  #CHK=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"name\": \"$PRJ_NAME\","|wc -l`
+  PRJ_CURL=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"(name|project_id)\""`
+  
+  GNS_PRJ_NAME=`echo "$PRJ_CURL" | egrep -A1 "\"name\": \"$PRJ_NAME\","|head -1`
+  GNS_PRJ_ID=`echo "$PRJ_CURL" | egrep -A1 "\"name\": \"$PRJ_NAME\","|tail -1| awk '{print $NF;}' | sed 's/[",]//g'`
+
+  if [ "x$GNS_PRJ_NAME" != "x" -a "x$GNS_PRJ_ID" != "x" ]
+  then
+    echo "  Project $PRJ_NAME (ID=$GNS_PRJ_ID) detected on GNS3 host $GNS_HOST ($GNS_IP:$GNS_PORT)."
+    
+    # Querying status, not opened, end of story
+    GNS_PRJ_OPEN=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID" 2>/dev/null|grep "\"status\":"|awk '{print $NF;}' | sed 's/[",]//g'`
+    
+    if [ "x$GNS_PRJ_OPEN" != "xopened" ]
+    then
+      echo "    Project closed, no running nodes, ignoring"
+    else
+      echo "  Running project, identifying nodes..."
+
+      NODES_ID=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID/nodes" 2>/dev/null|grep "\"node_id\""| sed 's/^.*node_id": "//'| sed 's/".*$//'`
+
+      NODE_MATCH=""
+      NODES_NAMES=""
+      for i in $NODES_ID
+      do
+        NODE_DETAILS=`$CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID/nodes/$i" 2>/dev/null`
+        
+        NODE_NAME=`echo "$NODE_DETAILS"|grep "\"name\""| head -1| sed 's/^.*name": "//'| sed 's/".*$//'`
+        NODE_STATUS=`echo "$NODE_DETAILS"|grep "\"status\""| sed 's/^.*status": "//'| sed 's/".*$//'`
+        
+        NODE_CONSOLE_HOST=`echo "$NODE_DETAILS"|grep "\"console_host\""| sed 's/^.*\"console_host\": "//'| sed 's/".*$//'| sed 's/\s+//g'`
+        [ "x$NODE_CONSOLE_HOST" = "x0.0.0.0" ] && NODE_CONSOLE_HOST=$GNS_IP
+        
+        NODE_CONSOLE_PORT=`echo "$NODE_DETAILS"|grep "\"console\""| sed 's/^.*console\": //'| sed 's/,//'`
+        NODE_CONSOLE_TYPE=`echo "$NODE_DETAILS"|grep "\"console_type\""| sed 's/^.*\"console_type\": "//'| sed 's/".*$//' | sed 's/\s+//g'`
+
+        [ "x$ACTION" = "xstatus" ] && echo -n "    $NODE_NAME ($i), $NODE_STATUS"
+        if [ "x$NODE_CONSOLE_PORT" != "x" -a "x$NODE_CONSOLE_PORT" != "xnull" ]
+        then
+          [ "x$ACTION" = "xstatus" ] && echo -n ", console=$NODE_CONSOLE_HOST:$NODE_CONSOLE_PORT"
+          if [ "x$NODE_CONSOLE_TYPE" != "x" ]
+          then
+            [ "x$ACTION" = "xstatus" ] && echo -n " ($NODE_CONSOLE_TYPE)"
+          fi
+        fi
+        [ "x$ACTION" = "xstatus" ] && echo
+
+        NODES_NAME="$NODES_NAME $NODE_NAME"
+
+        if [ "x$NODE_NAME" = "x$NAME_NODE" ]
+        then
+          #echo "Match !"
+          NODE_MATCH="$NODE_NAME:$i:$NODE_CONSOLE_HOST:$NODE_CONSOLE_PORT:$NODE_CONSOLE_TYPE:$NODE_STATUS:$GNS_PRJ_ID"
+        fi
+      done
+
+      if [ "$xNODE_MATCH" = "x" ]
+      then
+        echo "I cant find that node, cowardly exiting..."
+        exit 1
+      fi
+
+      NODE_NAME=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $1; }'`
+      NODE_ID=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $2; }'`
+      NODE_CONSOLE_HOST=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $3; }'`
+      NODE_CONSOLE_PORT=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $4; }'`
+      NODE_CONSOLE_TYPE=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $5; }'`
+      NODE_STATUS=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $6; }'`
+      NODE_PROJECT=`echo "$NODE_MATCH" | awk 'BEGIN { FS=":"; } { print $7; }'`
+
+      case "$ACTION" in
+        start|stop|reload)
+          echo "Requested action: $ACTION"
+
+          echo "$ACTION""ing node (NAME=$NODE_NAME, ID=$NODE_ID)..."
+            # $CURL "http://$GNS_IP:$GNS_PORT/v$VIGRID_GNS_VERSION/projects/$GNS_PRJ_ID/nodes/$i
+            NODE_STATUS=`$CURL -v -X POST "http://$NODE_CONSOLE_HOST:3080/v$VIGRID_GNS_VERSION/projects/$NODE_PROJECT/nodes/$NODE_ID/$ACTION" -d "{}" 2>/dev/null |grep "\"status\""| sed 's/^.*status": "//'| sed 's/".*$//'`
+          echo "New status: $NODE_STATUS"
+          ;;
+        "status")
+          ;;
+        "console")
+          if [ "x$NODE_CONSOLE_TYPE" = "xtelnet" ]
+          then
+            echo "Connecting to $NODE_NAME over telnet. Escape char is ~"
+            telnet -e "~" $NODE_CONSOLE_HOST $NODE_CONSOLE_PORT
+            exit 0
+          else
+            echo "I am sorry, I dont know how to connect over $NODE_CONSOLE_TYPE."
+            exit 0
+          fi
+          ;;
+        *)
+          echo "Unknown action, cowardly exiting..."
+          exit 1
+          ;;
+      esac
+
+      exit 
+
+      for i in $NODES
+      do
+        echo "Starting node $i"
+        STATUS=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes/$i/$ACTION" -d "{}" 2>/dev/null`
+
+        CHK=`echo "$STATUS" | grep "status.*started"`
+        if [ "x$CHK" != "x" ]
+        then
+          echo "  Node started"
+        else
+          echo "  Node stopped"
+        fi
+      done
+    fi
+  fi
+done

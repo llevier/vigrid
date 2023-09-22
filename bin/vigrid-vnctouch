@@ -1,0 +1,225 @@
+#!/usr/bin/perl
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+use ExtUtils::Installed;
+
+my @required_modules = qw( Getopt::Std Net::VNC);
+
+for(@required_modules)
+{
+  eval "use $_";
+  if ($@)
+  {
+    print("\nPerl module $_ not found, installing it, provide root password if asked:...\n\n");
+
+    system("sudo perl -MCPAN -e 'install $_'");
+  }
+}
+
+use Getopt::Std;
+use Net::VNC;
+
+print "Vigrid VNC touch command
+  see Net::VNC metacpan page to have possible events list (send_*, mouse_*)
+  The only Vigrid VNC event is : 'sleep X' to wait for X number of seconds.
+
+";
+
+$vnc_host="";
+$vnc_port="";
+$vnc_password="";
+$file_events="";
+
+getopts("h:p:P:f:v");
+$vnc_host=$opt_h;
+$vnc_port=$opt_p;
+$file_events=$opt_f;
+
+if ($opt_P) { $vnc_password=$opt_P; }
+$verbose=$opt_v;
+
+$usage="$0 -h VNChost -p VNCport -f events_file [ -P VNCpassword ] [ -v ]\n";
+
+if (($vnc_host eq "") || ($vnc_port eq ""))
+{ print $usage; exit(1); }
+
+$vnc_hostname="$vnc_host:$vnc_port";
+
+if ($verbose)
+{
+  print "Connecting to $vnc_hostname\n";
+  if ($vnc_password ne "") { print "  VNC password: $vnc_password\n"; }
+}
+
+my $vnc = Net::VNC->new({hostname => $vnc_hostname, password => $vnc_password}) || die "Cant connect to $vnc_hostname";
+$vnc->login;
+
+if ($verbose)
+{
+  print "Connected to:  " . $vnc->name . "\n";
+  print "  Screen size: " . $vnc->width . 'x' . $vnc->height . "\n";
+}
+
+open(IN,$file_events) || die "Cannot open events file '$file_events'\n";
+while (<IN>)
+{
+  $event=$_;
+  chop($event);
+  $event=~s/#.*$//;
+  $event=~s/^\s+|\s+$//g;
+  
+  @fields=split(/(\s+|\(|\))/,$event);
+  map { s/^\s+|\s+$//g; } @fields;
+  @fields=grep(!/(^$|^\($|^\)$)/,@fields);
+  
+  $arguments=$event;
+  $arguments=~s/($fields[0])//;
+  $arguments=~s/^\s+|\s+$//g;
+
+  $fields[0]= lc $fields[0];
+  
+  if (($verbose) && ($fields[0] ne "")) { print "  Requested event: $fields[0], args=$arguments\n"; }
+
+  if ($fields[0] =~ /^sleep$/i)
+  {
+    if ($arguments>0)
+    {
+      if ($verbose) { print "    Sleeping $arguments seconds...\n"; }
+      sleep ($arguments);
+    }
+    else { print "    '$fields[1]': invalid value for sleep\n"; }
+  }
+  
+  elsif ($fields[0] =~ /^send_key_event_down$/i)
+  {
+    if ($arguments ne "")
+    {
+      if ($verbose) { print "    Sending $fields[0] $arguments\n"; }
+      if ($fields[1] =~ /^0x/) { $vnc->send_key_event_down(hex($arguments)); }
+      else
+      {
+        $arguments=~s/(^\('|^\("|"\)$|'\)$)//g;
+        $vnc->send_key_event_down('$arguments');
+      }
+    }
+    else { print "    '$arguments': invalid value for send_key_event_down\n"; }
+  }
+
+  elsif ($fields[0] =~ /^send_key_event_up$/i)
+  {
+    if ($arguments ne "")
+    {
+      if ($verbose) { print "    Sending $fields[0] $arguments\n"; }
+      if ($fields[1] =~ /^0x/) { $vnc->send_key_event_up(hex($arguments)); }
+      else
+      {
+        $arguments=~s/(^\('|^\("|"\)$|'\)$)//g;
+        $vnc->send_key_event_up('$arguments');
+      }
+    }
+    else { print "    '$arguments': invalid value for send_key_event_up\n"; }
+  }
+
+  elsif ($fields[0] =~ /^send_key_event$/i)
+  {
+    if ($arguments ne "")
+    {
+      if ($verbose) { print "    Sending $fields[0] $arguments\n"; }
+      if ($fields[1] =~ /^0x/) { $vnc->send_key_event(hex($arguments)); }
+      else
+      {
+        $arguments=~s/(^\('|^\("|"\)$|'\)$)//g;
+        $vnc->send_key_event('$arguments');
+      }
+    }
+    else { print "    '$arguments': invalid value for send_key_event\n"; }
+  }
+
+  elsif ($fields[0] =~ /^send_key_event_string$/i)
+  {
+    if ($arguments ne "")
+    {
+      if ($verbose) { print "    Sending $fields[0] $arguments\n"; }
+
+      $arguments=~s/(^\('|^\("|"\)$|'\)$)//g;
+      $vnc->send_key_event_string('$arguments');
+    }
+    else { print "    '$arguments': invalid value for send_key_event_string\n"; }
+  }
+
+  elsif ($fields[0] =~ /^send_pointer_event$/i)
+  {
+    if ($arguments ne "")
+    {
+      $arguments=~s/(^\(|\)$)//g;
+      @f=split(/,/,$arguments);
+      map { s/^\s+|\s+$//g; } @f;
+
+      if ((($f[1] ne '0') && ($f[1]==0)) || ($f[2] ne '0') && ($f[2]==0))
+      { print "    '$arguments': invalid value for send_key_event_string\n"; }
+      else
+      {
+        if    ($f[1]>$vnc->width)
+        { print "    '$f[1]' is greater than screen width\n"; }
+        elsif ($f[2]>$vnc->height)
+        { print "    '$f[2]' is greater than screen height\n"; }
+        else
+        {
+          if ($verbose) { print "    Sending $fields[0] ARG=$f[0], X=$f[1], Y=$f[2]\n"; }
+          $vnc->send_pointer_event($f[0],$f[1],$f[2]);
+        }
+      }
+    }
+    else { print "    '$arguments': invalid value for send_key_event_string\n"; }
+  }
+
+  elsif ($fields[0] =~ /^mouse_move_to$/i)
+  {
+    if ($arguments ne "")
+    {
+      $arguments=~s/(^\(|\)$)//g;
+      @f=split(/,/,$arguments);
+      map { s/^\s+|\s+$//g; } @f;
+
+      if ((($f[0] ne '0') && ($f[0]==0)) || ($f[1] ne '0') && ($f[1]==0))
+      { print "    '$arguments': invalid value for mouse_move_to\n"; }
+      else
+      {
+        if    ($f[0]>$vnc->width)
+        { print "    '$f[0]' is greater than screen width\n"; }
+        elsif ($f[1]>$vnc->height)
+        { print "    '$f[1]' is greater than screen height\n"; }
+        else
+        {
+          if ($verbose) { print "    Sending $fields[0] X=$f[0], Y=$f[1]\n"; }
+          $vnc->mouse_move_to($f[0],$f[1]);
+        }
+      }
+    }
+    else { print "    '$arguments': invalid value for mouse_move_to\n"; }
+  }
+
+  elsif ($fields[0] =~ /^mouse_click$/i)
+  {
+    if ($verbose) { print "    Sending $fields[0]\n"; }
+    $vnc->mouse_click();
+  }
+
+  elsif ($fields[0] =~ /^mouse_right_click$/i)
+  {
+    if ($verbose) { print "    Sending $fields[0]\n"; }
+    $vnc->mouse_right_click();
+  }
+}
+close(IN);
+
+if ($verbose) { print "All done\n"; }

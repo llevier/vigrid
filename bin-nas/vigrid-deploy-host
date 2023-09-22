@@ -1,0 +1,69 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="$0 -a MAC_Address | -d MAC_Address "
+
+ACTION=""
+while getopts 'a:d:' OPTIONS
+do
+  case "$OPTIONS" in
+    a)      ACTION="a";MAC_ADDRESS="$OPTARG";;
+    d)      ACTION="d";MAC_ADDRESS="$OPTARG";;
+    [?])
+      print >&2 $USAGE
+      exit 1
+      ;;
+  esac
+done
+
+if [ "x$ACTION" = "x" ]
+then
+  echo "$USAGE"
+  exit 1
+fi
+
+DIR_UEFI="/Vstorage/tftp/grub2-cfg"
+DIR__BIOS="/Vstorage/tftp/pxegrub-cfg"
+
+# Checking MAC looks like a real one
+CHK=`echo "$MAC_ADDRESS"|egrep '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'`
+
+if [ "x$CHK" = "x" ]
+then
+  echo "$MAC_ADDRESS is not a valid MAC address"
+  exit 1
+fi
+
+if [ "x$ACTION" = "xa" ]
+then
+  echo "Adding Grub files for $MAC_ADDRESS"
+  echo "  -> $DIR_UEFI/grub.cfg-$MAC_ADDRESS"
+  cat $DIR_UEFI/grub.cfg-vigrid-gns | grep -v "net_default_mac" >$DIR_UEFI/grub.cfg-$MAC_ADDRESS
+  chown gns3:gns3 $DIR_UEFI/grub.cfg-$MAC_ADDRESS 2>/dev/null
+  [ $? -ne 0 ] && echo "ERROR creating file"
+
+  echo "  -> $DIR__BIOS/grub.cfg-$MAC_ADDRESS"
+  cat $DIR_UEFI/grub.cfg-vigrid-gns | grep -v "net_default_mac" >$DIR__BIOS/grub.cfg-$MAC_ADDRESS
+  [ $? -ne 0 ] && echo "ERROR creating file"
+  chown gns3:gns3 $DIR__BIOS/grub.cfg-$MAC_ADDRESS 2>/dev/null
+
+elif [ "x$ACTION" = "xd" ]
+then
+  echo "Deleting Grub files for $MAC_ADDRESS"
+  echo "  -> $DIR_UEFI/grub.cfg-$MAC_ADDRESS"
+  rm $DIR_UEFI/grub.cfg-$MAC_ADDRESS
+  [ $? -ne 0 ] && echo "ERROR deleting file"
+
+  echo "  -> $DIR__BIOS/grub.cfg-$MAC_ADDRESS"
+  rm $DIR__BIOS/grub.cfg-$MAC_ADDRESS
+  [ $? -ne 0 ] && echo "ERROR deleting file"
+fi

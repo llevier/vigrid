@@ -1,0 +1,197 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="$0 -P ProjectName -S SlavesList [ -R ]"
+
+REPLACE=0
+
+while getopts 'P:N:S:R' OPTIONS
+do
+   case "$OPTIONS" in
+        P)  PROJECT_NAME="$OPTARG";;
+        S)  SLAVES_LIST="$OPTARG";;
+        R)  REPLACE=1;;
+        [?])
+          echo >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+if [ "x$PROJECT_NAME" = "x" -o "x$SLAVES_LIST" = "x" ]
+then
+  echo "$USAGE"
+  exit 1
+fi
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+[ $VIGRID_TYPE -lt 1 -o $VIGRID_TYPE -gt 3 ] && echo "Host is not a Vigrid Master or Standalone, exiting" && exit 1
+
+[ $VIGRID_TYPE -eq 1 ] && echo "Vigrid Standalone GNS3 server without NAS detected"
+[ $VIGRID_TYPE -eq 2 ] && echo "Vigrid Standalone GNS3 server with NAS detected"
+[ $VIGRID_TYPE -eq 3 ] && echo "Vigrid GNS3 Farm Master server with NAS detected"
+
+PROJECT_HOME=`ls -1 /home/gns3/GNS3/projects/*/"$PROJECT_NAME.gns3" 2>/dev/null`
+if [ "x$PROJECT_HOME" = "x" ]
+then
+  echo "Cant find that project, exiting"
+  exit 1
+fi
+
+echo -n "Found project '$PROJECT_NAME', loading dependancies..."
+T=`/home/gns3/vigrid/bin/project-deps -p $PROJECT_NAME 2>/dev/null`
+IFSBAK=$IFS
+IFS="
+"
+
+for i in $T
+do
+  DEP_TYPE=`echo $i | awk '{print $1;}'`
+  DEP_DISKS=`echo $i | awk 'BEGIN { FS=":"; } {print $2;}'| sed 's/,/\n/g'`
+  
+  if [ "x$DEP_TYPE" = "xQemu" -o "x$DEP_TYPE" = "xIOU" -o "x$DEP_TYPE" = "xIOS" ]
+  then
+    for d in $DEP_DISKS
+    do
+      if [ "x$DEPS" = "x" ]
+      then
+        DEPS="$DEP_TYPE:$d"
+      else
+        DEPS="$DEPS
+$DEP_TYPE:$d"
+      fi
+    done
+  fi
+done
+
+DEPS_NUM=`echo "$DEPS"|wc -l`
+echo " $DEPS_NUM found"
+
+if [ $DEPS_NUM -eq 0 ]
+then
+  until false
+  do
+    echo -n "Not a single dependancy ? Not sure that is normal. Should I continue [y/N] ? "
+    read ANS
+    
+    [ "x$ANS" = "x" -o "x$ANS" = "xn" -o "x$ANS" = "xN" ] && exit
+    [ "x$ANS" = "xy" -o "x$ANS" = "xY" ] && break
+  done
+fi
+
+LIST=`echo $SLAVES_LIST|sed 's/:/\n/g'`
+for s in $LIST
+do
+  echo
+  echo "Spreading project '$PROJECT_NAME' and its dependancies to Vigrid slave host $s..."
+  echo -n "  Checking it is a Vigrid Slave..."
+  
+  REPLICATE=1
+  CHK=`echo $VIGRID_GNS_SLAVE_HOSTS|grep -i "$s:"`
+  if [ "x$CHK" = "x" ]
+  then
+    echo "FAIL, skipping host"
+    REPLICATE=0
+  else
+    echo "OK"
+    echo -n "  Checking SSH access..."
+    /home/gns3/vigrid/bin/vigrid-sshcheck -h $s -s $VIGRID_SSHKEY_GNS -u gns3 2>/dev/null
+    RC=$?
+    
+    if [ $RC -eq 0 ]
+    then
+      echo "SUCCESS"
+      
+      PROJECT_DIR=`dirname $PROJECT_HOME`
+      
+      echo -n "  Checking if target directory already exists..."
+      CHK=`ssh -i $VIGRID_SSHKEY_GNS gns3@$s ls -1 $PROJECT_DIR 2>/dev/null`
+      if [ "x$CHK" != "x" ]
+      then
+        if [ $REPLACE -eq 1 ]
+        then
+          echo "EXISTING but -R is set"
+          # Upon a NAS server, Slave should be as well.
+          # In such a case, source & target might be the same NAS directory
+          if [ $VIGRID_TYPE -eq 2 -o $VIGRID_TYPE -eq 3 ]
+          then
+            echo "  Checking if remote directory is NFS mounted..."
+            echo -n "    Identifying real target directory: "
+            PROJECT_DIR_PARENT=`dirname $PROJECT_DIR`
+            TARGET_DIR_REAL=`ssh -i $VIGRID_SSHKEY_GNS gns3@$s "cd $PROJECT_DIR_PARENT/;/bin/pwd" 2>/dev/null`
+            echo $TARGET_DIR_REAL
+
+            echo -n "    Is this a NFS mount point: "
+            CHK=`ssh -i $VIGRID_SSHKEY_GNS gns3@$s mount 2>/dev/null| grep "$TARGET_DIR_REAL"`
+            if [ "x$CHK" != "x" ]
+            then
+              echo "YES"
+              until false
+              do
+                echo
+                echo -n "  (!) Target project directory is a NFS mount. Replicating might generate issues. Should I continue [y/N] ? "
+                read ANS
+                
+                [ "x$ANS" = "x" -o "x$ANS" = "xn" -o "x$ANS" = "xN" ] && exit
+                [ "x$ANS" = "xy" -o "x$ANS" = "xY" ] && break
+              done
+              REPLICATE=1
+            else
+              echo "NO"
+            fi
+          fi
+        else
+          echo "EXISTING without -R set, skipping host"
+          REPLICATE=0
+        fi
+      fi
+    else
+      echo "FAIL, skipping host"
+      REPLICATE=0
+    fi
+  fi
+  
+  if [ $REPLICATE -eq 1 ]
+  then
+    echo "  Rsyncing Project data ($PROJECT_DIR)..."
+    rsync -n -avz -e "ssh -i $VIGRID_SSHKEY_GNS" --progress --inplace $PROJECT_DIR gns3@$s:/home/gns3/GNS3/projects/
+
+    echo "  Rsyncing dependancies:"
+    for i in $DEPS
+    do
+      DEP_TYPE=`echo $i| awk 'BEGIN { FS=":"; } { print $1;}'| tr /a-z/ /A-Z/`
+      DEP_FILE=`echo $i| awk 'BEGIN { FS=":"; } { print $2;}' | sed 's/^[\s ]*//'| sed "s/'//g"`
+      echo -n "    ($DEP_TYPE) $DEP_FILE..."
+
+      DEP_ROOT=`dirname $PROJECT_DIR` # projects
+      DEP_ROOT=`dirname $DEP_ROOT`    # GNS3
+      DEP_DIR="$DEP_ROOT/images/$DEP_TYPE/"
+      
+      rsync -n -avz -e "ssh -i $VIGRID_SSHKEY_GNS" --progress --inplace "$DEP_DIR$DEP_FILE" gns3@$s:/home/gns3/GNS3/images/$DEP_TYPE/
+    done
+  fi
+
+done

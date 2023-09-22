@@ -1,0 +1,474 @@
+#!/bin/bash
+
+# VIGRIDteleport LANtoLAN bootable ISO/USB
+
+dmesg -n 1
+/etc/init.d/inetutils-syslogd start >/dev/null 2>/dev/null
+
+clear
+echo "###############################################################################"
+echo "Welcome on the VIGRIDteleport (%%VIGRID_DATE%%) ISO boot"
+echo "###############################################################################"
+echo ""
+echo "Upon issue, please notice all output is logged into /var/log/VIGRIDteleport.log"
+echo "You can login to another console (Alt-Fx) as root, password is root as well."
+echo ""
+echo -n "Press [RETURN] to start..."
+read ANS
+echo
+
+INPUT=/tmp/menu.sh.$$
+OUTPUT=/tmp/output.sh.$$
+trap "rm $OUTPUT; rm $INPUT; exit" SIGHUP SIGINT SIGTERM
+
+export TERM=linux
+
+rm /etc/resolv.conf >/dev/null 2>/dev/null
+
+# Network configuration
+NICS=`/sbin/ifconfig -a | grep "^[a-z]" | egrep -v "^lo" | sed 's/:.*$//'`
+NICS_COUNT=`echo "$NICS" | wc -l`
+
+# Ask NM to ignore all NICs
+NM_NICS=`echo $NICS | sed 's/ /,/'`
+cat /etc/NetworkManager/NetworkManager.conf | sed "s/no-auto-default=.*$/no-auto-default=$NM_NICS/" >/tmp/net.temp
+mv /tmp/net.temp /etc/NetworkManager/NetworkManager.conf
+
+/etc/init.d/network-manager start >/dev/null 2>/dev/null
+
+# Cleaning weirdly detected NIC
+NICS_BKP=$NICS
+for i in $NICS_BKP
+do
+  nmcli device show $i >/dev/null 2>/dev/null
+  if [ $? -ne 0 ]
+  then
+    NICS=`echo "$NICS" | grep -v "^$i$"`
+  fi
+done
+
+echo "Ok first let's select a keyboard suitable for you"
+dpkg-reconfigure keyboard-configuration
+setupcon
+
+clear
+echo "###############################################################################"
+echo "VIGRIDteleport bootable ISO v1.0"
+echo "###############################################################################"
+echo ""
+echo "(!!) PLEASE READ THE BELOW (!!)"
+echo "
+Hello, I have been created so you can plug to the Vigrid infrastructure to access it.
+I must be ran on a PC with 2 network interfaces, wired or wireless.
+Any of the 2 can be used to access Internet.
+The other will become a router (hotspot or wired) for the Blue or Red zones.
+
+You will have to select the target Vigrid network you want to connect to.
+These can be to connect Users (64 IP block) to Red or Blue admin or exposed zones, or Servers (16 IP block) to Red or Blue exposed zone.
+  
+Then you will select the network device to access Internet (WAN) you will configure it with nmtui.
+Activate or Edit a connection, do your stuff and once done go Back & Quit.
+Nota: if you intend to use wireless device to reach Internet, keep in mind nmtui
+must scan before being able to display SSID ;-).
+I will ensure everything is ok at each step before moving forward.
+
+"
+echo -n "Press [RETURN] when you are ready..."
+read ANS
+
+echo
+until false
+do
+  echo -n "First of all, please provide the IP address of the Vigrid Master Server: "
+  read VIGRID_GATEWAY_IP
+  
+  if [ "x$VIGRID_GATEWAY_IP" != "x" ]
+  then
+    CHK=`ipcalc $VIGRID_GATEWAY_IP 2>&1|grep "^INVALID ADDRESS"|wc -l`
+    [ $CHK -eq 0 ] && break
+  fi
+done
+
+until false
+do
+  echo -n "and the FQDN of the Vigrid Master Server: "
+  read VIGRID_GATEWAY_NAME
+  
+  if [ "x$VIGRID_GATEWAY_NAME" != "x" ]
+  then
+    CHK=`echo $VIGRID_GATEWAY_NAME| grep -P '(?=^.{1,254}$)(^(?>(?!\d+\.)[a-zA-Z0-9_\-]{1,63}\.?)+(?:[a-zA-Z]{2,})$)'`
+    [ "x$CHK" != "x" ] && break
+  fi
+done
+
+# VIGRID Gateway selection
+IFS_BAK=$IFS
+IFS=$'\n'
+
+# VIGRID Gateways...
+VIGRID_ZONES[0]="VIGRIDred_exposed_users:Vigrid Red exposed LAN for users"
+VIGRID_ZONES[1]="VIGRIDblue_exposed_users:Vigrid Blue exposed LAN for users"
+VIGRID_ZONES[2]="VIGRIDred_exposed_servers:Vigrid Red exposed LAN for servers"
+VIGRID_ZONES[3]="VIGRIDblue_exposed_servers:Vigrid Blue exposed LAN for servers"
+VIGRID_ZONES[4]="VIGRIDblue_admin_users:Vigrid Blue admin LAN for users"
+VIGRID_ZONES[5]="VIGRIDred_admin_users:Vigrid Red admin LAN for users"
+MENU_ITEMS_COUNT=${#VIGRID_ZONES[@]}
+
+[ $MENU_ITEMS_COUNT -gt 8 ] && MENU_ITEMS_COUNT=8
+
+declare -a $MENU_LIST
+I=0
+for ITEM in ${VIGRID_ZONES[@]}
+do
+  ITEM_NAME=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $1;}'`
+  ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+  #MENU_LIST="$MENU_LIST $ITEM_NAME ${ITEM_DESC// /_}"
+  MENU_LIST[$I]=$ITEM_NAME
+  I=$((I+1))
+  MENU_LIST[$I]=$ITEM_DESC
+  I=$((I+1))
+done
+
+IFS=$IFS_BAK
+
+until false
+do
+  dialog --backtitle "VIGRIDteleport configuration" \
+    --title "Vigrid Zone selection" \
+    --menu "Which zone do you want be connected to ?" \
+    15 70 $MENU_ITEMS_COUNT "${MENU_LIST[@]}" 2>"${INPUT}"
+
+  if [ $? -eq 0 ]
+  then
+    VAL=$(<"${INPUT}")
+    for (( i=0; i<$MENU_ITEMS_COUNT; i++ ))
+    do
+      VIGRID_GATEWAY_LINE=${VIGRID_ZONES[i]}
+      if [ "x$VIGRID_GATEWAY_NAME" = "x$VAL" ]
+      then
+        cat /etc/openvpn/VIGRIDteleport.tmpl | sed "s'%%VIGRID_GATEWAY_NAME%%'$VIGRID_GATEWAY_NAME'" \
+         | sed "s'%%VIGRID_GATEWAY_IP%%'$VIGRID_GATEWAY_IP'" >/etc/openvpn/VIGRIDteleport.conf 2>/dev/null >/dev/null
+        VIGRID_GATEWAY=`cat /etc/openvpn/VIGRIDteleport.conf | grep "^remote " | awk '{print $2":"$3;}'`
+      fi
+    done
+
+    if [ "x$VIGRID_GATEWAY" = "x" ]
+    then
+      echo "I got a problem with VIGRIDteleport.conf, cant continue..."
+      until false
+      do
+        sleep 1
+      done
+    else
+      break
+    fi
+  fi
+done
+
+sleep 2
+
+# WAN device selection
+IFS_BAK=$IFS
+IFS=$'\n'
+
+MENU_ITEMS=`/usr/bin/nmcli dev status|grep "^[a-z]" | egrep -v "^(lo|tun)"| awk '{print $1;}'`
+MENU_ITEMS_COUNT=`echo "$MENU_ITEMS"|wc -l`
+MENU_LIST=""
+
+for ITEM in ${MENU_ITEMS[@]}
+do
+  ITEM_DESC=`nmcli device show $ITEM|grep "GENERAL.TYPE:" | awk '{print $NF;}'`
+  MENU_LIST="$MENU_LIST $ITEM ${ITEM_DESC// /_}"
+done
+
+IFS=$IFS_BAK
+
+until false
+do
+  dialog --backtitle "VIGRIDteleport configuration" \
+    --title "WAN device selection" --menu \
+    "Which device should I use to reach Internet ?" 15 60 $MENU_ITEMS_COUNT $MENU_LIST 2>"${INPUT}"
+
+  if [ $? -eq 0 ]
+  then
+    WAN_NIC=$(<"${INPUT}")
+    break
+  fi
+done
+
+# Now update NM.conf to prevent it to touch the other NICs
+cat /etc/NetworkManager/NetworkManager.conf | sed "s/$WAN_NIC,//" >/tmp/net.temp
+mv /tmp/net.temp /etc/NetworkManager/NetworkManager.conf
+cat /etc/NetworkManager/NetworkManager.conf | sed "s/,$WAN_NIC//" >/tmp/net.temp
+mv /tmp/net.temp /etc/NetworkManager/NetworkManager.conf
+cat /etc/NetworkManager/NetworkManager.conf | sed "s/$WAN_NIC//" >/tmp/net.temp
+mv /tmp/net.temp /etc/NetworkManager/NetworkManager.conf
+
+/etc/init.d/network-manager stop >/dev/null 2>/dev/null
+sleep 1
+/etc/init.d/network-manager start >/dev/null 2>/dev/null
+
+clear
+echo "Launching nmtui now... Just quit if you selected a non-wireless network interface."
+WIFI_CHK=`/sbin/iwconfig $WAN_NIC 2>&1|grep "no wireless"|wc -l`
+if [ $WIFI_CHK -eq 0 ] # wifi
+then
+  echo "Sleeping for 5 seconds so WiFi scan can be performed..."
+  sleep 5
+fi
+echo -n "Press [RETURN] once you read the above"
+read ANS
+nmtui
+
+# Check WAN is ok
+WAN_IP=`/sbin/ifconfig $WAN_NIC| grep "inet "|awk '{print $2;}'`
+WAN_MASK=`/sbin/ifconfig $WAN_NIC| grep "inet "|awk '{print $4;}'`
+WAN_GATEWAY=`/sbin/ip route | grep "default" | awk '{print $3;}'`
+
+if [ "x$WAN_GATEWAY" != "x" ]
+then
+  echo ""
+  echo "$WAN_NIC is now on $WAN_IP/$WAN_MASK, default route to $WAN_GATEWAY"
+else
+  echo "There is a problem with this configuration, please try again..."
+  sleep 2
+fi
+
+echo ""
+echo "Ok, so technically now I have Internet access, let me do some checks..."
+echo "Attempting to connect to Vigrid Gateway(s)..."
+while true
+do
+  FAIL=1 # fail = true by default
+
+  IFS_BAK=$IFS
+  IFS=$'\n'
+
+  VIGRID_GATEWAY_PORT="443"
+  for i in "$VIGRID_GATEWAY_NAME $VIGRID_GATEWAY_IP"
+  do
+    echo "  Connecting to $i on port $VIGRID_GATEWAY_PORT..."
+
+    RC=`nc -nzw3 $i $VIGRID_GATEWAY_PORT 2>/dev/null`
+    RC=$?
+
+    if [ $RC -eq 0 ]
+    then
+      echo "    Ok, I can reach it."
+      FAIL=0
+    else
+      echo "    Argh, I cant reach it."
+    fi
+  done
+
+  if [ $FAIL -eq 1 ]
+  then
+    echo "It seems I cant reach IP address $i on port TCP $VIGRID_GATEWAY_PORT."
+    if [ $WIFI_CHK -eq 0 ] # wifi
+    then
+      echo "You selected WiFi for WAN access, it might require to authenticate on a captive portal. Do you wish me to launch lynx ?"
+      read ANS
+      case $ANS in
+        y|Y)
+          lynx https://github.com/llevier/vigrid
+          ;;
+      esac
+    else
+      echo -n "That is not a WiFi access, I cant help here. Find the reason of the failure and press [RETURN] "
+      read ANS
+    fi
+  else
+    break
+  fi
+done
+
+IFS=$IFS_BAK
+
+echo "Ok thanks, I should now be able to connect to the OpenVPN Gateway..."
+echo "To be able to do this, I need...credentials :-). Please provide them to me:"
+echo -n "VIGRID username: "
+read VIGRID_USER
+echo -n "VIGRID password: "
+read VIGRID_PASS
+echo "$VIGRID_USER" >/etc/openvpn/VIGRIDteleport.login
+echo "$VIGRID_PASS" >>/etc/openvpn/VIGRIDteleport.login
+/etc/init.d/openvpn start
+
+while true
+do
+  echo "Waiting for tunnel to come up..."
+  RC=`/sbin/ifconfig tun0 2>/dev/null|wc -l`
+  if [ $RC -gt 1 ]
+  then
+    break
+  fi
+  sleep 3
+done
+
+TUN_IP=`/sbin/ifconfig tun0 | grep inet | sed 's/^.*inet //' | sed 's/ .*$//'`
+echo "Tunnel interface is now configured and running on IP $TUN_IP"
+
+# Get DHCP IP
+OVPN_DETAILS=`cat /var/log/daemon.log | grep "ovpn-VIGRIDteleport.*PUSH.*setenv-safe "|tail -1`
+VIGRID_DHCP_IP=`echo $OVPN_DETAILS| sed 's/^.*setenv-safe VIGRID_DHCP_IP //'| sed 's/,.*$//'`
+if [ "x$VIGRID_DHCP_IP" = "x" ]
+then
+  echo "I cant find the DHCP server IP address, I am blocked. Infinite looping..."
+  until false
+  do
+    sleep 1
+  done
+fi
+
+echo ""
+echo "Let me now ping DHCP server $VIGRID_DHCP_IP..."
+while true
+do
+  RC=`ping -c 1 -w 3 $VIGRID_DHCP_IP 2>/dev/null`
+  RC=$?
+
+  if [ $RC -eq 0 ]
+  then
+    break
+  fi
+  sleep 1
+  echo "No answer, trying again..."
+done
+echo "Great, I can ping DHCP server, I will now configure the LAN side."
+
+NICS=`echo "$NICS" | grep -v "^$WAN_NIC$"`
+echo ""
+echo "Remaining network interface available: "$NICS
+
+NICS_COUNT=`echo "$NICS" | wc -l`
+if [ $NICS_COUNT -gt 1 ]
+then
+  # LAN device selection
+  IFS_BAK=$IFS
+  IFS=$'\n'
+
+  MENU_ITEMS="$NICS"
+  MENU_ITEMS_COUNT=`echo "$MENU_ITEMS"|wc -l`
+  MENU_LIST=""
+
+  for ITEM in ${MENU_ITEMS[@]}
+  do
+    ITEM_DESC=`nmcli device show $ITEM|grep "GENERAL.TYPE:" | awk '{print $NF;}'`
+    MENU_LIST="$MENU_LIST $ITEM ${ITEM_DESC// /_}"
+  done
+
+  IFS=$IFS_BAK
+
+  until false
+  do
+    dialog --backtitle "VIGRIDteleport configuration" \
+      --title "Select the network device to host VIGRIDusers" --menu \
+      "Which device should I use ?" 15 60 $MENU_ITEMS_COUNT $MENU_LIST 2>"${INPUT}"
+
+    if [ $? -eq 0 ]
+    then
+      LAN_NIC=$(<"${INPUT}")
+      break
+    fi
+  done
+else
+        LAN_NIC=$NICS
+fi
+
+echo "Ok, configuring LAN ($LAN_NIC) network side now..."
+OVPN_DETAILS=`cat /var/log/daemon.log | grep "ovpn-VIGRIDteleport.*PUSH.*ifconfig-pool"|tail -1`
+if [ "x$OVPN_DETAILS" = "x" ]
+then
+  echo "No ifconfig-pool found in OpenVPN tunnel, cant step forward"
+  exit 1
+fi
+OVPN_LAN=`echo $OVPN_DETAILS| sed 's/^.*ifconfig-pool //'| sed 's/,.*$//'`
+
+OVPN_LAN_IP_START=`echo $OVPN_LAN | awk '{ print $1;}'`
+OVPN_LAN_IP_END=`echo $OVPN_LAN | awk '{ print $2;}'`
+OVPN_LAN_NETMASK=`echo $OVPN_LAN | awk '{ print $3;}'`
+IP_CHECK_START=`echo "$OVPN_LAN_IP_START" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b"`
+IP_CHECK_END=`echo "$OVPN_LAN_IP_END" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b"`
+if [ "x$IP_CHECK_START" = "x" -o "x$IP_CHECK_END" = "x" ]
+then
+  echo "Cant determine IP addresses range for LAN, cant step forward"
+  exit 1
+fi
+echo "LAN will be on $OVPN_LAN_IP_START-$OVPN_LAN_IP_END range."
+
+IP_BASE=`echo $OVPN_LAN_IP_START | cut -d "." -f 1-3`
+D_START_VAL=`echo $OVPN_LAN_IP_START | cut -d "." -f 4`
+D_START_VAL=`echo "$D_START_VAL + 1" | bc`
+IP_BASE="$IP_BASE.$D_START_VAL"
+
+SUBNET_BITS=`sipcalc $IP_BASE $OVPN_LAN_NETMASK|grep "Network.*bits" | sed 's/^.* //'`
+
+# LAN_NIC is wireless ?
+WLAN_CHK=`iwconfig $LAN_NIC 2>&1|grep "no wireless"|wc -l`
+
+if [ $WLAN_CHK -eq 0 ]
+then
+  echo "I sense $LAN_NIC is a WiFi device..."
+
+  echo "Configuring it as hotspot."
+  ifconfig $LAN_NIC down
+  iwconfig $LAN_NIC mode managed
+  nmcli radio wifi off
+  rfkill unblock all
+
+  echo "Updating hostapd.conf..."
+  cat /etc/hostapd/hostapd.conf | sed "s/interface=.*$/interface=$LAN_NIC/" >/etc/hostapd/hostapd.conf.tmp
+  mv /etc/hostapd/hostapd.conf.tmp /etc/hostapd/hostapd.conf
+  cat /etc/hostapd/hostapd.conf | sed "s/VIGRIDssid/$VIGRID_USER/" >/etc/hostapd/hostapd.conf.tmp
+  mv /etc/hostapd/hostapd.conf.tmp /etc/hostapd/hostapd.conf
+  echo "Launching hostapd..."
+  hostapd -B /etc/hostapd/hostapd.conf >/dev/null 2>/dev/null
+
+  echo "Finally configuring IP address..."
+  ifconfig $LAN_NIC $IP_BASE netmask $OVPN_LAN_NETMASK
+  ifconfig $LAN_NIC up
+  #
+  echo "Hotspot ready ! Please connect to '$VIGRID_USER' hotspot, password is also '$VIGRID_USER'"
+  echo "Then read VIGRID instructions to step forward"
+else
+  echo "Configuring $LAN_NIC : $IP_BASE/$OVPN_LAN_NETMASK"
+
+  nmcli con add type ethernet con-name LAN ifname $LAN_NIC ip4 $IP_BASE/$SUBNET_BITS >/dev/null 2>/dev/null
+fi
+
+echo "Routing now between LAN, WAN & tunnel (default to Internet, VIGRID WAN to tunnel)..."
+sysctl net.ipv4.ip_forward=1 >/dev/null 2>/dev/null
+
+iptables -F INPUT
+iptables -F OUTPUT
+iptables -F FORWARD
+iptables -t nat -F
+iptables -t filter -F
+
+iptables -P FORWARD ACCEPT
+iptables -A FORWARD -s 0.0.0.0/0.0.0.0 -d 0.0.0.0/0.0.0.0 -m state --state INVALID -j DROP
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -t filter -A FORWARD -i tun0 -o $LAN_NIC -j ACCEPT
+iptables -t filter -A FORWARD -o tun0 -i $LAN_NIC -j ACCEPT
+
+iptables -t filter -A FORWARD -i $LAN_NIC -o $WAN_NIC -j ACCEPT
+iptables -t filter -A FORWARD -o $LAN_NIC -i $WAN_NIC -j ACCEPT
+
+# Protect livebox ! Bar access from LAN to default route on WAN (??)
+
+iptables -t nat -A POSTROUTING -o $WAN_NIC -j MASQUERADE
+
+echo "Finally launching the DHCP relay on LAN ($LAN_NIC)..."
+dhcp-helper -s $VIGRID_DHCP_IP -i $LAN_NIC -e tun0
+
+echo ""
+echo "Ok, now all done"
+
+echo
+echo "Now endless looping... Press Ctrl-C to end to a root shell"
+until false
+do
+  sleep 30
+done
+
+exit 0

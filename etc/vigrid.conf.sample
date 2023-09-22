@@ -1,0 +1,62 @@
+#
+# Vigrid configuration file sample file
+#
+
+# Vigrid Type: 1=Standalone, 2=Standalone+NAS, 3=GNS3farmMaster+NAS, 4=GNS3farmSlave+NAS, 5=GNS3scalableSlave+NAS
+#VIGRID_TYPE=3
+
+# Vigrid Network design: 2=Tiny CyberRange (4 NICs), 5=Normal Cyber Range (6 NICs)
+#VIGRID_NETWORK=2
+
+# NAS hostname:IPaddress for NAS dependant servers"
+#VIGRID_NAS_SERVER="host1:IPaddress1 host2:IPaddress2"
+#VIGRID_NAS_SERVER="host1:IPaddress1"
+#
+# zfs or btrfs
+#VIGRID_STORAGE_MODE="zfs"
+#
+# root directory for Storage. Either NAS or local.
+# Vigrid default=Vstorage (ZFS) or Bstorage (BTRfs). Could be /volume1 (Synology BTRfs)
+# Without value, / will be storage root
+#VIGRID_STORAGE_ROOT="/Vstorage"
+
+# Hostname:IP adress of MX hub to send emails (cloning center)
+#VIGRID_SMTP_RELAY="MXhostname:MX_IPaddress:SMTPport"
+#VIGRID_SMTP_MAILFROM="from_user@from.host"
+
+# GNS3 Credentials
+#VIGRID_GNS_USER=gns3
+#VIGRID_GNS_PASS="gns3"
+
+# GNS3 hosts (slaves or scalable servers). Format: hostname:IP hostname:IP...
+#VIGRID_GNS_SLAVE_HOSTS="GNShost1:GNS_IPaddress1 GNShost2:GNS_IPaddress2 GNShost3:GNS_IPaddress3 GNShost4:GNS_IPaddress4"
+
+# MySQL credentials for Vigrid Cloning Daemon
+#VIGRID_MYSQL_HOST="127.0.0.1"
+#VIGRID_MYSQL_USER=vigrid
+#VIGRID_MYSQL_PASS="vigrid"
+
+# SSH options for all ssh actions
+#VIGRID_SSHKEY_OPTIONS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=error"
+
+# DHCP Server (if not local), will use VIGRID_SSHKEY_GNS for log extraction
+#VIGRID_DHCP_SERVER="DHCPhostname:DHCP_IPaddress"
+
+# Websockify options
+#VIGRID_WEBSOCKIFY_OPTIONS="--timeout=300"
+
+# NAS SSH key for DHCP server
+#VIGRID_SSHKEY_DHCP=/home/gns3/.ssh/id_dhcp_server
+
+# NAS SSH key for automated authentication
+#VIGRID_SSHKEY_NAS=/home/gns3/.ssh/id_NAS
+
+# GNS3 servers (upon Master of a farm, either slaves or scalable)
+#VIGRID_SSHKEY_GNS=/home/gns3/.ssh/id_gns3-GNS_HOSTS
+
+# Remote console (iDRAC, iLo, IMM etc) credentials for remote power on enslaved servers
+#VIGRID_POWER_USER=ipmi
+#VIGRID_POWER_PASS="password"
+# VIGRID_POWER_ACCESS=(IPMI|SSH)
+#VIGRID_POWER_ACCESS=SSH
+

@@ -1,0 +1,216 @@
+[
+  {
+    "NAME": "VIGRID_TYPE",
+    "DESCRIPTION": "Vigrid can be multiple designs. Basic is a classical GNS3 server with local storage, but Vigrid can also rely on NAS server(s) as a standalone GNS3 server, Master of a slave or scalable servers and, of course, such a slave/scalable server.",
+    "VALUE_TEXT": "Please select a architectural design:<BR>",
+    "VALUES":
+    {
+        "1": "1:Standalone GNS3 server",
+        "2": "2:Standalone GNS3 server with NAS storage",
+        "5": "5:GNS3 Scalable slave server with NAS storage",
+        "3": "3:GNS3 Farm MASTER server with NAS storage",
+        "4": "4:GNS3 Farm slave server with NAS storage"
+    },
+    "FORM": "LIST"
+  },
+
+  {
+    "NAME": "VIGRID_NETWORK",
+    "DESCRIPTION": "Vigrid network can also be multiple. Basic is under your responsability. Vigrid standards provides Blue Team/Red Team Cyber Ranges designs. One with Blue & Red admin zones, the other without. This page will change the value but not the design at host(s) level. That is your job.",
+    "VALUE_TEXT": "Please select a network design:<BR>",
+    "VALUES":
+    {
+        "1": "1:No network configuration change, you will manage",
+        "2": "2:TINY Cyber Range network configuration",
+        "3": "3:FULL Cyber Range network configuration"
+    },
+    "FORM": "LIST"
+  },
+
+  {
+    "NAME": "VIGRID_GNS_VERSION",
+    "DESCRIPTION": "GNS3 version, either 2 or 3.",
+    "VALUE_TEXT": "Please select a GNS3 version: ",
+    "VALUES":
+    {
+        "2": "GNS3 v2 (no RBAC)",
+        "3": "GNS3 v3 (with RBAC)"
+    },
+    "PATTERN": "(2|3)",
+    "FORM": "LIST"
+  },
+
+  {
+    "NAME": "VIGRID_GNS_USER",
+    "DESCRIPTION": "Please provide the GNS3 admin user, as specified by the 'user' parameter in gns3_server.conf.",
+    "VALUE_TEXT": "Please provide a user login: ",
+    "FORM": "USER",
+    "PATTERN": "[a-z0-9]_-]+"
+  },
+
+  {
+    "NAME": "VIGRID_GNS_PASS",
+    "DESCRIPTION": "Please provide the GNS3 admin user password, as specified by the 'password' parameter in gns3_server.conf.",
+    "VALUE_TEXT": "Please provide the users' password (at least 4 chars): ",
+    "FORM": "PASS",
+    "PATTERN": ".{4,}"
+  },
+
+  {
+    "NAME": "VIGRID_GNS_SLAVE_HOSTS",
+    "DESCRIPTION": "Please provide the list of all slave (not scalable) servers controlled by this master. IP adresses must be in the Nsuperadmin0 LAN (172.29.0.0/24)<BR><B>Nota: dont provide the Master Vigrid server that will be added automatically</B>",
+    "VALUE_TEXT": "Please provide a list of GNS hosts at format 'hostname:IPaddress:port' (port probably 3080), separated with a space or a coma:<BR>",
+    "FORM": "HOST",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_SSHKEY_GNS",
+    "DESCRIPTION": "As a server relying on a NAS, Vigrid must be able to launch scripts on it. It then also needs a SSH key that must be authorized on the 'root' account.",
+    "VALUE_TEXT": "Please provide a SSH key (public) key full path file: ",
+    "FORM": "FILE",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_WEBSOCKIFY_OPTIONS",
+    "DESCRIPTION": "Clientless consoles are relying on websockify. If you want to add specific parameters for each console, that is the place.",
+    "VALUE_TEXT": "'man websockify' to list options: ",
+    "FORM": "ARGS",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_STORAGE_MODE",
+    "DESCRIPTION": "Vigrid extended features such as snaping shot or cloning relies on specific filesystems.",
+    "VALUE_TEXT": "Please select a the one you are using:<BR>",
+    "VALUES":
+    {
+        "ZFS": "ZFS:is very fast but with hierarchical snapshots contraint",
+        "BTRFS": "BTRFS: is much slower (10% ZFS) but much more flexible"
+    },
+    "PATTERN": "(ZFS|BTRFS)",
+    "FORM": "LIST"
+  },
+
+  {
+    "NAME": "VIGRID_STORAGE_ROOT",
+    "DESCRIPTION": "The root directory of Vigrid storage (~/GNS3/GNS3farm/GNS) might change if you are using foreign NAS for example.",
+    "VALUE_TEXT": "Please define the root storage directory:",
+    "FORM": "FILE",
+    "PATTERN": "/[a-zA-Z0-9]_-=+]+"
+  },
+
+  {
+    "NAME": "VIGRID_NAS_SERVER",
+    "DESCRIPTION": "On a Vigrid design relaying on a NAS, everything is managed by Vigrid. It still needs to know the NAS network details.",
+    "VALUE_TEXT": "Please provide a list of GNS hosts at format 'hostname:IPaddress', separated with a space or a coma:<BR>",
+    "FORM": "HOST"
+  },
+
+  {
+    "NAME": "VIGRID_SSHKEY_NAS",
+    "DESCRIPTION": "As a master Server, Vigrid must be able to launch scripts on slave/scalable servers. It then needs a SSH key that is authorized on all 'gns3' accounts as well as on 'root' account on target servers.",
+    "VALUE_TEXT": "Please provide a SSH key (public) key full path file: ",
+    "FORM": "FILE",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_DHCP_SERVER",
+    "DESCRIPTION": "Vigrid needs a DHCP server to get the IP addresses obtained for the virtual devices attached to a real cloud.",
+    "VALUE_TEXT": "Please provide a pair at format 'hostname:IPaddress': ",
+    "FORM": "HOST"
+  },
+
+  {
+    "NAME": "VIGRID_SSHKEY_DHCP",
+    "DESCRIPTION": "To be able to extract the DHCP logs, Vigrid needs to access it. This SSH key must be authorized on the account of a 'gns3' user on the target host.",
+    "VALUE_TEXT": "Please provide a SSH key (public) key full path file: ",
+    "FORM": "FILE",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_MYSQL_HOST",
+    "DESCRIPTION": "Vigrid needs a MySQL server for Vigrid-cloning to work.",
+    "VALUE_TEXT": "Please provide a hostname or IP address: ",
+    "FORM": "HOST"
+  },
+
+  {
+    "NAME": "VIGRID_MYSQL_USER",
+    "DESCRIPTION": "Please provide a MySQL login. This login must be GRANTed ALL at start, until it creates the database/tables required by Vigrid-cloning daemon. then ALL on the created database will suffice.",
+    "VALUE_TEXT": "Please provide a user login: ",
+    "FORM": "USER",
+    "PATTERN": "[a-z0-9]_-]+"
+  },
+
+  {
+    "NAME": "VIGRID_MYSQL_PASS",
+    "DESCRIPTION": "Please provide the password for the MySQL login.",
+    "VALUE_TEXT": "Please provide the users' password (at least 4 chars): ",
+    "FORM": "PASS",
+    "PATTERN": ".{4,}"
+  },
+
+  {
+    "NAME": "VIGRID_SMTP_RELAY",
+    "DESCRIPTION": "Vigrid-cloning daemon must be able to mail to users who requested a clone. This mail will contain the clone access details. Please provide it here",
+    "VALUE_TEXT": "Please provide a pair at format 'hostname:IPaddress:SMTPport': ",
+    "FORM": "HOST",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_SMTP_MAILFROM",
+    "DESCRIPTION": "Vigrid-cloning daemon send to send email signing as someone. Strongly suggesting to define this 'Mail From': as an existing one so bounces can be recovered.",
+    "VALUE_TEXT": "Please provide mailfrom email: ",
+    "FORM": "EMAIL"
+  },
+
+  {
+    "NAME": "VIGRID_SSHKEY_OPTIONS",
+    "DESCRIPTION": "Some SSH options might be required. Here is the place to specify them.",
+    "VALUE_TEXT": "'man ssh' to list options (-o option): ",
+    "FORM": "ARGS",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_POWER_SLAVE_HOSTS",
+    "DESCRIPTION": "Vigrid can also control physical hosts to power them on (off being done via 'init 0').",
+    "VALUE_TEXT": "Please provide a list of GNS hosts at format 'hostname:IPaddress', separated with a space or a coma:<BR>",
+    "FORM": "HOST",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_POWER_USER",
+    "DESCRIPTION": "Vigrid can power on/off slave/scalable servers. this can be done over SSH or IPMI. Please provide the associated account for these actions.",
+    "VALUE_TEXT": "Please provide a user login: ",
+    "FORM": "USER",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_POWER_PASS",
+    "DESCRIPTION": "The power control operation required to have the password as well.",
+    "VALUE_TEXT": "Please provide the users' password (at least 4 chars): ",
+    "FORM": "PASS",
+    "PATTERN": ""
+  },
+
+  {
+    "NAME": "VIGRID_POWER_ACCESS",
+    "DESCRIPTION": "To control physical hosts, Vigrid must use either SSH or IPMI.",
+    "VALUE_TEXT": "Please make a choice: ",
+    "VALUES":
+    {
+        "SSH":  "Access over SSH",
+        "IPMI": "Access using IPMI"
+    },
+    "FORM": "LIST",
+    "PATTERN": "(IPMI|SSH)"
+  }
+]

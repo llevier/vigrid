@@ -1,0 +1,94 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  // MQTT broker
+  include "/home/gns3/vigrid/www/site/manager/vigrid-emqx_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Puppet Master");
+
+	if ($_GET["refresh"] != 0) { $refresh=HTMLvalue($_GET["refresh"]); }
+	else { $refresh=60; }
+
+	// end of metarefresh
+	$refresh_url=getselfurl_controltower();
+	print ("<meta http-equiv=\"refresh\" content=\"".$refresh."; ".$refresh_url."\">\n");
+	// echo "Refresh=".$refresh_url."<BR>\n";
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+	
+	// if there are parameters, means start/stop something :-)
+	// if (($_GET["gnshost"]!="") && ($_GET["project_id"]!="") && ($_GET["status"]!=""))
+	// {
+	// }
+  
+  // Toggles
+  if (preg_match("/\?/",$refresh_url)) { $split_char="&"; } else { $split_char="?"; }
+
+	?>
+	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=2 pattern="[0-9]{2}">seconds<?php getselfurl_controltower_form("refresh"); ?></form>
+
+	<H3>Running ghosts</H3>
+	<TABLE NUMCOL=3 BORDER=1>
+	<TR><TD><B>Ghost ID</B></TD><TD><B>username</B></TD><TD><B>connected at</B></TD><TD><B>Bound on project</B></TD><?php if ($dispid==1) { ?><TD><B>Project ID</B></TD> <?php } ?><TR>
+	<TR><TD></TD><TD></TD><TD></TD><TD>preg filter:<BR><form><input type="text" name="regex_project" value="<?php print HTMLvalue($_GET["regex_project"]); ?>"><?php getselfurl_controltower_form("regex_project"); ?></form></TD>
+	<?php if ($dispid==1) { ?><TD></TD><?php } ?><TR><?php
+
+  $ghosts=EMQXgetghosts("admin","public","http://10.239.206.5:8081");  
+  
+  for ($g=0;$g<sizeof($ghosts['data']);$g++)
+	{
+    print("<TR><TD>".$ghosts['data'][$g]['clientid']."</TD><TD>".$ghosts['data'][$g]['username']."</TD>");
+    print("<TD>".$ghosts['data'][$g]['connected_at']."</TD>");
+    
+    $macaddr=preg_replace("/^.*_/","",$ghosts['data'][$g]['clientid']);
+    $macaddr=sprintf("%s:%s:%s:%s:%s:%s",substr($macaddr,0,2),substr($macaddr,2,2),substr($macaddr,4,2),substr($macaddr,6,2),substr($macaddr,8,2),substr($macaddr,10,2));
+    $project_name=gns_getprojectname_by_macaddr($gns_controller,$data_vigrid,$macaddr);
+    print("<TD>".$project_name."</TD></TR>");
+	}
+
+	function getselfurl_controltower() // return self url with all arguments (GET)
+	{
+		$refresh_url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'].$_SERVER["PHP_SELF"];
+		$arg=0;
+		if ($_GET["regex_host"]!="")    { $refresh_url.="?regex_host=".HTMLvalue($_GET["regex_host"]); $arg=1; }
+		if ($_GET["regex_project"]!="") { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_project=".HTMLvalue($_GET["regex_project"]); }
+		if ($_GET["regex_node"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_node=".HTMLvalue($_GET["regex_node"]); }
+		if ($_GET["refresh"]!="")       { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="refresh=".HTMLvalue($_GET["refresh")]; }
+		if ($_GET["dispid"]!="")        { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="dispid=".HTMLvalue($_GET["dispid"]); }
+		if ($_GET["links"]!="")         { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="links=".HTMLvalue($_GET["links"]); }
+		return($refresh_url);
+	}
+
+	function getselfurl_controltower_form($arg) // create forms fields of all in URL but the one in $arg
+	{
+		$arg_fields=array("regex_host","regex_project","regex_node","refresh","dispid","links");
+		for ($field=0;$field<sizeof($arg_fields);$field++)
+		{
+			if ($arg_fields[$field] != $arg)
+			{ if ($_GET[$arg_fields[$field]]!="")
+				{ print("<input type=\"hidden\" name=\"$arg_fields[$field]\"; value=\"".HTMLvalue($_GET[$arg_fields[$field]])."\">"); }
+			}
+		}
+	}
+	
+?>
+</html>

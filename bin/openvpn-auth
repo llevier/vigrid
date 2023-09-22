@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# Vigrid OpenVPN authentication validation
+#
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+
+DATE=`date +'+%Y-%m-%d %H:%M:%S'`
+
+FILE=$1
+
+[ "x$FILE" = "x" ] && exit 2
+[ -f $FILE ] || exit 2
+
+VIGRID_PASSWD="/home/gns3/etc/VIGRIDteleport-passwd"
+VIGRID_LOGS="/var/log/gns3/vigrid.log"
+
+OVPN_USER=`cat $FILE|head -1`
+OVPN_PASS=`cat $FILE|tail -1`
+
+echo -n "$DATE: Vigrid OpenVPN authentication attempt: $OVPN_USER ($OVPN_PASS) -> " >>$VIGRID_LOGS
+
+
+CHK=`cat $VIGRID_PASSWD| grep "^$OVPN_USER:{PLAIN}$OVPN_PASS$"|wc -l`
+
+[ $CHK -ge 1 ] && echo "VALID" >>$VIGRID_LOGS && exit 0
+
+echo "DENIED" >>$VIGRID_LOGS
+exit 1
+

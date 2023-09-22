@@ -1,0 +1,178 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="$0 [ -a|-d ] -i image.iso -o DistributionName -r ReleaseName"
+
+ACTION=""
+while getopts 'adi:o:r:' OPTIONS
+do
+  case "$OPTIONS" in
+    a)      ACTION="a";;
+    d)      ACTION="d";;
+    i)      ISO_IMAGE="$OPTARG";;
+    o)      DISTRIBUTION="$OPTARG";;
+    r)      RELEASE="$OPTARG";;
+    [?])
+      print >&2 $USAGE
+      exit 1
+      ;;
+  esac
+done
+
+if [ "x$ACTION" = "x" -o "x$ISO_IMAGE" = "x" -o "$DISTRIBUTION" = "x" -o "x$RELEASE" = "x" ]
+then
+  echo "$USAGE"
+  exit 1
+fi
+
+DIR_TFTP="/Vstorage/tftp"
+DIR_UEFI="/Vstorage/tftp/grub2-cfg"
+DIR_BIOS="/Vstorage/tftp/pxegrub-cfg"
+
+DISTRO="$DISTRIBUTION-$RELEASE"
+ISO=`basename $ISO_IMAGE`
+
+if [ "x$ACTION" = "xd" ]
+then
+  CHK=`cat $DIR_UEFI/grub.cfg-vigrid-gns | grep "^# Distro: %%START_$DISTRO%%"`
+  if [ "x$CHK" = "x" ]
+  then
+    echo "I am sorry, but I cant find that OS defined into $DIR_UEFI/grub.cfg-vigrid-gns. Exiting."
+    exit 1
+  fi
+
+  rm $DIR_UEFI/grub.cfg-vigrid-gns.new 2>/dev/null
+  WRITE=1
+  while read LINE
+  do
+    CHK=`echo "$LINE" | grep "default=autoinstall-$DISTRO"`
+    if [ "x$CHK" != "x" ]
+    then
+      echo "(!) default install was set to $DISTRO, resetting to default=autoinstall."
+      LINE=`echo "$LINE" | sed "s/default=autoinstall-$DISTRO/default=autoinstall/"`
+    fi
+
+    CHK=`echo "$LINE" | grep "^# Distro: %%START_$DISTRO%%"`
+    [ $WRITE -eq 1 -a "x$CHK" != "x" ] && WRITE=0
+
+    [ $WRITE -eq 1 ] && echo "$LINE" >>$DIR_UEFI/grub.cfg-vigrid-gns.new
+
+    CHK=`echo "$LINE" | grep "^# Distro: %%END_$DISTRO%%$ISO%%"`
+    [ $WRITE -eq 0 -a "x$CHK" != "x" ] && WRITE=1    
+
+  done <$DIR_UEFI/grub.cfg-vigrid-gns
+  
+  mv $DIR_UEFI/grub.cfg-vigrid-gns.new $DIR_UEFI/grub.cfg-vigrid-gns
+
+  echo "$DISTRO removed from $DIR_UEFI/grub.cfg-vigrid-gns."
+  
+  exit
+fi
+
+if [ "x$ACTION" = "xa" ]
+then
+  echo "Creating ISO directory"
+  mkdir /Vstorage/tftp/isos 2>/dev/null
+  if [ ! -f "$ISO_IMAGE" ]
+  then
+    echo "Cant find $ISO_IMAGE"
+    exit 1
+  fi
+
+  if [ ! -f "/Vstorage/tftp/isos/$ISO" ]
+  then
+    echo "Copying distro to $DIR_TFTP/isos directory..."
+    cp $ISO_IMAGE /Vstorage/tftp/isos/ 
+    [ $? -ne 0 ] && exit 1
+  else
+    echo "Dont copying distro to $DIR_TFTP/isos directory, already present."
+  fi
+
+  ISO_IMAGE="/Vstorage/tftp/isos/$ISO"
+
+  echo "  Mounting ISO image..."
+  mount -o ro $ISO_IMAGE /mnt/
+  [ $? -ne 0 ] && exit 1
+
+  echo "  mkdir target directory for $DISTRO..."
+  if [ -d "/Vstorage/tftp/$DISTRO" ]
+  then
+    echo "Target directory /Vstorage/tftp/$DISTRO already exists, exiting"
+    exit 1
+  fi
+  mkdir -p /Vstorage/tftp/$DISTRO
+  [ $? -ne 0 ] && exit 1
+
+  echo "  Extracting kernel+initrd..."
+  cp /mnt/casper/vmlinuz /Vstorage/tftp/$DISTRO/vmlinuz
+  [ $? -ne 0 ] && exit 1
+
+  cp /mnt/casper/initrd /Vstorage/tftp/$DISTRO/initrd
+  [ $? -ne 0 ] && exit 1
+
+  umount /mnt
+  [ $? -ne 0 ] && exit 1
+
+  echo "Updating grub.cfg-vigrid-gns..."
+
+  DISTRO_GRUB="
+  # Distro: %%START_$DISTRO%%$ISO%%
+  menuentry 'Live Installer $DISTRO - automated' --id=autoinstall-$DISTRO {
+      echo \"Loading Kernel...\"
+      linux /$DISTRO/vmlinuz ip=dhcp url=http://\${pxe_default_server}/isos/$ISO autoinstall ds=\"nocloud-net;s=http://\${pxe_default_server}/vigrid-gns/\" root=/dev/ram0 cloud-config-url=/dev/null
+      echo \"Loading Ram Disk...\"
+      initrd /$DISTRO/initrd
+  }
+  menuentry 'Live Installer $DISTRO' --id=install-$DISTRO {
+      echo \"Loading Kernel...\"
+      linux /$DISTRO/vmlinuz ip=dhcp url=http://\${pxe_default_server}/isos/$ISO root=/dev/ram0 cloud-config-url=/dev/null
+      echo \"Loading Ram Disk...\"
+      initrd /$DISTRO/initrd
+  }
+  # Distro: %%END_$DISTRO%%$ISO%%
+  "
+
+  # Sanity check 
+  CHK=`cat $DIR_UEFI/grub.cfg-vigrid-gns | grep -n "^# Distro: %%START_$DISTRO%%$ISO%%"`
+  if [ "x$CHK" != "x" ]
+  then
+    echo "That distro is already defined into $DIR_UEFI/grub.cfg-vigrid-gns, exiting"
+    exit 1
+  fi
+
+  echo "Backing up $DIR_UEFI/grub.cfg-vigrid-gns"
+  cp $DIR_UEFI/grub.cfg-vigrid-gns $DIR_UEFI/grub.cfg-vigrid-gns.old
+  LINES_START=`cat $DIR_UEFI/grub.cfg-vigrid-gns | grep -n '^# %%DISTROS%%' | awk -F ':' '{print $1;}'`
+  if [ $? -ne 0 ]
+  then
+    LINES_START=`cat $DIR_UEFI/grub.cfg-vigrid-gns | grep -n '^# Distro: %%START_.*%%.*%%' | awk -F ':' '{print $1;}'`
+    [ $? -ne 0 ] && echo "Cant find marker into $DIR_UEFI/grub.cfg-vigrid-gns to push distribution" && exit 1
+  fi
+  LINES_TOTAL=`cat $DIR_UEFI/grub.cfg-vigrid-gns | wc -l`
+  [ $? -ne 0 ] && exit 1
+
+  # START=$((LINES_START-1))
+  END=$((LINES_TOTAL-START))
+
+  head -$START $DIR_UEFI/grub.cfg-vigrid-gns >$DIR_UEFI/grub.cfg-vigrid-gns.new
+  [ $? -ne 0 ] && exit 1
+  echo "$DISTRO_GRUB" >>$DIR_UEFI/grub.cfg-vigrid-gns.new
+  tail -$END $DIR_UEFI/grub.cfg-vigrid-gns >>$DIR_UEFI/grub.cfg-vigrid-gns.new
+  [ $? -ne 0 ] && exit 1
+
+  mv $DIR_UEFI/grub.cfg-vigrid-gns.new $DIR_UEFI/grub.cfg-vigrid-gns
+  [ $? -ne 0 ] && exit 1
+
+  echo "$DIR_UEFI/grub.cfg-vigrid-gns updated."
+  echo "You must now ensure, eventually update boot file manually to define the default install.
+  That is line 'default=' at start of $DIR_UEFI/grub.cfg-vigrid-gns."
+fi

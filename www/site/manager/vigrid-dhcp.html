@@ -1,0 +1,218 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("DHCP config builder");
+
+	if ($_GET["regex_project"]!="") { $regex_project=HTMLvalue($_GET["regex_project"]); }
+	if ($_GET["regex_node"]!="")    { $regex_node   =HTMLvalue($_GET["regex_node"]); }
+	if ($_GET["ip_address"]!="")    { $ip_address   =HTMLvalue($_GET["ip_address"]); }
+	if ($_GET["project_start"]!="") { $project_start=HTMLvalue($_GET["project_start"]); }
+
+ if ($regex_project=="" || $regex_node=="" || $ip_address=="" || $project_start=="")
+ {
+    ?>
+    <H3>Please provide a project & node preg so I can extract data for you:</H3><BR>
+    <FORM>
+    <TABLE NUMCOL=2 BORDER=0>
+    <TR><TD><B>Project name preg:   </TD><TD><input type="text" name="regex_project" value="<?php print HTMLvalue($_GET["regex_project"]); ?>"></TD></TR>
+    <TR><TD><B>Node name preg:      </TD><TD><input type="text" name="regex_node"    value="<?php print HTMLvalue($_GET["regex_node"]);    ?>"></TD></TR>
+    <TR><TD><B>Starting IP address: </TD><TD><input type="text" name="ip_address"    value="<?php print HTMLvalue($_GET["ip_address"]);    ?>"></TD></TR>
+    <TR><TD><B>Starting number:     </TD><TD><input type="text"  name="project_start" value="<?php print HTMLvalue($_GET["project_start"]);    ?>"></TD></TR>
+    </TABLE><BR>
+    <input type="submit" value="Build DHCP config">
+    </FORM>
+    <?php
+    exit;
+  }
+  // Check values...
+  if (!filter_var($ip_address, FILTER_VALIDATE_IP))
+  { print("I am sorry, but $ip_address is not a valid IP address, exiting"); exit; }
+
+  if ($project_start<=0) 
+  { print("I am sorry, but a project starting number cant be less than zero, exiting"); exit; }
+
+  ?><H3>Extracting projects list...</H3><BR><?php
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+  $vigrid_hosts=VIGRIDgetgnshosts($gns_controller);
+
+  $host_name="";
+  for ($i=0;$i<sizeof($vigrid_hosts);$i++)
+  {
+    $f=explode(":",$vigrid_hosts[$i]);
+    $host_name=$f[0];
+    $host_ip=$f[1];
+    $host_port=$f[2];
+    $host_compute=$f[3];
+    
+    if ($host_name==gethostname()) break;
+  }
+  
+  if ($host_name=="") 
+  { print("<H4><FONT COLOR=Red><B>I am sorry, I failed finding this host in Vigrid computes, exiting.</B></FONT></H4>"); exit; }
+  
+  $projects_list=array();
+  for ($pi=0;$pi<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$pi++)
+  { array_push($projects_list,$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['name']); }
+
+  // Using this direct access method to prevent being forced to open each project on GNS3 and deal with Vigrid slaves
+  $project_files=glob('/home/gns3/GNS3/projects/*/*.gns3');
+  
+  if (($project_files==null) || (sizeof($project_files)==0))
+  { print("<H4><FONT COLOR=Red><B>I am sorry, I failed finding projects, possibly a directory permissions origin. Exiting</B></FONT></H4>"); exit; }
+  
+  ?><H3>Comparing projects list from GNS3 & from local files</H3><BR><?php
+  
+  for ($i=0;$i<sizeof($projects_list);$i++)
+  {
+    if (!preg_grep("/\/$projects_list[$i]\.gns3$/",$project_files))
+    { print("<H4><FONT COLOR=Red><B>I am sorry, $projects_list[$i] appears to be a project but I found no associated configuration file.<BR>Possibly a local directory/file permissions issue.<BR>Exiting</B></FONT></H4>"); exit; }
+  }
+  
+  ?><H3>Extracting MAC address for <?php print ("$regex_project / $regex_node"); ?></H3><BR><?php
+  
+  // Now sort by project name
+  usort($project_files,projectname_cmp);
+
+  // Count extracted to detect errors (none detected)
+  $extracted=0;
+  
+  $projects_config_all=array();
+  foreach ($project_files as $project_config_file)
+  {
+    // loading project config
+    if (($project_config_dump=file($project_config_file))===false)
+    { print("<H4><FONT COLOR=Red><B>I am sorry, I cant load $project_config_file.<BR>Probably a local directory/file permissions issue.<BR>Exiting</B></FONT></H4>"); exit; }
+
+    if (sizeof($project_config_dump)>1) { $extracted++; }
+
+    array_push($projects_config_all,json_decode(implode($project_config_dump),true));
+  }
+  
+  if ($extracted==0)
+  {
+    print("<H4><FONT COLOR=Red><B>I am sorry, I failed finding projects, possibly a local directory/file permissions issue.<BR>Exiting</B></FONT></H4>");
+    $test_path="/home/gns3/GNS3/projects/*/*.gns3";
+    $cur_path="";
+
+    ?><TABLE><TR><TD COLSPAN=4><FONT SIZE=+1><B>For your information (might help):</FONT></B></TD></TR><?php
+    $cur_tok = strtok($test_path,"/");
+    while ($cur_tok !== false)
+    {
+      $cur_path.="/".$cur_tok;
+      
+      // add / to expected directories
+      $final_path=$cur_path;
+      $t=substr($test_path,-strlen($cur_tok));
+      if (strcmp($cur_tok,$t)!=0) $final_path.="/";
+
+      $res=shell_exec("ls -ld $final_path");
+
+      print("<TR><TD VALIGN=TOP>Listing <code>$final_path</code></TD><TD VALIGN=TOP>returns</TD><TD>&nbsp;</TD><TD><TABLE>");
+      
+      $f=explode("\n",$res);
+      for ($j=0;$j<sizeof($f);$j++)
+      {
+        if ($f[$j]!="")
+        {
+          $g=explode(" ",$f[$j]);
+          print("<TR><TD><code>$g[0]</code></TD><TD><code>$g[2]</code></TD><TD><code>$g[3]</code></TD>");
+          print("<TD><code>".$g[sizeof($g)-1]."</code></TD></TR>\n");
+        }
+      }
+      print("</TABLE></TD></TR>");
+
+      $cur_tok = strtok("/");
+    }
+    ?></TABLE><?php
+    
+    exit;
+  }
+
+  $dhcp_config=array();
+  
+  // Expose IP address fields for incrementation...
+  $f=explode(".",$ip_address);
+  $ip_a=$f[0];
+  $ip_b=$f[1];
+  $ip_c=$f[2];
+  $ip_d=$f[3];
+
+  print("<TABLE BORDER=1><TR><TD><B>Project</B></TD><TD><B>Node</B></TD><TD><B>Mac Address</B></TD><TD><B>Assigned IP</B></TD</TR>");
+  for ($j=0;$j<sizeof($projects_config_all);$j++)
+  {
+    // does project's name match regex ?
+    if (preg_match("/$regex_project/",$projects_config_all[$j]['name']))
+    {
+      for ($k=0;$k<sizeof($projects_config_all[$j]['topology']['nodes']);$k++)
+      {
+        if (preg_match("/$regex_node/",$projects_config_all[$j]['topology']['nodes'][$k]['name']))
+        {
+          $ip_full="$ip_a.$ip_b.$ip_c.$ip_d";
+          $mac=$projects_config_all[$j]['topology']['nodes'][$k]['properties']['mac_address'];
+
+          // In GNS3, Node MAC is starting base, each NIC will take +1
+          $f=explode(":",$mac);
+          $t=hexdec($f[sizeof($f)-1]);
+          $f[sizeof($f)-1]=sprintf("%02x",++$t);
+          $mac_new=implode(":",$f);
+          
+          print("<TR><TD>".$projects_config_all[$j]['name']."</TD>");
+          print("<TD>".$projects_config_all[$j]['topology']['nodes'][$k]['name']."</TD>");
+          print("<TD>".$mac_new."</TD>");
+          print("<TD>$ip_full</TD></TR>\n");
+          
+          // # Kali CTF2022_HackThyBank-team001...
+          // host Kali-team001 { hardware ethernet 02:b6:be:10:41:18; fixed-address 172.16.150.31; }
+          $dhcp_name=$projects_config_all[$j]['topology']['nodes'][$k]['name']."-".$projects_config_all[$j]['name'];
+          array_push($dhcp_config,"# ".$dhcp_name);
+          array_push($dhcp_config,"host ".$dhcp_name." { hardware ethernet ".$mac_new."; fixed-address ".$ip_full."; }");
+          array_push($dhcp_config,"");
+          
+          $ip_d++;
+          if ($ip_d>254) { $ip_d=1; $ip_c++; }
+          if ($ip_c>254) { $ip_c=1; $ip_b++; }
+          if ($ip_b>254) { $ip_b=1; $ip_a++; }
+          if ($ip_b>254) { print($ip_a.$ip_b.$ip_c.$ip_d." is not a possible IP, exiting<BR>"); exit; }
+        }
+      }
+
+    }
+  }
+  print("</TABLE>");
+
+  ?><H3>DHCPd configuration, to copy/paste to your server:</H3><?php
+  for ($i=0;$i<sizeof($dhcp_config);$i++)
+  { print($dhcp_config[$i]."<BR>\n"); }    
+
+  exit;
+  
+  function projectname_cmp($a, $b)
+  {
+    $f=explode("/",$a);
+    $g=explode("/",$b);
+
+    return strcmp($f[sizeof($f)-1],$g[sizeof($g)-1]);
+  }
+?>
+</html>

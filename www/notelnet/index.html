@@ -1,0 +1,143 @@
+<!doctype html><!--
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+-->
+<html>
+    <head>
+        <title>noTELNET access</title>
+        <script src="hterm_all.js"></script>
+    </head>
+    <body>
+	<!-- https://github.com/cppio/web-telnet -->
+        <div id="terminal" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;"></div>
+        <script>
+            hterm.defaultStorage = new lib.Storage.Memory();
+            var t = new hterm.Terminal;
+            t.decorate(document.getElementById("terminal"));
+            t.installKeyboard();
+            
+            // var ws = new WebSocket(window.location.protocol.replace("http", "ws") + "//" + window.location.host);
+            var ws = new WebSocket(window.location.protocol.replace("http", "ws") + "//" + window.location.host + "/" + window.location.pathname);
+            ws.binaryType = "arraybuffer";
+            var td = new TextDecoder;
+            ws.onmessage = function(m) {
+                var msg = Array.from(new Uint8Array(m.data));
+                var response = [];
+                var output = [];
+                
+                var recv = "recv";
+                var send = "send";
+                
+                for (var i = 0; i < msg.length; i++) {
+                    if (msg[i] === 255) { // IAC
+                        recv += " IAC";
+                        switch (msg[++i]) {
+                            case 241: // NOP
+                                break;
+                                
+                            case 242: // Data Mark
+                                break; //
+                                
+                            case 243: // Break
+                                break; //
+                                
+                            case 244: // Interrupt Process
+                                break; //
+                                
+                            case 245: // Abort output
+                                break; //
+                                
+                            case 246: // Are You There
+                                break; //
+                                
+                            case 247: // Erase character
+                                break; //
+                                
+                            case 248: // Erase Line
+                                break; //
+      
+                            case 249: // Go ahead
+                                break; //
+                            
+                            case 250: // SB
+                                recv += " SB";
+                                if (msg[++i] === 24 && msg[++i] === 1 && msg[++i] === 255 && msg[++i] === 240) { // TERMINAL-TYPE ECHO
+                                    recv += " TERMINAL-TYPE ECHO IAC SE";
+                                    response.push(255, 250, 24, 0, 120, 116, 101, 114, 109, 45, 50, 53, 54, 99, 111, 108, 111, 114, 255, 240);
+                                    send += " IAC SB TERMINAL-TYPE TRANSMIT-BINARY xterm-256color IAC SE";
+                                } else throw msg[i];
+                                break; //
+                            
+                            case 251: // WILL
+                                recv += " WILL " + msg[++i];
+                                break; //
+                            
+                            case 252: // WON'T
+                                recv += " WON'T";
+                                break; //
+                            
+                            case 253: // DO
+                                recv += " DO";
+                                if (msg[++i] === 24 || msg[i] === 0) { // TERMINAL-TYPE
+                                    recv += " TERMINAL-TYPE";
+                                    response.push(255, 251, msg[i]);
+                                    send += " IAC WILL TERMINAL-TYPE";
+                                } else if (msg[i] === 31) {
+                                    recv += " NAWS";
+                                    response.push(255, 251, 31, 255, 250, 31, t.io.columnCount >> 8 & 255, t.io.columnCount & 255, t.io.rowCount >> 8 & 255, t.io.rowCount & 255, 255, 240);
+                                    send += " IAC WILL NAWS IAC SB NAWS " + t.io.columnCount + " " + t.io.rowCount + " IAC SE";
+                                } else {
+                                    recv += " " + msg[i];
+                                    response.push(255, 252, msg[i]);
+                                    send += " IAC WON'T " + msg[i];
+                                }
+                                break; //
+                            
+                            case 254: // DON'T
+                                recv += " DON'T";
+                                break; //
+                             
+                            case 255: // IAC
+                                output.push(255);
+                                break;
+                                
+                            default: throw msg[i];
+                        }
+                    } else output.push(msg[i]);
+                }
+                
+                console.log(msg);
+                if (msg.length - output.length) console.log(msg.length - output.length + " " + recv);
+                if (response.length) console.log(response.length + " " + send);
+                
+                if (response.length > 0) {
+                    var buffer = new Uint8Array(response);
+                    if (ws.readyState === ws.OPEN) ws.send(buffer);
+                    else if (ws.readyState === ws.CONNECTING) ws.addEventListener("open", ws.send.bind(ws, buffer));
+                }
+                if (output.length > 0) t.io.print(td.decode(new Uint8Array(output)));
+            };
+            
+            var te = new TextEncoder;
+            t.io.onVTKeystroke = t.io.sendString = function(str) { // weird issues
+                var buffer = te.encode(str);
+                if (ws.readyState === ws.OPEN) ws.send(buffer);
+                else if (ws.readyState === ws.CONNECTING) ws.addEventListener("open", ws.send.bind(ws, buffer));
+            };
+            t.io.onTerminalResize = function(columns, rows) {
+                var buffer = new Uint8Array([255, 250, 31, columns >> 8 & 255, columns & 255, rows >> 8 & 255, rows & 255, 255, 240]);
+                if (ws.readyState === ws.OPEN) ws.send(buffer);
+                else if (ws.readyState === ws.CONNECTING) ws.addEventListener("open", ws.send.bind(ws, buffer));
+            };
+        </script>
+    </body>
+</html>
+

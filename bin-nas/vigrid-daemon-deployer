@@ -1,0 +1,241 @@
+#!/usr/bin/php
+<?php
+
+// #################################################################################################################################
+// #
+// # This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+// #
+// # (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+// # LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+// #
+// # Each dependancies (c) to their respective owners
+// #
+// ##################################################################################################################################
+
+// Deployer GRUB files manager : runs on NAS acting as Deployer.
+
+// Required vigrid_storage_root of course for: $vigrid_storage_root/tftp/*
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+// turn off output buffering
+ob_implicit_flush();
+
+$usage="Vigrid-daemon-deployer -R VigridStorageRoot [ -v ] | -d ] [ -l logfile ]";
+$host=gethostname();
+
+$opt=getopt("R:l:Fvd");
+if (isset($opt['v'])) { $verbose=1; }
+if (isset($opt['d'])) { $daemon=1; }
+
+$vigrid_storage_root=$opt['R'];
+$log_file=$opt['l'];
+
+if ($vigrid_storage_root=="") { print "Usage: $usage\n"; exit(1); }
+
+report("$host Vigrid Deployer Daemon starting at ".strftime("%Y/%m/%d %H:%M:%S",time())."...\n");
+
+if ($verbose) { report("  verbose=on\n"); }
+
+// Capture SIGTERM
+declare(ticks = 1);
+pcntl_signal(SIGTERM,"sig_handler");
+pcntl_signal(SIGINT ,"sig_handler");
+
+if ($daemon)
+{
+  report("  turning to daemon...\n");
+  
+  $pid=pcntl_fork();
+  if ($wpid===-1)
+  { die("Couldn't fork()!"); }
+  else if ($pid) { exit(0); }
+
+  posix_setsid();
+  usleep(100000);
+
+  report("   Daemon now runing on ".posix_getpid()."\n");
+}
+
+$dir_tftp="$vigrid_storage_root/tftp";
+$file_logs_tftp="/var/log/syslog";
+$file_logs_http="/var/log/apache2/access.log";
+
+// Infinite loop
+$mark=0;
+report("Entering infinite loop...\n");
+while (1)
+{
+  if ($mark++>60) { $mark=0; report("I am still alive...\n"); }
+
+  // Extracting MAC/IP pair from DHCP leases
+  // $apache2_logs=getHTTPlogs();
+  
+  // list current grub.cfg-MAC files
+  foreach (glob($dir_tftp."/*-cfg/grub.cfg-*") as $client_filename)
+  {
+    // ensure it is a file with -real MAC_address
+    $client_mac=preg_replace("/^.*\/grub.cfg-/","",$client_filename);
+    if (filter_var($client_mac,FILTER_VALIDATE_MAC))
+    {
+      $now=time();
+      report("$now, managing $client_mac...\n");
+      $dhcp_lease=getDHCPlease($client_mac);
+      if (strcmp($dhcp_lease,"")!=0)
+      {
+        $f=preg_split("/ /",$dhcp_lease);
+        $client_ip=$f[1];
+        $client_dhcp_start=$f[2];
+        $client_dhcp_end=$f[3];
+        report("  $client_mac -> $client_ip, lease from $client_dhcp_start to $client_dhcp_end\n");
+        
+        // DHCP lease is running, ok. Now lets check if TFTP served the grub configuration file:
+        // Sep  1 05:49:49 hamster in.tftpd[178898]: RRQ from 192.168.243.205 filename grub.cfg-9c:dc:71:ce:f1:40
+        $tftp_logs=getTFTPlogs($client_mac,$client_ip,$client_dhcp_start,$client_dhcp_end);
+        if (count($tftp_logs)>0)
+        {
+          // Ok got some RRQ, now ensure Apache2 served the cloud-init files. If so, host is or has been installed, we can remove special config file
+          $http_logs=getHTTPlogs($client_ip,$client_dhcp_start,$client_dhcp_end);
+
+          if (count($http_logs)>0)
+          {
+            report("  $client_ip ($client_mac) -> installation running or done, deleting $client_filename\n");
+            unlink($client_filename);
+          }
+        }
+      }
+    }
+  }
+  sleep(5);
+}
+
+exit;
+
+function getHTTPlogs($client_ip,$client_dhcp_start,$client_dhcp_end)
+{
+  global $file_logs_http;
+  
+  $http_logs=array();
+
+  $fd=fopen($file_logs_http,"r");
+  if (!$fd) { report("Cant open $file_logs_http !!, stopping\n"); exit(1); }
+
+  while (($line = fgets($fd, 4096)) !== false)
+  {
+    if (preg_match("/^$client_ip .* \"GET \/vigrid-gns\/(meta|user|vendor)-data HTTP\/1.1.* \"Cloud-Init\//",$line))
+
+    $t=preg_replace("/\s+/"," ",$line);
+    $f=preg_split("/(\[|\])/",$t);
+    $t=preg_replace("/\[/","",$f[1]);
+    $log_time=strtotime($t);
+
+    if (($log_time>=$client_dhcp_start ) && ($log_time<=$client_dhcp_end)) { array_push($http_logs,$line); }
+  }
+
+  fclose($fd);
+
+  return($http_logs);
+}
+
+function getTFTPlogs($client_mac,$client_ip,$client_dhcp_start,$client_dhcp_end)
+{
+  global $file_logs_tftp;
+  
+  $tftp_logs=array();
+
+  $fd=fopen($file_logs_tftp,"r");
+  if (!$fd) { report("Cant open $file_logs_tftp !!, stopping\n"); exit(1); }
+
+  while (($line = fgets($fd, 4096)) !== false)
+  {
+    if (preg_match("/^.* in.tftpd\[\d*\]: RRQ from $client_ip filename (.*\/)*grub.cfg-$client_mac/",$line))
+    {
+      $t=preg_replace("/\s+/"," ",$line);
+      $f=preg_split("/ /",$t);
+      $log_time=strtotime("$f[0] $f[1] $f[2]");
+      
+      if (($log_time>=$client_dhcp_start) && ($log_time<=$client_dhcp_end)) { array_push($tftp_logs,$line); }
+    }
+  }
+
+  fclose($fd);
+
+  return($tftp_logs);
+}
+
+function getDHCPlease($mac)
+{
+  $fd=popen("/usr/sbin/dhcp-lease-list --parsable","r");
+  if (!$fd) { report("Cant run dhcp-lease-list !!, stopping\n"); exit(1); }
+  
+  while (($line = fgets($fd, 4096)) !== false)
+  {
+    if (preg_match("/^MAC /",$line))
+    {
+      $f=preg_split("/ /",$line);
+      
+      if (($time_start=strtotime("$f[7] $f[8]"))===false) { print("Cant convert $f[7] $f[8] to time_t\n"); }
+      if (($time_end=strtotime("$f[10] $f[11]"))===false) { print("Cant convert $f[10] $f[11] to time_t\n"); }
+
+      if (strcmp($f[1],$mac)==0) { pclose($fd); return("$f[1] $f[3] $time_start $time_end"); }
+    }
+  }
+  pclose($fd);
+  return("");
+}
+
+function clean_comment($text)
+{ return(preg_replace("/#.*$/","",trim($text))); }
+
+function get_exec($command,$prefix,$display)
+{
+  $res=array();
+
+  $fd=popen("$command 2>/dev/null","r");
+  while (!feof($fd))
+  {
+    $line=fgets($fd,4096);
+    array_push($res,$line);
+    if ($display) { report($prefix.$line); ob_implicit_flush(); }
+  }
+  $rc=pclose($fd);
+  
+  return(array($rc,$res));
+}
+
+function report($text)
+{
+  global $log_file;
+  
+  $date=date("M j G:i:s");
+  $hostname=gethostname();
+  
+  if ($log_file!="")
+  {
+    $fd=fopen($log_file,"a");
+    if (!$fd) { report("Cant append $log_file !!, stopping\n"); }
+
+    fwrite($fd,"$date $hostname Vigrid-daemon-deployer: $text");
+
+    fclose($fd);
+  }
+  else { print $text; }
+}
+
+function sig_handler($signo)
+{
+  if (($signo==SIGTERM) || ($signo==SIGINT))
+  {
+    report("Received SIGTERM or SIGINT, Vigrid-daemon-deployer exiting at ".strftime("%Y/%m/%d %H:%M:%S",time()).".\n");
+
+    report("Exiting at ".strftime("%Y/%m/%d %H:%M:%S",time()).".\n");
+    exit(0);
+  }
+
+  // other signals, normally useless
+  report("Received signal $signo !!");
+}
+
+?>

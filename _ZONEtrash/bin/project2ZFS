@@ -1,0 +1,134 @@
+#!/bin/bash
+
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+# Logic:
+# ZFS dataset cant be renamed (busy)
+# the project directory in unchanged, sub dirs as well
+#
+# Procedure:
+# extract from project all sub directories with uuid
+# zfs create new temp dataset + all subdirectories
+# rsync from within old dataset content to new
+# delete -R previous project dataset or directory
+# zfs rename temp dataset to old project directory name + change mountpoint
+
+
+echo "$0: convert GNS3 project into a list of ZFS volumes for snaping shot"
+echo
+
+GNS3_HOME="/home/gns3/GNS3"
+
+NODES_ZFS=0
+
+if [ "x$1" = "x-N" ]
+then
+  NODES_ZFS=1
+  PROJECT_UUID=$2
+else
+  PROJECT_UUID=$1
+fi
+
+if [ "x$PROJECT_UUID" = "x" ]
+then
+  echo "Usage: $0 [ -N ] Project_UUID"
+  echo "  [ -N ] a dataset per node"
+  exit 1
+fi
+
+GNS3_UID=`stat --format %u $GNS3_HOME`
+GNS3_GID=`stat --format %g $GNS3_HOME`
+
+if [ $GNS3_UID -eq 0 -o $GNS3_GID -eq 0 ]
+then
+  echo "Detected $GNS3_HOME is owned by UID/GID 0, cant be. Exiting."
+	exit 1
+fi
+
+if [ ! -d "$GNS3_HOME/projects/$PROJECT_UUID" ]
+then
+  echo "I am sorry, I cant find that project UUID: $PROJECT_UUID"
+  exit 1
+fi
+
+# Getting real physical location of project
+DIR_CURRENT=`pwd`
+cd $GNS3_HOME/projects/$PROJECT_UUID
+DIR_PROJECT=`/bin/pwd`
+cd $DIR_CURRENT
+echo "Project real directory: $DIR_PROJECT"
+
+DIR_PARENT=`echo $DIR_PROJECT | awk 'BEGIN{FS=OFS="/"}{NF--; print}'`
+ZFS_PARENT=`zfs list | grep "$DIR_PARENT$" | awk '{print $1;}'`
+
+echo "  Parent dir is $DIR_PARENT, parent ZFS data set is $ZFS_PARENT"
+
+# Ensuring at least ~gns3/GNS3/projects is a ZFS volume
+DIR_CURRENT=`pwd`
+cd $GNS3_HOME/projects
+DIR_PROJECTS=`/bin/pwd`
+cd $DIR_CURRENT
+
+ZFS_DATASET=`zfs list $DIR_PROJECTS | grep "$DIR_PARENT$"`
+CHK=`echo "$ZFS_DATASET"|wc -l`
+if [ $CHK -eq 0 ]
+then
+  echo "~gns3/GNS3/projects is not a ZFS volume. That is mandatory. Exiting."
+  exit 1
+fi
+
+CHK=`zfs list $DIR_PROJECT | grep "$PROJECT_UUID" |wc -l`
+DIR_PROJECT_ZFS=0
+if [ $CHK -ne 0 ]
+then
+  DIR_PROJECT_ZFS=1
+  echo "  Project is already a ZFS volume"
+else
+  echo "  Project is not yet a ZFS volume"
+fi
+
+echo "Listing project uuid nodes directories..."
+LIST=`find $DIR_PROJECT -type d -print | egrep "\/$PROJECT_UUID\/.*\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b"`
+
+echo "Creating ZFS dataset tmp project directory..."
+ZFS_TEMP_DIR="temp$$"
+zfs create $ZFS_PARENT/$ZFS_TEMP_DIR
+
+if [ $NODES_ZFS -eq 1 ]
+then
+  for i in $LIST
+  do
+    NEW=$i
+    
+    # REGEX_GNS3_HOME=`echo "${GNS3_HOME//\//\\\/}"`
+    # REGEX_ZFS_PARENT=`echo "${ZFS_PARENT//\//\\\/}"`
+
+    # [ $DIR_PROJECT_ZFS -ne 1 ] && NEW=`echo "$NEW" | sed 's;$REGEX_GNS3_HOME/projects;$REGEX_ZFS_PARENT;'`
+    
+    NEW=`echo "$NEW" | sed "s;^.*/$PROJECT_UUID;$ZFS_PARENT/$ZFS_TEMP_DIR;"`
+    
+    zfs create -p $NEW
+  done
+else
+  echo "-N option not set, nodes will *not* have their own dataset."
+fi
+
+echo "Now copying project to temp dataset (can be looooonnnnnggggg depending on size) ..."
+rsync  -rlHpogtz --delete --delete-before --inplace --numeric-ids $DIR_PROJECT/ /$ZFS_PARENT/$ZFS_TEMP_DIR/
+
+echo "Deleting $DIR_PROJECT..."
+[ $DIR_PROJECT_ZFS -eq 1 ] && ZFS sub delete -c $DIR_PROJECT 2>/dev/null
+rm -rf $DIR_PROJECT 2>/dev/null
+
+echo "Finally renaming temp dataset to old name and adjusting its mount point..."
+zfs rename $ZFS_PARENT/$ZFS_TEMP_DIR $ZFS_PARENT/$PROJECT_UUID
+
+echo "Task done. Dont forget to restart gns3 service ;-)"

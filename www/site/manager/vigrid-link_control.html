@@ -1,0 +1,170 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Link Control");
+	
+	$gns_host=HTMLvalue($_GET["gnshost"]);
+	$project_id=HTMLvalue($_GET["project_id"]);
+	$link_id=HTMLvalue($_GET["link_id"]);
+  if (($gns_host=="") || ($project_id=="") || ($link_id==""))
+  {
+    print("I miss the GNS Host, Project ID or Link ID to control it, exiting");
+    exit;
+  }
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+
+  // First display link details
+  $links=gns_getlinks($gns_controller,$gns_host,$project_id);
+  // print "\n\n"; print_r($links); print "\n\n";
+
+  // if any filter_ argument in URL, let's take action
+  parse_str($_SERVER['QUERY_STRING'], $url_params);
+  $update=0;
+  $filter_command=array();
+  foreach ($url_params as $param => $value)
+  {
+    // print("P=".$param.", V=".$value."\n");
+    if (preg_match("/filter_/",$param))
+    {
+      $order=substr($param,7);
+      if ($order=="suspend")
+      {
+        if ($value==0) { $filter_command[$order]=FALSE; }
+        if ($value==1) { $filter_command[$order]=TRUE; }
+      }
+      else
+      {
+        // ALL filters must be sent each time, else return to standard value
+        // -d '{"filters":  {"frequency_drop": [10], "packet_loss": [20], "delay": [30, 40] , "corrupt": [51], "bpf": ["dst host.127.0.0.1\n dst host 127.0.0.2"]}, "suspend" : false}'
+        if (preg_match("/delay_latency/",$order))
+        { $filter_command["filters"]["delay"][0]=(int)$value; }
+        else if (preg_match("/delay_jitter/",$order))
+        { $filter_command["filters"]["delay"][1]=(int)$value; }
+        else if ($order=="bpf")
+        { $filter_command["filters"][$order][0]=$value; }
+        else
+        { $filter_command["filters"][$order][0]=(int)$value; }
+      }
+      $update=1;
+      print("<FONT COLOR=Blue SIZE=+1><B>Link command: $order=$value</B></FONT><BR>\n");
+    }
+  }
+
+  // reget links
+  if ($update==1)
+  {
+    // print "\nFILTERS:\n"; print_r($filter_command); print"\n\n";
+    // print "\nJSON:\n"; print json_encode($filter_command); print "\n\n";
+    $json=gns_link_command($gns_controller,$gns_host,$project_id,$link_id,$filter_command);
+    // print_r($json);
+    
+    $links=gns_getlinks($gns_controller,$gns_host,$project_id); print("<BR>");
+  }
+  
+  for ($l=0;$l<sizeof($links);$l++)
+  {
+    if ($links[$l]['link_id']==$link_id)
+    {
+      // print("Got it: ".$links[$l]['link_id']."/".$link_id."<BR>");
+      print("<TABLE BORDER=1>");
+      $project_name=gns_getprojectnamebyuuid($gns_host,$project_id);
+      print("<TR><TD>Project</TD><TD>".$project_name."</TD></TR>");
+      print("<TR><TD>Link ID</TD><TD>".$links[$l]['link_id']."</TD></TR>");
+      print("<TR><TD>Link type</TD><TD>".$links[$l]['link_type']."</TD></TR>");
+      if ($links[$l]['capturing']!="")
+      {
+        print("<TR><TD>Capturing ?</TD><TD>".$links[$l]['capturing']."</TD></TR>");
+        print("<TR><TD>Capturing file path</TD><TD>".$links[$l]['capturing_file_path']."</TD></TR>");
+        print("<TR><TD>Capturing file name</TD><TD>".$links[$l]['capturing_file_name']."</TD></TR>");
+      }
+      print("<TR><TD>Bound to</TD><TD>");
+      print("<TABLE WIDTH=100% BORDER=1>");
+      for ($n=0;$n<2;$n++)
+      {
+        $node_name=gns_getnodenamebyuuid($gns_host,$project_id,$links[$l]['nodes'][$n]['node_id']);
+        print("<TR><TD>Node ".$node_name."</TD><TD>Adapter ".$links[$l]['nodes'][$n]['adapter_number']."</TD><TD>Port ".$links[$l]['nodes'][$n]['port_number']."</TD></TR>");
+      }
+      print("</TABLE>");
+
+      print("<TR><TD>Specifications</TD><TD>");
+      print("<TABLE WIDTH=100% BORDER=1>");
+      print("<TR><TD>Suspended&nbsp;?</TD><TD ALIGN=CENTER>");
+
+
+      if ($links[$l]['suspend']!="") { print("<A HREF=\"/manager/vigrid-link_control.html?gnshost=".$gns_host."&project_id=".$project_id."&link_id=".$link_id."&filter_suspend=0\">YES</A></TD></TR>"); }
+      else { print("<A HREF=\"/manager/vigrid-link_control.html?gnshost=".$gns_host."&project_id=".$project_id."&link_id=".$link_id."&filter_suspend=1\">NO</A></TD></TR>\n"); }
+
+      $filters=0;
+      foreach($links[$l]['filters'] as $filter_name => $value)
+      {
+        foreach($value as $sub_param => $filter_value)
+        {
+          $filters++;
+        }
+      }
+      if ($filters<6)
+      {
+        // populate filters with value=0 for all filters, "" for bpf, and FALSE for suspended
+        if ($links[$l]['suspend']=="")                  { $links[$l]['suspend']=FALSE; }
+        if ($links[$l]['filters']['corrupt']==0)        { $links[$l]['filters']['corrupt'][]=0; }
+        if ($links[$l]['filters']['delay'][0]==0)       { $links[$l]['filters']['delay'][0]=0; }
+        if ($links[$l]['filters']['delay'][1]==0)       { $links[$l]['filters']['delay'][0]=0; }
+        if ($links[$l]['filters']['frequency_drop']==0) { $links[$l]['filters']['frequency_drop'][]=0; }
+        if ($links[$l]['filters']['packet_loss']==0)    { $links[$l]['filters']['packet_loss'][]=0; }
+        if (!$links[$l]['filters']['bpf'])              { $links[$l]['filters']['bpf'][]=""; }
+        $filters=1;
+      }
+
+      print("<FORM ACTION=\"/manager/vigrid-link_control.html\" ID=\"LinkControl\">");
+      
+      foreach($links[$l]['filters'] as $filter_name => $value)
+      {
+        foreach($value as $sub_param => $filter_value)
+        {
+          if ($filter_name=="delay")
+          {
+            if ($sub_param==1) { $real_filter_name="delay_jitter"; }
+            else { $real_filter_name="delay_latency"; }
+          }
+          else { $real_filter_name=$filter_name; }
+          
+          print("<TR><TD>Filter: ".$real_filter_name."</TD><TD>");
+          print("<INPUT TYPE=\"hidden\" NAME=\"gnshost\" VALUE=\"".$gns_host."\">");
+          print("<INPUT TYPE=\"hidden\" NAME=\"link_id\" VALUE=\"".$link_id."\">");
+          print("<INPUT TYPE=\"hidden\" NAME=\"project_id\" VALUE=\"".$project_id."\">");
+          
+          if ($real_filter_name=="bpf")
+          { print("<TEXTAREA COLS=40 ROWS=5 NAME=\"filter_".$real_filter_name."\" FORM=\"LinkControl\">".$filter_value."</TEXTAREA>"); }
+          else
+          { print("<INPUT TYPE=TEXT SIZE=4 NAME=\"filter_".$real_filter_name."\" VALUE=\"".$filter_value."\">"); }
+        }
+        print("</TD></TR>\n");
+      }
+      print("<TR><TD COLSPAN=2 ALIGN=CENTER><INPUT TYPE=\"submit\" VALUE=\"CHANGE FILTERS\"></TD></TR></FORM>\n");
+    
+      print("</TABLE></TD></TR>");
+      print("</TABLE>");
+    }
+  }
+?>
+</html>

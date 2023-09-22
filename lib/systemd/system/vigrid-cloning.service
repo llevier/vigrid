@@ -1,0 +1,21 @@
+[Unit]
+Description=Vigrid Cloning Daemon
+Wants=network-online.target
+After=network.target network-online.target gns3.service
+
+[Service]
+Type=forking
+User=root
+Group=gns3
+PermissionsStartOnly=true
+
+ExecStart=/home/gns3/vigrid/bin/vigrid-daemon-cloning -d -l /var/log/gns3/vigrid.log
+ExecStop=/bin/kill -TERM $MAINPID
+
+UMask=022
+
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

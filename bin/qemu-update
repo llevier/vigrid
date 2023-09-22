@@ -1,0 +1,156 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+PWD=`pwd`
+
+echo "### Qemu installation/update script..."
+
+if [ "x$1" != "x" ]
+then
+  VER=$1
+  echo "Argument provided: '$VER', I will use it as forced version"
+fi
+
+echo "### Getting last stable Qemu version..."
+LIST=`curl -ko - https://download.qemu.org/ 2>/dev/null | sed 's/^.*href=\"//g' | sed 's/\".*$//g'|grep "^qemu-"|grep -v "qemu-.*-rc" | grep "\.xz$"|tail -1`
+
+QEMU_VER=`echo $LIST | sed 's/qemu-//' | sed 's/\.tar.xz//'`
+echo "  Current Qemu stable version appears to be $QEMU_VER."
+[ "x$VER" != "x" ] && echo "  Your ENFORCED $VER" && QEMU_VER=$VER
+
+echo "### Checking your Qemu version (x86_64)..."
+QEMU_LOCAL=`which -a qemu-system-x86_64`
+
+if [ "x$QEMU_LOCAL" != "x" ]
+then
+  for i in $QEMU_LOCAL
+  do
+    QEMU_LOCAL_VER=`$i --version | head -1| awk '{print $NF;}'`
+    echo "  Local Qemu ($i) appears to be $QEMU_LOCAL_VER."
+  done
+  echo
+else
+  echo "I cant find a Qemu on this system"
+fi
+
+until false
+do
+  echo -n "Do you wish to update [y/N] ? "
+  read ANS
+  
+  case $ANS in
+    y|Y)
+      break
+      ;;
+    *)
+      exit
+      ;;
+  esac
+done
+
+until false
+do
+  VIRGL=0
+  echo -n "Do you wish to add the VirGL option permitting to use GPU in Qemu [Y/n] ? "
+  read ANS
+
+  case $ANS in
+    n|N)
+      break
+      ;;
+    *)
+      echo
+      echo "### Updating..."
+      apt update
+      [ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+      echo
+      echo "### Adding VirGL packages..."
+      apt install -y virgl-server libvirglrenderer1 libvirglrenderer-dev
+      [ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+      VIRGL=1
+      break
+      ;;
+  esac
+done
+
+echo
+echo "### Downloading Qemu source..."
+wget -c https://download.qemu.org/qemu-$QEMU_VER.tar.xz
+[ $? -ne 0 ] && echo "Download failed, exiting." && exit 1
+
+echo
+echo "### Extracting data..."
+rm -rf qemu-$QEMU_VER
+xz -dfc qemu-$QEMU_VER.tar.xz | tar xf -
+[ $? -ne 0 ] && echo "Extract failed, exiting." && exit 1
+
+echo
+echo "### Deleting source tarball to save disk space..."
+rm -f qemu-$QEMU_VER.tar.xz
+
+echo
+echo "### Adding deb-src packages..."
+cat /etc/apt/sources.list | sed 's/^# deb-src/deb-src/' >/etc/apt/sources.list.new
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+mv /etc/apt/sources.list.new /etc/apt/sources.list
+
+echo
+echo "### Updating system..."
+apt update
+[ $? -ne 0 ] && echo "Update failed, exiting." && exit 1
+
+echo
+echo "### Adding Qemu build dependancies..."
+apt build-dep -y qemu
+[ $? -ne 0 ] && echo "Update failed, exiting." && exit 1
+
+echo
+echo "###   Adding packages..."
+apt install -y bison flex pkg-config build-essential libepoxy-dev libdrm-dev libgbm-dev libx11-dev libvirglrenderer-dev libpulse-dev libsdl2-dev libpixman-1-dev build-essential
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+apt install -y python3 python3-dev python3-pip
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+echo
+echo "### Installing Ninja..."
+pip3 install ninja
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+echo
+echo "### Configuring Qemu..."
+[ $VIRGL -eq 1 ] && OPTION="--enable-virglrenderer --enable-opengl"
+cd qemu-$QEMU_VER && ./configure --enable-sdl --enable-system --enable-modules --audio-drv-list=pa --enable-kvm $OPTION
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+echo
+echo "### Compiling Qemu..."
+make -j$(nproc)
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+echo
+echo "### Installing Qemu, you shouls read Qemu-$QEMU_VER:"
+make install && /usr/local/bin/qemu-system-x86_64 --version
+[ $? -ne 0 ] && echo "Action failed, exiting." && exit 1
+
+echo
+echo "### You can run Qemu with '-device virtio-vga-gl -display egl-headless' flags to access GPU"
+
+echo
+echo "### Deleting source tree, keeping tarball."
+cd $PWD
+rm -rf qemu-$QEMU_VER
+
+echo
+echo "ALL DONE."
+

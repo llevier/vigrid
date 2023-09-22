@@ -1,0 +1,31 @@
+default=autoinstall
+timeout=30
+timeout_style=menu
+
+echo \"Trying /grub2-cfg/grub.cfg-\$net_default_mac\"
+configfile \"/grub2-cfg/grub.cfg-\$net_default_mac\"
+
+echo \"Trying grub.cfg-\$net_default_mac\"
+configfile \"grub.cfg-\$net_default_mac\"
+
+insmod part_gpt
+insmod fat
+insmod chain
+
+%%DISTROS%%%
+
+menuentry 'Continue normal boot process' --id normal {
+  exit
+}
+
+menuentry 'Chainload into BIOS bootloader on first disk' --id local_chain_legacy_hd0 {
+  set root=(hd0,0)
+  chainloader +1
+  boot
+}
+
+menuentry 'Chainload into BIOS bootloader on second disk' --id local_chain_legacy_hd1 {
+  set root=(hd1,0)
+  chainloader +1
+  boot
+}

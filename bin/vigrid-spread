@@ -1,0 +1,108 @@
+#!/bin/bash
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+CHK=`which rsync`
+if [ "x$CHK" = "x" ]
+then
+  echo "I cant find rsync, installing it..."
+  sudo apt install -y rsync
+  [ $? -ne 0 ] && echo "Install failed, exiting..." && exit 1
+fi
+
+USAGE="$0 [ -H 'Host list' (format Name:IP Name:IP...) ] -K sshkey -U user -S 'files_or_dirs' -T 'target_destination'
+  Upon no user or SSHkey, assuming gns3 from Vigrid configuration"
+
+SEC=0
+while getopts 'S:T:H:K:U:' OPTIONS
+do
+   case "$OPTIONS" in
+        S)      FILES="$OPTARG";;
+        T)      TARGET="$OPTARG";;
+        H)      LIST="$OPTARG";;
+        U)      USER="$OPTARG";;
+        K)      VIGRID_SSHKEY="$OPTARG";;
+        [?])
+          print >&2 "$USAGE"
+          exit 1
+    ;;
+   esac
+done
+
+[ "x$FILES" = "x" -o "x$TARGET" = "x"  ] && echo $USAGE && exit 1
+
+[ "x$USER" = "x" ] && USER='gns3'
+[ "x$VIGRID_SSHKEY" = "x" ] && VIGRID_SSHKEY=$VIGRID_SSHKEY_GNS
+
+if [ "x$LIST" = "x" ]
+then
+  echo "No host, using Vigrid configuration"
+  
+  HOSTNAME=`hostname`
+  
+  for i in $VIGRID_GNS_SLAVE_HOSTS
+  do
+    NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+    HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+    
+    CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
+    if [ $CHK -eq 0 ]
+    then
+      LIST="$LIST $HOST:$NAME"
+    else
+      echo "Skipping myself..."
+    fi
+  done
+fi
+
+[ "x$LIST" = "x" ] && echo "No host anywhere, exiting" && exit 1
+
+echo "Host(s) list: $LIST"
+echo "Objects(s) to transfer to '$TARGET' directory on host(s): $FILES"
+
+for i in $LIST
+do
+  NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+  HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+
+  echo
+ 
+  echo "### Spreading on $NAME ($HOST):"
+  echo
+
+  for f in $FILES
+  do
+    rsync -avz --progress --inplace --delete-before --delete -e "ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS" $f $USER@$HOST:$TARGET/
+    if [ $? -ne 0 ]
+    then
+      echo "WARNING: rsync exited with an error !!"
+    fi
+  done
+
+done
+
+echo "### OK ALL DONE"
+

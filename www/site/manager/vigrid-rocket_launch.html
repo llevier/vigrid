@@ -1,0 +1,37 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Rocket Launcher");
+?>
+<HTML>
+<FONT SIZE=+2>This page is to guide you to massive clone a project and launch the clones.</FONT><BR><BR>
+<TABLE>
+<TR><TD><FONT SIZE=+1>Step</FONT></TD><TD><FONT SIZE=+1>Description</FONT></TD></TR>
+<TR><TD></TD><TD></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>1</B></FONT></TD><TD><FONT SIZE=+1>Properly <A HREF="/manager/vigrid-control_tower.html?activeonly=1" TARGET="S1">shutdown</A> the project you wish to deploy</FONT></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>2</B></FONT></TD><TD><FONT SIZE=+1>Once all nodes are off, <A HREF="/manager/vigrid-snapshot.html" TARGET="S2">snapshot</A> the project as a 'Clone Source'</FONT></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>3</B></FONT></TD><TD><FONT SIZE=+1>You can now <A HREF="/manager/vigrid-clones_industrial.html" TARGET="S3">'industrial clone'</A> the project to fit your needs</FONT><BR><FONT COLOR=Red><B>IMPORTANT: check your source project is permitted to run when leaving gns3, else it will auto_close.</B></FONT></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>4</B></FONT></TD><TD><FONT SIZE=+1>Now the clones are created, ensure <A HREF="/manager/vigrid-control_tower.html" TARGET="S4">Vigrid infrastructure</A> reflects this (each server lists all clones)</FONT></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>5</B></FONT></TD><TD><FONT SIZE=+1>To be able to rollback at its start any clone, <A HREF="/manager/vigrid-snapshot_industrial.html" TARGET="S5">snapshot</A> each of them</FONT></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>6</B></FONT></TD><TD><FONT SIZE=+1>Get the <A HREF="/manager/vigrid-dhcp.html" TARGET="S6">MAC address and define IP address to update the DHCP server</A></FONT></TD></TR>
+<TR><TD ALIGN=CENTER><FONT SIZE=+1><B>7</B></FONT></TD><TD><FONT SIZE=+1>Everything should be ready here. Define your <A HREF="/manager/vigrid-launch.html" TARGET="S7">launch matrix and start all clones</A></FONT></TD></TR>
+</TABLE>
+</HTML>

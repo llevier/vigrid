@@ -1,0 +1,612 @@
+#!/bin/bash
+#
+# Vigrid configuration utility
+#
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+if [ ! -f /usr/bin/dialog ]
+then
+  echo "dialog package is missing, installing it..."
+  apt install -y dialog
+fi
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+INPUT=/tmp/menu.sh.$$
+OUTPUT=/tmp/output.sh.$$
+trap "rm $OUTPUT 2>/dev/null; rm $INPUT 2>/dev/null; exit" SIGHUP SIGINT SIGTERM
+
+# Message display
+display_result() {
+  dialog --title "$1" \
+    --no-collapse \
+    --msgbox "$2" 0 0
+}
+
+# Welcome popup
+DISP_MSG="Welcome to Vigrid Cyber Range configuration utility
+
+Loading $VIGRID_CONF..."
+DISP_MSG_LEN=${#DISP_MSG}
+DISP_MSG_LEN=$((DISP_MSG_LEN+4))
+
+# Vigrid Types
+DISP_VIGRID_TYPE[1]="1:Standalone GNS3 server & local storage"
+DISP_VIGRID_TYPE[2]="2:Standalone GNS3 server + NAS storage"
+DISP_VIGRID_TYPE[3]="3:GNS3 Farm MASTER server + NAS storage"
+DISP_VIGRID_TYPE[4]="4:GNS3 Farm SLAVE server + NAS storage"
+DISP_VIGRID_TYPE[5]="5:GNS3 Scalable SLAVE server + NAS storage"
+
+# Vigrid network designs
+DISP_VIGRID_NETWORK[1]="1:Native network configuration"
+DISP_VIGRID_NETWORK[2]="2:TINY Cyber Range network configuration on 4 NICs"
+DISP_VIGRID_NETWORK[3]="3:FULL Cyber Range network configuration on 6 NICs"
+
+# Let's start !
+dialog --clear
+
+dialog --no-collapse --infobox "$DISP_MSG" 5 $DISP_MSG_LEN
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+sleep 1
+
+################################# Change Vigrid Type
+VIGRIDtype()
+{
+  IFS_BAK=$IFS
+  IFS=$'\n'
+
+  MENU_ITEMS_COUNT=${#DISP_VIGRID_TYPE[@]}
+
+  # Uniformizing text length for a nice display
+  MENU_WIDTH=0
+  for ITEM in ${DISP_VIGRID_TYPE[@]}
+  do
+    ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+    [ ${#ITEM_DESC} -gt $MENU_WIDTH ] && MENU_WIDTH=${#ITEM_DESC}
+  done
+  MENU_WIDTH=$((MENU_WIDTH+1))
+  MENU_WIDTH_FULL=$((MENU_WIDTH+10))
+
+  [ $MENU_ITEMS_COUNT -gt 8 ] && MENU_ITEMS_COUNT=8
+
+  unset MENU_LIST
+  declare -a $MENU_LIST
+  I=0
+  for ITEM in ${DISP_VIGRID_TYPE[@]}
+  do
+    ITEM_NAME=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $1;}'`
+    ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+    #MENU_LIST="$MENU_LIST $ITEM_NAME ${ITEM_DESC// /_}"
+    MENU_LIST[$I]=$ITEM_NAME
+    I=$((I+1))
+    MENU_LIST[$I]="$(printf "%-"$MENU_WIDTH"s" $ITEM_DESC)"
+    I=$((I+1))
+  done
+
+  IFS=$IFS_BAK
+
+  until false
+  do
+    DEFAULT=""
+    [ $VIGRID_TYPE -ne 0 ] && DEFAULT="--default-item $VIGRID_TYPE"
+    dialog --backtitle "Vigrid extension to GNS3 configuration utility" \
+      --title "Vigrid design selection" $DEFAULT \
+      --menu "Which design do you wish to apply on this server ?" \
+      12 55 $MENU_ITEMS_COUNT "${MENU_LIST[@]}" 2>"${INPUT}"
+    RC=$?
+    
+      if [ $RC -eq 0 ]
+      then
+        VAL=$(<"${INPUT}")
+
+        for (( i=0; i<$MENU_ITEMS_COUNT; i++ ))
+        do
+          DISP_VIGRID_TYPE_LINE=${DISP_VIGRID_TYPE[i]}
+          DISP_VIGRID_TYPE_NAME=`echo "$DISP_VIGRID_TYPE"| awk 'BEGIN { FS=":";} {print $1;}'`
+          if [ "x$DISP_VIGRID_TYPE_NAME" != "x$VAL" ]
+          then
+            VIGRID_TYPE=$VAL
+            return $VIGRID_TYPE
+          fi
+        done
+      else
+        return $VIGRID_TYPE
+      fi
+  done
+}
+
+################################# Change Vigrid Type
+VIGRIDnetwork()
+{
+  IFS_BAK=$IFS
+  IFS=$'\n'
+
+  MENU_ITEMS_COUNT=${#DISP_VIGRID_NETWORK[@]}
+
+  # Uniformizing text length for a nice display
+  MENU_WIDTH=0
+  for ITEM in ${DISP_VIGRID_NETWORK[@]}
+  do
+    ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+    [ ${#ITEM_DESC} -gt $MENU_WIDTH ] && MENU_WIDTH=${#ITEM_DESC}
+  done
+  MENU_WIDTH=$((MENU_WIDTH+1))
+  MENU_WIDTH_FULL=$((MENU_WIDTH+10))
+
+  [ $MENU_ITEMS_COUNT -gt 8 ] && MENU_ITEMS_COUNT=8
+
+  unset MENU_LIST
+  declare -a $MENU_LIST
+  I=0
+  for ITEM in ${DISP_VIGRID_NETWORK[@]}
+  do
+    ITEM_NAME=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $1;}'`
+    ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+    #MENU_LIST="$MENU_LIST $ITEM_NAME ${ITEM_DESC// /_}"
+    MENU_LIST[$I]=$ITEM_NAME
+    I=$((I+1))
+    MENU_LIST[$I]="$(printf "%-"$MENU_WIDTH"s" $ITEM_DESC)"
+    I=$((I+1))
+  done
+
+  IFS=$IFS_BAK
+
+  until false
+  do
+    DEFAULT=""
+    [ $VIGRID_NETWORK -ne 0 ] && DEFAULT="--default-item $VIGRID_NETWORK"
+    dialog --backtitle "Vigrid extension to GNS3 configuration utility" \
+      --title "Vigrid network design selection" $DEFAULT \
+      --menu "Which design do you wish to apply on this server ?" \
+      10 $MENU_WIDTH_FULL $MENU_ITEMS_COUNT "${MENU_LIST[@]}" 2>"${INPUT}"
+    RC=$?
+
+    if [ $RC -eq 0 ]
+    then
+      VAL=$(<"${INPUT}")
+      for (( i=0; i<$MENU_ITEMS_COUNT; i++ ))
+      do
+        DISP_VIGRID_NETWORK_LINE=${DISP_VIGRID_NETWORK[i]}
+        DISP_VIGRID_NETWORK_NAME=`echo "$DISP_VIGRID_NETWORK"| awk 'BEGIN { FS=":";} {print $1;}'`
+        if [ "x$DISP_VIGRID_NETWORK_NAME" != "x$VAL" ]
+        then
+          VIGRID_NETWORK=$VAL
+          return $VIGRID_NETWORK
+        fi
+      done
+    else
+      return $VIGRID_NETWORK
+    fi
+  done
+}
+
+VIGRIDsave()
+{
+  # First we check configuration before saving it. That is logical test (if server then slaves...)
+  DISP_CHECK="Sanity checking configuration..."
+  dialog --no-collapse --infobox "$DISP_CHECK" 14 70
+
+  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 5 ]
+  then
+    DISP_CHECK="$DISP_CHECK
+- Vigrid type: OK "
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+  else
+    DISP_CHECK="$DISP_CHECK
+- Vigrid type: FAILED, stopping "
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+    return
+  fi
+
+  BAD=0
+  DISP_CHECK="$DISP_CHECK
+- Vigrid network: "
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+  if [ $VIGRID_NETWORK -ge 1 -a $VIGRID_NETWORK -le 3 ]
+  then
+    if [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ]
+    then
+      [ $VIGRID_NETWORK -eq 2  ] && NIC_LIST="internet:6 superadmin:6 blue_exposed:7 red_exposed:7 blue_users:2 red_users:2"
+      [ $VIGRID_NETWORK -eq 3  ] && NIC_LIST="internet:6 superadmin:6 blue_exposed:7 red_exposed:7 blue_users:2 red_users:2 blue_admin:6 red_admin:6"
+
+      for NIC in $NIC_LIST
+      do
+        NIC_NAME=`echo "$NIC"|awk 'BEGIN { FS=":"; } { print $1;}'`
+        NIC_COUNT=`echo "$NIC"|awk 'BEGIN { FS=":"; } { print $1;}'`
+        
+        CHK=`cat /etc/network/interfaces 2>/dev/null| egrep "(auto|iface|bridge_ports|bond-master) [BN]"$NIC_NAME"0"|wc -l`
+        
+        DISP_CHECK="$DISP_CHECK $NIC_NAME"
+        dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+        
+        if [ $CHK -ne $NIC_COUNT ]
+        then
+          BAD=1
+          break
+        fi
+      done
+    fi
+  else
+    BAD=1
+  fi
+
+  if [ $BAD -eq 1 ]
+  then
+    DISP_CHECK="$DISP_CHECK FAILED, stopping "
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+    return
+  else
+    DISP_CHECK="$DISP_CHECK OK "
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+  fi
+  
+  # if Vigrid type >1, implies NAS server
+  if [ $VIGRID_TYPE -gt 1 ]
+  then
+    DISP_CHECK="$DISP_CHECK
+- Central storage..."
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+     BAD=0
+    for i in $VIGRID_NAS_SERVER
+    do
+      DISP_CHECK="$DISP_CHECK $i"
+      dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+      # showmount -e $i + ssh key ssh_options $i
+    done
+
+    if [ $BAD -eq 1 ]
+    then
+      DISP_CHECK="$DISP_CHECK FAILED, stopping "
+      dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+      return
+    else
+      DISP_CHECK="$DISP_CHECK OK "
+      dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+    fi
+  fi
+
+  DISP_CHECK="$DISP_CHECK
+- GNS3 credentials..."
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+  DISP_CHECK="$DISP_CHECK
+- MySQL credentials..."
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+  # If Master
+  if [ $VIGRID_TYPE -eq 2 -o $VIGRID_TYPE -eq 3 ]
+  then
+    DISP_CHECK="$DISP_CHECK
+- Master Server SSH key..."
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+    DISP_CHECK="$DISP_CHECK
+- Master Server slave hosts..."
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+  fi
+
+  DISP_CHECK="$DISP_CHECK
+
+OK, ALL SEEMS FINE, SAVING"
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+  # Checks ok, now saving
+  DISP_CHECK="$DISP_CHECK
+- Saving $VIGRID_CONF to its .old"
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+  cp $VIGRID_CONF $VIGRID_CONF.old
+  RC=$?
+  if [ $RC -eq 0 ]
+  then
+    DISP_CHECK="$DISP_CHECK: OK"
+  else
+    DISP_CHECK="$DISP_CHECK: FAILED, stopping"
+    return
+  fi
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+  DISP_CHECK="$DISP_CHECK
+- Saving $VIGRID_CONF..."
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+
+  DATE=`/bin/date '+%Y-%m-%d %H:%M:%S'`
+  
+  RC_ALL=0
+  echo "#
+# Vigrid configuration file (saved $DATE)
+#
+
+# Vigrid Type: 1=Standalone, 2=Standalone+NAS, 3=GNS3farmMaster+NAS, 4=GNS3farmSlave+NAS, 5=GNS3scalableSlave+NAS
+VIGRID_TYPE=$VIGRID_TYPE
+
+# Vigrid Network design: 2=Tiny CyberRange (4 NICs), 5=Normal Cyber Range (6 NICs)
+VIGRID_NETWORK=$VIGRID_NETWORK
+
+# NAS IP address/hostname for NAS dependant servers">$VIGRID_CONF
+RC_ALL=$?
+
+if [ "x$VIGRID_NAS_SERVER" != "x" ]
+then
+  echo "VIGRID_NAS_SERVER=$VIGRID_NAS_SERVER
+
+# ZFS or BTRFS
+VIGRID_STORAGE_MODE=\"$VIGRID_STORAGE_MODE\"
+
+# root directory for Storage. Either NAS or local.
+# Vigrid default=Vstorage (ZFS) or Bstorage (BTRfs). Could be /volume1 (Synology BTRfs)
+# Without value, / will be storage root
+VIGRID_STORAGE_ROOT=\"$VIGRID_STORAGE_ROOT\"" >>$VIGRID_CONF
+else
+  echo "# VIGRID_NAS_SERVER=IPaddress/Name
+
+# ZFS or BTRFS
+#VIGRID_STORAGE_MODE=\"ZFS\"
+
+# root directory for Storage. Either NAS or local.
+# Vigrid default=Vstorage (ZFS) or Bstorage (BTRfs). Could be /volume1 (Synology BTRfs)
+# Without value, / will be storage root
+#VIGRID_STORAGE_ROOT=\"/Vstorage\"" >>$VIGRID_CONF
+fi
+RC=$?;[ $RC -ne 0 ] && RC_ALL=2
+
+  echo "
+# Hostname:IP adress of MX hub to send emails (cloning center)
+#VIGRID_SMTP_RELAY=\"MXhostname:MX_IPaddress:SMTPport\"
+#VIGRID_SMTP_MAILFROM=\"from_user@from.host\"
+
+# GNS3 Credentials
+VIGRID_GNS_USER=$GNS3_USER
+VIGRID_GNS_PASS=$GNS3_PASS
+
+# MySQL credentials for Vigrid Cloning Daemon
+VIGRID_MYSQL_HOST=\"$VIGRID_MYSQL_HOST\"
+VIGRID_MYSQL_USER=$VIGRID_MYSQL_USER
+VIGRID_MYSQL_PASS=$VIGRID_MYSQL_PASS
+
+# SSH options for all ssh actions
+VIGRID_SSHKEY_OPTIONS=\"-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=error\"
+
+# DHCP Server (if not local), will use VIGRID_SSHKEY_GNS for log extraction
+#VIGRID_DHCP_SERVER=\"DHCPhostname:DHCP_IPaddress\"
+
+# Websockify options
+#VIGRID_WEBSOCKIFY_OPTIONS=\"--timeout=300\"
+
+# NAS SSH key for DHCP server
+#VIGRID_SSHKEY_DHCP=/home/gns3/.ssh/id_dhcp_server
+
+# NAS SSH key for automated authentication
+VIGRID_SSHKEY_NAS=$VIGRID_SSHKEY_NAS
+
+# GNS3 servers (upon Master of a farm, either slaves or scalable)
+VIGRID_SSHKEY_GNS=$VIGRID_SSHKEY_GNS
+
+# Remote console (iDRAC, iLo, IMM etc) credentials for remote power on">>$VIGRID_CONF
+RC=$?;[ $RC -ne 0 ] && RC_ALL=3
+
+  if [ "x$VIGRID_POWER_USER" != "x" -o "x$VIGRID_POWER_PASS" != "x" ]
+  then
+    echo "VIGRID_POWER_USER=$VIGRID_POWER_USER
+VIGRID_POWER_PASS=$VIGRID_POWER_PASS
+# VIGRID_POWER_ACCESS=(IPMI|SSH)
+VIGRID_POWER_ACCESS=$VIGRID_POWER_ACCESS
+">>$VIGRID_CONF
+    RC=$?;[ $RC -ne 0 ] && RC_ALL=4
+  else
+    echo "# VIGRID_POWER_USER=
+# VIGRID_POWER_PASS=
+# VIGRID_POWER_ACCESS=(IPMI|SSH)
+">>$VIGRID_CONF
+    RC=$?;[ $RC -ne 0 ] && RC_ALL=4
+  fi
+  
+  if [ $VIGRID_TYPE -eq 2 -o $VIGRID_TYPE -eq 3 ]
+  # Master server
+  then
+    if [ "x$VIGRID_GNS_SLAVE_HOSTS" = "x" ]
+    then
+      echo "
+# GNS3 hosts (slaves or scalable servers). Format: IP:name IP:name...
+# VIGRID_GNS_SLAVE_HOSTS=
+">>$VIGRID_CONF
+      RC=$?;[ $RC -ne 0 ] && RC_ALL=5
+    else
+      echo "
+# GNS3 hosts (slaves or scalable servers). Format: IP:name IP:name...
+VIGRID_GNS_SLAVE_HOSTS=$VIGRID_GNS_SLAVE_HOSTS
+">>$VIGRID_CONF
+      RC=$?;[ $RC -ne 0 ] && RC_ALL=5
+    fi
+  fi
+
+  if [ $RC_ALL -eq 0 ]
+  then
+    DISP_CHECK="$DISP_CHECK: OK"
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+  else
+    DISP_CHECK="$DISP_CHECK: at least one step ($RC_ALL) failed
+- Restoring backup..."
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+    
+    # restoring backup
+    cp $VIGRID_CONF.old $VIGRID_CONF
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+      DISP_CHECK="$DISP_CHECK: OK"
+    else
+      DISP_CHECK="$DISP_CHECK: FAILED"
+      return
+    fi
+    dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+    sleep 2
+    return
+  fi
+
+  chown gns3:gns3 $VIGRID_CONF 2>/dev/null
+
+  DISP_CHECK="$DISP_CHECK
+  
+OK, ALL DONE"
+  dialog --no-collapse --keep-window --infobox "$DISP_CHECK" 14 70
+  
+  sleep 2
+  return
+}
+
+################################# MAIN MENU
+DIALOG_CANCEL=254
+DIALOG_ESC=255
+
+VIGRID_MENU=1
+
+until false
+do
+  IFS_BAK=$IFS
+  IFS=$'\n'
+
+  [ "$VIGRID_TYPE" = "x" ] && VIGRID_TYPE=1
+  VIGRID_TYPE_DESC=`echo ${DISP_VIGRID_TYPE[$VIGRID_TYPE]}| sed 's/[0-9]://'`
+
+  [ "$VIGRID_NETWORK" = "x" ] && VIGRID_NETWORK=1
+  VIGRID_NETWORK_DESC=`echo ${DISP_VIGRID_NETWORK[$VIGRID_NETWORK]}| sed 's/[0-9]://'`
+
+  # Main menu
+  DISP_VIGRID_MENU[1]=" 1-Vigrid Type: $VIGRID_TYPE_DESC "
+  DISP_VIGRID_MENU[2]=" 2-Vigrid Network Design: $VIGRID_NETWORK_DESC "
+
+  VIGRID_NAS_SERVER_DESC=$VIGRID_NAS_SERVER
+  [ "x$VIGRID_NAS_SERVER" = "x" ] && VIGRID_NAS_SERVER_DESC="none"
+  DISP_VIGRID_MENU[3]=" 3-Central Storage Server(s): $VIGRID_NAS_SERVER_DESC "
+
+  VIGRID_MYSQL_DESC="USER=$VIGRID_MYSQL_USER, PASS=$VIGRID_MYSQL_PASS"
+  [ "x$VIGRID_MYSQL_USER" = "x" -o "x$VIGRID_MYSQL_PASS" = "x" ] && VIGRID_MYSQL_DESC="none valid"
+  DISP_VIGRID_MENU[4]=" 4-MySQL credentials: $VIGRID_MYSQL_DESC "
+  
+  VIGRID_GNS_DESC="USER=$VIGRID_GNS_USER, PASS=$VIGRID_GNS_PASS"
+  [ "x$VIGRID_GNS_USER" = "x" -o "x$VIGRID_GNS_PASS" = "x" ] && VIGRID_GNS_DESC="none valid"
+  DISP_VIGRID_MENU[5]=" 5-GNS3 credentials: $VIGRID_GNS_DESC "
+
+  VIGRID_GNS_SLAVE_HOSTS_DESC=$VIGRID_GNS_SLAVE_HOSTS
+  [ "x$VIGRID_GNS_SLAVE_HOSTS" = "x" ] && VIGRID_GNS_SLAVE_HOSTS_DESC="none"
+  DISP_VIGRID_MENU[6]=" 6-GNS3 slave/scalable hosts: $VIGRID_GNS_SLAVE_HOSTS_DESC "
+
+  VIGRID_SSHKEY_OPTIONS_DESC=$VIGRID_SSHKEY_OPTIONS
+  [ "x$VIGRID_SSHKEY_OPTIONS" = "x" ] && VIGRID_SSHKEY_OPTIONS_DESC="none"
+  DISP_VIGRID_MENU[7]=" 7-SSH options: $VIGRID_SSHKEY_OPTIONS_DESC "
+
+  VIGRID_SSHKEY_VIGRID_NAS_DESC=$VIGRID_SSHKEY_NAS
+  [ "x$VIGRID_SSHKEY_NAS" = "x" ] && VIGRID_SSHKEY_VIGRID_NAS_DESC="none"
+  DISP_VIGRID_MENU[8]=" 8-SSH key for NAS: $VIGRID_SSHKEY_VIGRID_NAS_DESC "
+
+  VIGRID_SSHKEY_VIGRID_GNS_DESC=$VIGRID_SSHKEY_GNS
+  [ "x$VIGRID_SSHKEY_GNS" = "x" ] && VIGRID_SSHKEY_VIGRID_GNS_DESC="none"
+  DISP_VIGRID_MENU[9]=" 9-SSH key for GNS servers: $VIGRID_SSHKEY_VIGRID_GNS_DESC "
+
+  VIGRID_POWER_DESC="USER=$VIGRID_POWER_USER, PASS=$VIGRID_POWER_PASS, $VIGRID_POWER_ACCESS access"
+  [ "x$VIGRID_POWER_USER" = "x" -o "x$VIGRID_POWER_ACCESS" = "x" ] && VIGRID_POWER_DESC="none"
+
+  DISP_VIGRID_MENU[10]="10-Power credentials & method: $VIGRID_POWER_DESC "
+
+  MENU_ITEMS_COUNT=${#DISP_VIGRID_MENU[@]}
+  
+  # Uniformizing text length for a nice display
+  MENU_WIDTH=0
+  for ITEM in ${DISP_VIGRID_MENU[@]}
+  do
+    ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+    [ ${#ITEM_DESC} -gt $MENU_WIDTH ] && MENU_WIDTH=${#ITEM_DESC}
+  done
+  MENU_WIDTH=$((MENU_WIDTH+1))
+  
+  [ $MENU_ITEMS_COUNT -gt 14 ] && MENU_ITEMS_COUNT=14
+
+  unset MENU_LIST
+  declare -a $MENU_LIST
+  I=0
+  for ITEM in ${DISP_VIGRID_MENU[@]}
+  do
+    ITEM_NAME=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $1;}'`
+    ITEM_DESC=`echo "$ITEM" | awk 'BEGIN { FS=":";} {print $2;}'`
+    #MENU_LIST="$MENU_LIST $ITEM_NAME ${ITEM_DESC// /_}"
+    MENU_LIST[$I]="$ITEM_NAME"
+    I=$((I+1))
+    MENU_LIST[$I]="$(printf "%-"$MENU_WIDTH"s" $ITEM_DESC)"
+    I=$((I+1))
+  done
+
+  IFS=$IFS_BAK
+
+  DEFAULT=""
+  [ $VIGRID_MENU -ne 0 ] && DEFAULT="--default-item $VIGRID_MENU"
+  
+  dialog --backtitle "Vigrid extension to GNS3 configuration utility" \
+    --cancel-label "Quit" --extra-button --extra-label "Save" \
+    --title "Vigrid configuration menu" $DEFAULT \
+    --menu "Which items do you wish to update ?" \
+    18 90 $MENU_ITEMS_COUNT "${MENU_LIST[@]}" 2>"${INPUT}"
+  RC=$?
+
+  VIGRID_MENU=""
+  if [ $RC -eq 0 ]
+  then
+    VAL=$(<"${INPUT}")
+    for (( i=0; i<$MENU_ITEMS_COUNT; i++ ))
+    do
+      DISP_VIGRID_MENU_LINE=${DISP_VIGRID_MENU[i]}
+      DISP_VIGRID_MENU_NAME=`echo "$DISP_VIGRID_MENU"| awk 'BEGIN { FS="-";} {print $1;}'`
+      VIGRID_MENU=`echo "$VAL"| awk 'BEGIN { FS="-";} {print $1;}'`
+    done
+  elif [ $RC -eq 3 ] # Extra button
+  then
+    VIGRID_MENU=254
+  elif [ $RC -eq 1 ] # Cancel/QUIT
+  then
+    VIGRID_MENU=255
+  fi 
+  
+  case $VIGRID_MENU in
+    1)
+      VIGRIDtype
+      ;;
+    2)
+      VIGRIDnetwork
+      ;;
+    254)
+      VIGRIDsave
+      ;;
+    255)
+      exit 0
+      ;;
+    *)
+      echo "Unknown value ($VIGRID_MENU), asking again"
+      sleep 1
+      ;;
+  esac
+done
+

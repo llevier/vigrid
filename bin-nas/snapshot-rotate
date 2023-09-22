@@ -1,0 +1,118 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+
+NOW=`/bin/date +%s`
+
+DRY_RUN=0
+#DRY_RUN=1
+
+echo "Cleaning useless ZFS snapshots (USED=0)"
+BAD_LIST=`zfs list -t snapshot|awk '{print $1"%%"$2;}'|grep "%%0$"`
+for i in $BAD_LIST
+do
+  BAD_ZFS=`echo $i | sed 's/%%0$//'`
+  echo "  $BAD_ZFS"
+  [ $DRY_RUN -eq 0 ] && zfs destroy $BAD_ZFS
+done
+
+Z_LIST=`zfs list -t snapshot| egrep "^Vstorage(_BKP)*"| sed 's/@.*$//'|sort -ru`
+
+for i in $Z_LIST
+do
+  SNAP_LIST=`zfs list -t snapshot | grep "^$i@" | awk '{print $1;}' | sort -ru`
+  SNAP_LIST_SIZE=`echo "$SNAP_LIST" | wc -l`
+  SNAP_LIST_SIZE=`echo $SNAP_LIST_SIZE | sed 's/ //g'`
+
+  echo
+  echo "Zfilesystem: $i ($SNAP_LIST_SIZE snapshots)"
+
+  I=10
+
+  IFSBAK=$IFS
+  IFS="
+"
+
+  COUNT_7=0
+  COUNT_14=0
+  COUNT_21=0
+  COUNT_30=0
+  COUNT_MORE=0
+
+  COUNT_7_MAX=7
+  COUNT_14_MAX=1
+  COUNT_21_MAX=1
+  COUNT_30_MAX=1
+  COUNT_MORE_MAX=2
+
+  for j in $SNAP_LIST
+  do
+    SNAP_DELETE=0
+
+    ZFS_MARK=`echo "$j" | awk 'BEGIN { FS="@"; } { print $NF;}'`
+    SNAP_TIME=`echo "$ZFS_MARK" | awk 'BEGIN { FS="-"; } { print $NF;}'`
+
+    SNAP_DIFF=""
+    CHK=`echo "$SNAP_TIME" | sed 's/[0-9]//g' | egrep -v "[0-9]"`
+    if [ "x$CHK" = "x" ]
+    then
+      [ "x$SNAP_TIME" != "x$j" ] && SNAP_DIFF=$((NOW-SNAP_TIME))
+    else
+      echo "  Not one my of snapshots, invalid marker format ($SNAP_MARK), ignoring"
+    fi
+    echo "SNAP: $j      $SNAP_TIME ($SNAP_DIFF)"
+
+    if [ "x$SNAP_DIFF" != "x" ]
+    then
+      if [ $SNAP_DIFF -le 604800 ] # 7 days, 7 to keep
+      then
+        echo "   $j : <=7d (max=$COUNT_7_MAX)"
+        [ $COUNT_7 -ge $COUNT_7_MAX ] && SNAP_DELETE=1
+        COUNT_7=$((COUNT_7+1))
+      elif [ $SNAP_DIFF -gt 604800 -a $SNAP_DIFF -le 1209600 ] # 7-14 days, 1 to keep
+      then
+        echo "   $j >7d <=14d (max=$COUNT_14_MAX)"
+        [ $COUNT_14 -ge $COUNT_14_MAX ] && SNAP_DELETE=1
+        COUNT_14=$((COUNT_14+1))
+      elif [ $SNAP_DIFF -gt 1209600 -a $SNAP_DIFF -le 1814400 ] # 14-21 days, 1 to keep
+      then
+        echo "   $j >14d <=21d (max=$COUNT_21_MAX)"
+        [ $COUNT_21 -ge $COUNT_21_MAX ] && SNAP_DELETE=1
+        COUNT_21=$((COUNT_21+1))
+      elif [ $SNAP_DIFF -gt 1209600 -a $SNAP_DIFF -le 2592000 ] # 14-21 days, 1 to keep
+      then
+        echo "   $j >21d <=30d (max=$COUNT_30_MAX)"
+        [ $COUNT_30 -ge $COUNT_30_MAX ] && SNAP_DELETE=1
+        COUNT_30=$((COUNT_30+1))
+      else
+        echo "   $j >30d"
+        [ $COUNT_MORE -ge $COUNT_MORE_MAX ] && SNAP_DELETE=1
+        COUNT_MORE=$((COUNT_MORE+1))
+      fi
+
+      if [ $SNAP_DELETE -eq 1 ]
+      then
+        echo "   *** deleting $j"
+        [ $DRY_RUN -eq 0 ] && zfs destroy $j
+      fi
+    else
+      SNAP_MARK=`echo $j | awk 'BEGIN { FS="@"; } { print $NF;}'`
+      echo "  Not one my of snapshots, invalid marker format ($SNAP_MARK), ignoring"
+    fi
+  done
+  
+  echo
+  echo "   *** Summary: 7d=$COUNT_7(max=$COUNT_7_MAX), 14d=$COUNT_14(max=$COUNT_14_MAX), 21d=$COUNT_21(max=$COUNT_21_MAX), 30d=$COUNT_30(max=$COUNT_30_MAX), >30d=$COUNT_MORE(max=$COUNT_MORE_MAX)"
+done
+

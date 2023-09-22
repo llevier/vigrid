@@ -1,0 +1,126 @@
+#!/bin/bash
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/gns3/vigrid/bin
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+USAGE="$0 [ -H 'Host list' (format Name:IP Name:IP...) ] [ -K sshkey ] [ -U user ] -A 'shell command(s)' [ -S ] [ -M ]
+  Upon no user or SSHkey, assuming gns3 from Vigrid configuration. -M to include server itself in action"
+
+SEC=0
+MYSELF=0
+while getopts 'A:H:K:U:SM' OPTIONS
+do
+   case "$OPTIONS" in
+        A)      ACTION="$OPTARG";;
+        H)      LIST="$OPTARG";;
+        U)      GNS_USER="$OPTARG";;
+        K)      VIGRID_SSHKEY="$OPTARG";;
+        S)      SEC=1;;
+        M)      MYSELF=1;;
+        [?])
+          print >&2 "$USAGE"
+          exit 1
+    ;;
+   esac
+done
+
+[ "x$ACTION" = "x" ] && echo $USAGE && exit 1
+
+[ "x$GNS_USER" = "x" ] && GNS_USER='gns3'
+[ "x$VIGRID_SSHKEY" = "x" ] && VIGRID_SSHKEY=$VIGRID_SSHKEY_GNS
+
+if [ "x$LIST" = "x" ]
+then
+  echo "No host, using Vigrid configuration"
+
+  # hostname:IP:port
+  HOSTNAME=`hostname`
+  if [ $MYSELF -eq 1 ]
+  then
+    LIST="$HOSTNAME:127.0.0.1:3080"
+  fi
+  
+  for i in $VIGRID_GNS_SLAVE_HOSTS
+  do
+    NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+    HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+    
+    CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
+    if [ $CHK -eq 0 ]
+    then
+      LIST="$LIST $HOST:$NAME"
+    fi
+  done
+fi
+
+[ "x$LIST" = "x" ] && echo "No host anywhere, exiting" && exit 1
+
+if [ $SEC -eq 0 ]
+then
+  echo -n "Parallel launch on "
+  SEC="&"
+else
+  echo -n "Sequencial launch on "
+  SEC=""
+fi
+
+echo "host(s) list: $LIST"
+echo "Command(s) to execute: $ACTION"
+
+for i in $LIST
+do
+  NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+  HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+
+  echo
+ 
+  echo "### Executing on $NAME ($HOST):"
+  echo
+  
+  T=`date +'%b %d %H:%M:%S'`
+
+  if [ "x$NAME" = "x$HOSTNAME" ]
+  # local execution, no SSH
+  then
+    echo "$T vigrid-run: launched \'$ACTION\' on me ($HOSTNAME)..." >>/var/log/gns3/vigrid.log
+    eval $ACTION $SEC
+  else
+    echo "$T vigrid-run: launched \'$ACTION\' on $HOST..." >>/var/log/gns3/vigrid.log
+    eval ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS $GNS_USER@$HOST \'$ACTION\' $SEC
+  fi
+  RC=$?
+  if [ $RC -ne 0 ]
+  then
+    echo \'$ACTION\' failed with RC=$RC
+  fi
+done
+
+echo "### Waiting for all children..."
+wait
+
+echo "### OK ALL DONE"
+

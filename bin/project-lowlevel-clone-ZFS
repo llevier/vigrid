@@ -1,0 +1,479 @@
+#!/usr/bin/php
+<?php
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+##################################################################################################################################
+# Summarized, clone-ZFS is called locally as:
+#  project-lowlevel-clone-$vigrid_storage_mode -r $log_file
+#   -G $gns3_home -P $gns3_home/projects -R $vigrid_storage_root
+#   -c $console_range_start -e $console_range_end
+#   -Z "clonesource_$Pversion_source" -s $Puuid_source -S "$Pname_source" -T "$Pname_target"
+#
+#  or is called on NAS removing -G -P -R to replace with -B with values:
+#  vigrid_type=1   -> -B "/home/gns3/GNS3"
+#  vigrid_type=2|5 -> -B "$vigrid_storage_root/NFS/$host/GNS3mount/GNS3"
+#  vigrid_type=3|4 -> -B "$vigrid_storage_root/GNS3/GNS3farm/GNS3"
+##################################################################################################################################
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+# Verbose level
+$verbose=0;
+
+$opt=getopt("D:G:P:s:S:t:T:r:Z:c:e:R:v:W");
+
+$project_deletion=$opt['D'];
+$from_project_snapshot=$opt['Z'];
+$from_project_uuid=$opt['s'];
+$from_project_name=$opt['S'];
+$to_project_uuid=$opt['t'];
+$to_project_name=$opt['T'];
+
+$console_port_start=$opt['c'];
+$console_port_end=$opt['e'];
+
+if (isset($opt['W'])) { $www=1; $www_ok="OK="; $www_bad="BAD="; }
+if (isset($opt['v'])) { $verbose=$opt['v']; }
+
+$report_file=$opt['r'];
+
+$gns_home=$opt['G'];
+$gns_home_projects=$opt['P'];
+$vigrid_storage_root=$opt['R'];
+
+########################### Functions & NAS detection
+$vigrid_functions="/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+if (file_exists($vigrid_functions)) 
+{ include $vigrid_functions; $am_on_nas=0; }
+else
+{ $am_on_nas=1; }
+
+if (!function_exists(dirTOzdataset))
+{
+  function dirTOzdataset($dir)
+  {
+    if (($dir=="") || (!file_exists($dir))) { return(""); }
+    
+    chdir($dir);
+    $real=trim(shell_exec("/bin/pwd"));
+    if ($real!=$dir) { $real_dir=$real; }
+    else { $real_dir=$dir; }
+    
+    list($rc,$res)=get_exec("/sbin/zfs list -o name,mountpoint","",false);
+    
+    for ($i=0;$i<sizeof($res);$i++)
+    {
+      $res[$i]=trim($res[$i]);
+      report(5,"D2Z LINE=$res[$i]\n");
+      $f=preg_split("/\s +/",$res[$i]);
+      report(5,"DIR=".$f[1]."\n");
+      
+      if ($f[1]==$real_dir)
+      { return($f[0]); }
+    }
+    
+    return("");
+  }
+}
+
+if (!function_exists(zdatasetTOdir))
+{
+  function zdatasetTOdir($zdataset)
+  {
+    report(4,"Searching dir for $zdataset\n");
+    
+    list($rc,$res)=get_exec("/sbin/zfs list","",false);
+    
+    for ($i=0;$i<sizeof($res);$i++)
+    {
+      $res[$i]=trim($res[$i]);
+      report(5,"Z2D LINE=$res[$i]\n");
+      $f=explode(" ",$res[$i]);
+      report(5,"DATASET=".$f[0].", DIR=".$f[sizeof($f)-1]."\n");
+      
+      if ($f[0]==$zdataset)
+      { report(5,"  returning DIR\n"); return($f[sizeof($f)-1]); }
+    }
+    
+    return("");
+  }
+}
+
+if (!function_exists(get_exec))
+{
+  function get_exec($command,$prefix,$display)
+  {
+    $res=array();
+
+    $fd=popen("$command 2>&1","r");
+    while (!feof($fd))
+    {
+      $line=fgets($fd,4096);
+      array_push($res,$line);
+      if ($display) { report(0,$prefix.$line); ob_implicit_flush(); }
+    }
+    $rc=pclose($fd);
+    
+    return(array($rc,$res));
+  }
+}
+
+if (!function_exists(gen_uuid))
+{
+  function gen_uuid()
+  {
+    return sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+      // 32 bits for "time_low"
+      random_int( 0, 0xffff ), random_int( 0, 0xffff ),
+      // 16 bits for "time_mid"
+      random_int( 0, 0xffff ),
+      // 16 bits for "time_hi_and_version",
+      // four most significant bits holds version number 4
+      random_int( 0, 0x0fff ) | 0x4000,
+      // 16 bits, 8 bits for "clk_seq_hi_res",
+      // 8 bits for "clk_seq_low",
+      // two most significant bits holds zero and one for variant DCE1.1
+      random_int( 0, 0x3fff ) | 0x8000,
+      // 48 bits for "node"
+      random_int( 0, 0xffff ), random_int( 0, 0xffff ), random_int( 0, 0xffff )
+    );
+  }
+}
+
+if (!function_exists(gen_mac))
+{
+  function gen_mac()
+  {
+    $md5_str=md5(random_int(0,0xffffff));
+    $md5_str=preg_replace('/ff/','/fa/',$md5_str);
+    $mac=str_split($md5_str,2);
+       
+    return sprintf( '02:%s:%s:%s:%s:%s',$mac[0],$mac[1],$mac[2],$mac[3],$mac[4]);
+
+    // return sprintf( '%02x:%02x:%02x:%02x:%02x:%02x',
+      // random_int( 0, 0x10 ),
+      // random_int( 0, 0xff ),
+      // random_int( 0, 0xff ),
+      // random_int( 0, 0xff ),
+      // random_int( 0, 0xff ),
+      // random_int( 0, 0x10 )
+    // );
+  }
+}
+
+if (!function_exists(clean_array))
+{
+  function clean_array($var)
+  {
+    return ($var !== NULL && $var !== FALSE && $var !== "");
+  }
+}
+
+if (!function_exists(report))
+{
+  function report($level,$text)
+  {
+    global $report_file;
+    global $verbose;
+
+    if ($verbose<$level)
+    { return; }
+    
+    if ($report_file!="")
+    {
+      $fd=fopen($report_file,"a");
+      if (!$fd) { print("Cant append $report_file !!, stopping\n"); }
+
+      fwrite($fd,$text);
+
+      fclose($fd);
+    }
+    else { print $text; }
+  }
+}
+
+if (!function_exists(find_all_files))
+{
+  function find_all_files($mode,$dir, &$results = array())
+  {
+    $files = scandir($dir);
+
+    foreach ($files as $key => $value)
+    {
+      $path = realpath($dir . DIRECTORY_SEPARATOR . $value);
+      if (!is_dir($path))
+      {
+        // mode=0 -> all, mode=1 -> only dirs
+        if ($mode==0) { $results[] = $path; }
+      }
+      else if ($value != "." && $value != "..")
+      {
+        find_all_files($mode,$path, $results);
+        $results[] = $path;
+      }
+    }
+    return $results;
+  }
+}
+############################## Functions end
+
+$host=gethostname();
+
+if ($am_on_nas==0) // Currently running on a Master server
+{
+  // Getting Vigrid config
+  $vigrid_type=VIGRIDconfig("VIGRID_TYPE");
+
+  $vigrid_nas_server=VIGRIDconfig("VIGRID_NAS_SERVER");
+  $t=explode(":",$vigrid_nas_server);
+  $vigrid_nas_server=$t[1];
+
+  $vigrid_storage_mode=strtoupper(VIGRIDconfig("VIGRID_STORAGE_MODE"));
+  $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+
+  if ($vigrid_storage_mode!="ZFS")
+  {
+      report(0,$www_bad."  This script only work with ZFS storage mode, exiting\n");
+      exit(-1);
+  }
+  
+  if ($vigrid_nas_server!="")
+  {
+    // Launched on NAS
+    report(0,$www_ok."Launching '$vigrid_storage_root/GNS3/bin/project-lowlevel-clone-ZFS' command on NAS $vigrid_nas_server\n");
+
+    // Getting real physical location of projects
+    if (($vigrid_type==2) || ($vigrid_type==5)) { $gns_home="$vigrid_storage_root/NFS/$host/GNS3mount/GNS3"; }
+    if (($vigrid_type==3) || ($vigrid_type==5)) { $gns_home="$vigrid_storage_root/GNS3/GNS3farm/GNS3"; }
+    $gns_home_projects="$gns_home/projects";
+
+    $vigrid_sshkey_nas=VIGRIDconfig("VIGRID_SSHKEY_NAS");
+    $vigrid_sshkey_options=VIGRIDconfig("VIGRID_SSHKEY_OPTIONS");
+
+    $run_flags="-G $gns_home -P $gns_home_projects -R $vigrid_storage_root";
+    if ($project_deletion!="")      { $run_flags.=" -D $project_deletion"; }
+    if ($from_project_snapshot!="") { $run_flags.=" -Z \"$from_project_snapshot\""; }
+    if ($from_project_uuid!="")     { $run_flags.=" -s $from_project_uuid"; }
+    if ($from_project_name!="")     { $run_flags.=" -S \"$from_project_name\""; }
+    if ($to_project_uuid!="")       { $run_flags.=" -t $to_project_uuid"; }
+    if ($to_project_name!="")       { $run_flags.=" -T \"$to_project_name\""; }
+    if ($console_port_start!="")    { $run_flags.=" -c $console_port_start"; }
+    if ($console_port_end!="")      { $run_flags.=" -e $console_port_end"; }
+    if ($report_file!="")           { $run_flags.=" -r $report_file"; }
+
+    $list=array("project-lowlevel-clone-ZFS","project-lowlevel-reset");
+    for ($i=0;$i<sizeof($list);$i++)
+    {
+      list($rc,$res)=get_exec("ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP stat -t %s $VIGRID_STORAGE_ROOT/GNS3/bin/$list[$i] 2>/dev/null","",false);
+      $size_remote=$res[0];
+
+      $stat = stat("/home/gns3/vigrid/bin/$list[$i]");
+      $size_local=$stat['size'];
+      
+      if ($size_local!=$size_remote)
+      {
+        $command="cat /home/gns3/vigrid/bin/$list[$i] | ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$vigrid_nas_server 'mkdir -p $vigrid_storage_root/GNS3/bin;cat >$vigrid_storage_root/GNS3/bin/$list[$i]'";
+        list($rc,$res)=get_exec($command,"",false);
+        $command="ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$vigrid_nas_server chmod 755 $vigrid_storage_root/GNS3/bin/$list[$i]";
+        list($rc,$res)=get_exec($command,"",false);
+      }
+    }
+    
+    $command="ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$vigrid_nas_server $vigrid_storage_root/GNS3/bin/project-lowlevel-clone-ZFS $run_flags 2>/dev/null";
+    report(4,"Launching $command\n");
+    list($run_rc,$res)=get_exec($command,"",false);
+    report(4,"RC=$run_rc\n$res\n");
+      
+    // Fill local report_file with data from remote report_file
+    if ($report_file!="")
+    {
+      $command="ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$vigrid_nas_server cat $report_file 2>/dev/null";
+      list($rc,$res)=get_exec($command,"",false);
+      if ($rc==0)
+      { for ($i=0;$i<sizeof($res);$i++) { report(0,$res[$i]); } }
+    }
+
+    exit ($rc);
+  }
+}
+
+// From here, it runs locally
+report(0,$www_ok."Running on $host...\n");
+
+if ($www==0)
+{
+  print("In order to be able to industrially clone GNS3 Projects over ZFS, you need to prepare the field:
+    1- Your project *must* be in its own ZFS dataset, it can contain sub datasets.
+    2- Once your source project is ready, make it a clone snapshot.
+    3- Provide the snapshot mark to this command with the -Z flag.
+    4- IMPORTANT : destroying the original snapshot will terminate all its ZFS clones !
+    
+  ");
+}
+
+# Procedure is :
+# 1- zfs snapshot dataset
+# 2- zfs clone snapshot clone_dataset
+#
+# For Project versionning:
+# 1- Delete previous project version
+# 2- Select appropriate snapshot (associated version)
+# 3- zfs clone snapshot clone_dataset
+#
+# DONT GO TO:
+# 3- zfs promote clone_dataset
+# because destroying clone_dataset will then enforce destroying of original dataset as well (ZFS wird behavior)
+
+// turn off output buffering
+ob_implicit_flush();
+
+report(0,$www_ok."Project lowlevel ZFS cloning\n");
+
+report(2,"GNS home for projects is: $gns_home_projects\n");
+$zfs_gns_home_projects=dirTOzdataset($gns_home_projects);
+if ($zfs_gns_home_projects=="")
+{ report(0,$www_bad." cant identify ZFS dataset for directory $gns_home_projects, exiting.\n"); exit(1); }
+
+// Delete a clone ?
+if ($project_deletion!="")
+{
+  report(0,$www_ok."Project deletion requested: $project_deletion\n");
+  if ($to_project_name=="")
+  {
+    report(0,$www_bad."  -T is required to double check\n");
+    exit(-1);
+  }
+  
+  $config_file="$gns_home_projects/$project_deletion/$to_project_name.gns3";
+  $fd=fopen($config_file,"r");
+  if (!$fd) { report(0,$www_bad."Cant open $config_file !!, incorrect $to_project_name, exiting\n"); exit(1); }
+  fclose($fd);
+  
+  // http://people.redhat.com/rpeterso/Patches/NFS/NLM/004.txt
+
+  $command="zfs destroy -r ".$zfs_gns_home_projects."/".$project_deletion;
+  report(0,$www_ok." Command: $command");
+  list($rc,$res)=get_exec($command,"",false);
+  report(0,$www_ok."\n RC=$rc (".print_r($res,true).")\n");
+
+  if ($rc==0) { print ("Target project uuid $project_deletion DELETED\n"); } // hack to confirm deletion to CLONErun function
+
+  exit;
+}
+
+// Cloning !
+if (($from_project_uuid=="")
+ || (!preg_match("/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$/",$from_project_uuid))
+ || ($from_project_name=="") || ($from_project_snapshot=="") || ($to_project_name=="")
+ || ($gns_home=="") || ($gns_home_projects=="") || ($console_port_start=="") || ($console_port_end==""))
+{
+  print($www_bad."$argv[0] arguments:
+    [ -D target_project_uuid ] project deletion
+    -G GNS3 home directory (eg: ~gns3/GNS3)
+    -P GNS3 projects directory (eg: ~gns3/GNS3/projects)
+
+    -s source_project_uuid
+    -Z source_projet_snapshot_name
+    -S source_project_name
+    -T target_project_name
+    -c console ports starting value
+    -e console ports ending value
+    [ -r report_file ] [ -W ]\n");
+
+  exit(1);
+}
+
+report(0,$www_ok."Source project UUID: $from_project_uuid@$from_project_snapshot ($from_project_name) to clone as $to_project_name\n");
+report(0,$www_ok."ZFS GNS3 projects dataset: $zfs_gns_home_projects\n");
+
+report(0,$www_ok."ZFS cloning project $from_project_uuid\n\n");
+
+// Phase 1 : generating a target project free UUID...
+// Phase 2: ZFS cloning source project snapshot to target project dataset...
+// Phase 3: passing relay to nas-project-lowlevel-reset for UUID/MAC/consoles reset
+
+// 1- Generating UUID for project
+report(0,$www_ok."Phase 1: generating a target project free UUID...\n");
+$to_project_uuid_pairs=array();
+while (1)
+{
+  if ($to_project_uuid=="")
+  { $to_project_uuid=gen_uuid(); }
+  
+  if (!is_dir("$gns_home_projects/$to_project_uuid")) { break; }
+
+  report(0,$www_ok."  $to_project_uuid already existing, let's try again..\n");
+  sleep (1);
+}
+report(0,$www_ok."  Target project UUID for $to_project_name will be $to_project_uuid\n");
+
+// 2- Cloning
+report(0,$www_ok."Phase 2: Cloning project data tree...\n");
+report(0,$www_ok."  Cloning (ZFS clone of master snapshot) project data directory...\n");
+
+$source_dataset="$zfs_gns_home_projects/$from_project_uuid@$from_project_snapshot";
+report(1,$www_ok."    Source dataset: $source_dataset\n");
+
+$target_dataset="$zfs_gns_home_projects/$to_project_uuid";
+report(1,$www_ok."    Target dataset: $target_dataset\n");
+
+$command="zfs clone \"$source_dataset\" \"$target_dataset\"";
+report(3,$www_ok."    Executing $command\n");
+list($rc,$res)=get_exec($command,"    ",true);
+if ($rc!=0) { report(0,$www_bad."    Cloning order failed ($rc)\n"); }
+
+// Checking ZFS clone succeeded
+$t=zdatasetTOdir($target_dataset);
+report(3,$www_ok."    Checking target dataset directory exists: $t\n");
+if (!file_exists($t))
+{
+  report(0,$www_bad."###ERROR : zfs clone failed !\n");
+  report(0,$www_bad."".print_r($res,true));
+  report(0,$www_bad."###ERROR : EXITING\n");
+  exit(1);
+}
+
+// 3- Reseting target project
+// Reset command will be in same directory as the current one
+
+report(0,$www_ok."Phase 3: Reseting target project (UUID, MAC, consoles), delegated to project-lowlevel-reset...\n");
+
+if ($am_on_nas==1) // On NAS
+{ $command="$vigrid_storage_root/GNS3/bin/project-lowlevel-reset"; }
+else
+{ $command="/home/gns3/vigrid/bin/project-lowlevel-reset"; }
+
+if ($www==1) { $command.=" -i P -W"; }
+$command.=" -G $gns_home -P $gns_home_projects";
+$command.=" -s $from_project_uuid -S $from_project_name";
+$command.=" -t $to_project_uuid -T $to_project_name";
+$command.=" -c $console_port_start -e $console_port_end";
+
+if ($report_file!="") { $command="$command -r $report_file"; }
+report(3,$www_ok."    Executing $command\n");
+
+list($rc,$res)=get_exec($command,"  ",true);
+
+if ($rc==0)
+{ report(0,$www_ok."Cloning $from_project_name ($from_project_uuid) as $to_project_name -> ### SUCCESS ###\n"); exit; }
+else
+{
+  report(2,"RC=$rc\n$res\n");
+  report(0,$www_bad."Cloning $from_project_name ($from_project_uuid) as $to_project_name -> ### FAIL ###\n");
+  report(0,$www_bad."Project must *still* be lowlevel resetted to be properly cloned\n");
+}
+
+exit ($rc);
+
+?>

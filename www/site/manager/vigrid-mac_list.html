@@ -1,0 +1,75 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+$hostname=gethostname(); ?>
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<HTML>
+ <HEAD>
+   <TITLE><?php print $hostname; ?> MAC list</TITLE>
+ </HEAD>
+ <BODY>
+	 <TABLE><TR><TD><IMG SRC="/images/Vigrid.png" height=124 width=200></TD>
+   <TD><FONT SIZE=+2><FONT COLOR="#f75c05">Vigrid DHCPd leases status of <?php print $hostname; ?></FONT></FONT></TD></TR></TABLE>
+<?php
+	error_reporting(E_ERROR | E_PARSE);
+
+	// GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+	
+  // turn off output buffering
+	ob_implicit_flush();
+	
+	// get leases
+	$dhcp_leases=get_dhcp_leases();
+
+	$gns_controllers=gns_getcontrollers();
+	
+	// gets projects on the unique controller (0)
+	$gns_projects=gns_getprojects($gns_controllers,$gns_controllers['computes'][0]['name']);
+
+	print("<TABLE BORDER=1><TR><TD>Project name</TD><TD>Node</TD><TD>Network Port</TD><TD>Status</TD><TD>MAC address</TD><TD>DHCP IP address (<B>realnet0</B>)</TD></TR>");
+	
+	for ($i=0;$i<sizeof($gns_projects);$i++)
+	{
+		// open project in case of...
+		gns_project_command($gns_controllers,$gns_controllers['computes'][0]['name'],$gns_projects[$i]['project_id'],"open");
+
+		// get nodes
+		$gns_nodes=gns_getnodes($gns_controllers,$gns_controllers['computes'][0]['name'],$gns_projects[$i]['project_id']);
+		// print("NODES:");
+		// print_r($gns_nodes);
+	
+		for ($j=0;$j<sizeof($gns_nodes);$j++)
+		{
+			for ($k=0;$k<sizeof($gns_nodes[$j]['ports']);$k++)
+			{
+				if ($gns_nodes[$j]['ports'][0]['mac_address'] != "")
+				{
+					$port_status=gns_getlinkstatus($gns_controllers,$gns_controllers['computes'][0]['name'],$gns_projects[$i]['project_id'],$gns_nodes[$j]['node_id'],$gns_nodes[$j]['ports'][$k]['port_number']);
+					if ($dhcp_leases[$gns_nodes[$j]['ports'][$k]['mac_address']]!="")
+					{
+						print("<TR><TD>".$gns_projects[$i]['name']."</TD><TD>".$gns_nodes[$j]['name']."</TD>");
+						print("<TD>".$gns_nodes[$j]['ports'][$k]['name']."</TD>");
+						if ($port_status==1) { print ("<TD ALIGN=CENTER><IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15></TD>"); }
+						else { print ("<TD ALIGN=CENTER><IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15></TD>"); }
+						print("<TD>".$gns_nodes[$j]['ports'][$k]['mac_address']."</TD>");
+						print("<TD>".$dhcp_leases[$gns_nodes[$j]['ports'][$k]['mac_address']]."</TD></TR>");
+					}
+				}
+			}
+		}
+	}
+	print("</TABLE>\n");
+	
+?>
+</BODY></HTML>
+

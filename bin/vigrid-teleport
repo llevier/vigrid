@@ -1,0 +1,397 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+VIGRID_TELEPORT_HOME="/home/gns3/VIGRIDteleport"
+
+# To have script execution traced...
+SCRIPT_NAME=`basename $0`
+LOG_FILE="/tmp/$SCRIPT_NAME-log.out"
+DATE=`date '+%Y%m%d_%H%M%S'`
+
+Error()
+{
+  TXT=$*
+  
+  until false
+  do
+    echo
+    echo -n "$TXT do you wish to (F)orce continue, (C)ontinue/(R)un a sub shell/(E)xit script [F/C/R/E) ? "
+    read ANS
+    
+    case "$ANS" in
+      f|F)
+        return 2
+        ;;
+      c|C)
+        return 1
+        ;;
+      r|R)
+        echo "Launching /bin/sh via script command. Output will be added to the log file"
+        echo "Once you finished, end with the 'exit' command."
+        echo
+        # script /bin/sh /tmp/shell-$$.log
+        /bin/sh -xi
+        
+        # echo "Concatening shell output to log file..."
+        # cat /tmp/shell-$$.log >>$LOG_FILE
+        # rm /tmp/shell-$$.log
+        TXT="Shell ended,"
+        ;;
+      e|E)
+        echo "Ok. bye bye then..."
+        exit 1
+        ;;
+    esac
+  done
+}
+
+Display()
+{
+  NO_CR=0
+  NO_HEAD=0
+  
+  until false
+  do
+    case "$1" in
+      "-n")
+        NO_CR=1
+        shift
+        ;;
+      "-h")
+        NO_HEAD=1
+        shift
+        ;;
+      *)
+        TXT=$*
+        break
+        ;;
+    esac
+  done
+
+  [ $NO_HEAD -eq 0 ] && echo && echo "############# VIGRID DISPLAY ################################################################"
+
+  [ $NO_HEAD -eq 1 ] && echo -n "# "
+  
+  [ $NO_CR -eq 0 ] && echo "$TXT"
+  [ $NO_CR -eq 1 ] && echo -n "$TXT"
+  
+  return 0
+}
+
+rm -f $LOG_FILE 2>/dev/null
+(
+Display "Vigrid Teleport building script
+
+Upon any issue, script will pause, proposing to (force) continue, run a sub shell or exit procedure.
+Everything will be logged to $LOG_FILE.
+
+Press [RETURN] to start"
+read ANS
+
+Display -h "Checking needed packages/commands are there..."
+CMDS="debootstrap squashfs-tools isolinux syslinux-efi grub-pc-bin grub-efi-amd64 mtools mksquashfs grub-mkstandalone xorriso"
+for i in $CMDS
+do
+  CHK=`dpkg -l | grep "$i" 2>/dev/null`
+  if [ "x$CHK" = "x" ]
+  then
+    CHK=`which $i`
+    if [ "x$CHK" = "x" ]
+    then
+      Display "I cant find $i, installing it..."
+      sudo apt install -y $i || Error ", installed failed, exiting"
+    fi
+  fi
+done
+
+# Debian build
+mkdir -p $VIGRID_TELEPORT_HOME/debian-amd64 >/dev/null 2>/dev/null
+
+Display "Building latest Debian stable..."
+debootstrap --arch=amd64 --variant=minbase stable $VIGRID_TELEPORT_HOME/debian-amd64 http://ftp.debian.org/debian/
+
+Display "  Installing Debian image..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt update -y' || Error ', update failed'
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt install -y --no-install-recommends linux-image-amd64 live-boot' || Error ', install failed'
+
+Display "  Installing required packages..."
+
+DEBIAN_FRONTEND_BAK=$DEBIAN_FRONTEND
+export DEBIAN_FRONTEND=noninteractive
+
+# systemd-sysv
+PACKAGES="grub-pc-bin console-data console-setup-mini keyboard-configuration software-properties-common bash bandwidthd vim bc curl dialog dhcp-helper grub-efi-amd64 hostapd ipcalc iproute2 iptables iputils-ping isc-dhcp-client lynx netcat net-tools network-manager openvpn rfkill sipcalc snmpd tcpdump wget wireless-tools sysvinit-core"
+Display "    Installing $PACKAGES..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c "apt install -y $PACKAGES" || Error ', install failed'
+
+# for i in $PACKAGES
+# do
+  # Display "    Installing $i..."
+  # chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c "apt install -y $i" || Error ', install failed'
+# done
+
+Display "  Adding non-free & contrib to sources..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt-add-repository non-free'
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt-add-repository contrib'
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt update -y'
+
+Display "  Installing additionnal WiFi firmwares..."
+PACKAGES="atmel-firmware firmware-brcm80211 firmware-ipw2x00 firmware-iwlwifi firmware-libertas firmware-misc-nonfree firmware-ralink firmware-realtek firmware-zd1211"
+Display "    Installing $PACKAGES..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c "apt install -y $PACKAGES"
+
+# for i in $PACKAGES
+# do
+  # Display "    Installing $i..."
+  # chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c "apt install -y $i"
+# done
+
+DEBIAN_FRONTEND=$DEBIAN_FRONTEND_BAK
+
+Display "  Cleaning..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt purge -y rsync dnsmasq* exim*'
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'apt autoclean -y && apt autoremove -y'
+
+Display "Customizing for VIGRIDteleport..."
+
+until false
+do
+  Display -h -n "a VIGRIDteleport can be associated with a specific Vigrid zone, or be flexible able to connect to all.
+
+Risk is VIGRIDteleport carries the TLS AUTH key for zones, so Flexible means it carries all of them.
+  
+If you wish to associate this VIGRIDteleport to a single access, please name it, else enter '*' (star): "
+  read VIGRID_GATEWAY_ZONE
+  
+  if [ "x$VIGRID_GATEWAY_ZONE" = "x*" ]
+  then
+    break
+  elif [ "x$VIGRID_GATEWAY_ZONE" != "x" ]
+  then
+    if [ -f /etc/openvpn/certs/pki/$VIGRID_GATEWAY_ZONE-ta.key ]
+    then
+      break
+    else
+      VIGRID_ZONES_LIST=`ls -1 /etc/openvpn/certs/pki/VIGRID*_*-ta.key | sed "s'^.*VIGRID'VIGRID'"| sed "s'-ta.key$''"`
+      Display -h "I am sorry, I cant find the TLS Auth key for that VIGRIDteleport, try again with one of: "$VIGRID_ZONES_LIST
+      echo
+    fi
+  fi
+done
+
+Display -h "  hostname"
+echo "VIGRIDteleport" > $VIGRID_TELEPORT_HOME/debian-amd64/etc/hostname
+
+Display -h "  Installing VIGRIDteleport starting script"
+echo "sleep 2
+
+echo
+echo -n \"###############################################################################
+Welcome to VIGRIDteleport (built $DATE)
+
+Press [RETURN] to start...\"
+read ANS
+
+clear
+
+echo -n \"###############################################################################
+Welcome to VIGRIDteleport (built $DATE)
+Please login as root, password=vigrid
+All output will be logged into /var/log/VIGRIDteleport.log\"
+
+exit 0
+" >$VIGRID_TELEPORT_HOME/debian-amd64/etc/rc.local || Error ', rc.local install failed'
+
+cat /home/gns3/vigrid/etc/VIGRIDteleport-rc | sed "s/%%VIGRID_DATE%%/$DATE/" >$VIGRID_TELEPORT_HOME/debian-amd64/etc/rc.vigrid || Error ', rc.vigrid install failed'
+chmod 755 $VIGRID_TELEPORT_HOME/debian-amd64/etc/rc.vigrid || Error ', rc.vigrid chmod failed'
+
+Display -h "  Updating ~root/.profile..."
+echo "script -c /etc/rc.vigrid /var/log/VIGRIDteleport.log" >>$VIGRID_TELEPORT_HOME/debian-amd64/root/.profile || Error ', ~root/.profile install failed'
+
+# Flexible key... Must generate a VIGRIDteleport.conf per zone
+if [ "x$VIGRID_GATEWAY_ZONE" = "x*" ]
+then
+  VIGRID_ZONES=`echo $VIGRID_ZONES_LIST`
+else
+  VIGRID_ZONES=$VIGRID_GATEWAY_ZONE
+fi
+
+for i in $VIGRID_ZONES
+do
+  Display -h "  Adding VIGRIDteleport OpenVPN configuration..."
+  cp /home/gns3/vigrid/etc/VIGRIDteleport.tmpl $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf || Error ', install failed'
+
+  Display -h "    Adding SSL data (CA) in OpenVPN client configuration..."
+  DATA_CA=`cat /etc/openvpn/certs/pki/ca.crt`
+  DATA_CA=`echo $DATA_CA|sed 's/ //g'`
+  [ "x$DATA_CA" = "x" ] && Error 'Cant find OpenVPN CA data'
+  cat $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf | sed "s'%%VIGRID_TLS_CA%%'<ca>$DATA_CA</ca>'" >/tmp/VIGRIDteleport.conf$$
+  mv /tmp/VIGRIDteleport.conf$$ $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf
+
+  DATA_CERT=`cat /etc/openvpn/certs/pki/issued/CyberRange.crt`
+  DATA_CERT=`echo $DATA_CA|sed 's/ //g'`
+  [ "x$DATA_CERT" = "x" ] && Error 'Cant find OpenVPN CERT data'
+  cat $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf | sed "s'%%VIGRID_TLS_CERT%%'<cert>$DATA_CERT</cert>'" >/tmp/VIGRIDteleport.conf$$
+  mv /tmp/VIGRIDteleport.conf$$ $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf
+
+  DATA_KEY=`cat /etc/openvpn/certs/pki/private/CyberRange.key`
+  DATA_KEY=`echo $DATA_CA|sed 's/ //g'`
+  [ "x$DATA_KEY" = "x" ] && Error 'Cant find OpenVPN KEY data'
+  cat $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf | sed "s'%%VIGRID_TLS_KEY%%'<key$DATA_KEY</key>'" >/tmp/VIGRIDteleport.conf$$
+  mv /tmp/VIGRIDteleport.conf$$ $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf
+
+  DATA_AUTH=`cat /etc/openvpn/certs/pki/$VIGRID_GATEWAY_ZONE-ta.key`
+  DATA_AUTH=`echo $DATA_CA|sed 's/ //g'`
+  [ "x$DATA_AUTH" = "x" ] && Error 'Cant find OpenVPN AUTH data'
+  cat $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf | sed "s'%%VIGRID_TLS_AUTH%%'<tls-auth>$DATA_AUTH</tls-auth>'" >/tmp/VIGRIDteleport.conf$$
+  mv /tmp/VIGRIDteleport.conf$$ $VIGRID_TELEPORT_HOME/debian-amd64/etc/openvpn/VIGRIDteleport.conf
+done
+
+Display -h "  Customizing boot..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'cp /usr/share/sysvinit/inittab /etc/inittab' || Error ', setting inittab failed'
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'rm -f /etc/rc2.d/*openvpn /etc/rc2.d/*dhcp* /etc/rc2.d/S15network-manager' || Error ', disabling openvpn/networkmanager failed'
+
+Display -h "  Removing useless files..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'find / -name man -type d -exec rm -rf {} \; 2>/dev/null'
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'rm -rf /usr/share/doc'
+
+Display -h "  Setting 'vigrid' as 'root' password..."
+chroot $VIGRID_TELEPORT_HOME/debian-amd64 /bin/sh -c 'echo "vigrid\nvigrid" | passwd root' || Error ', setting failed'
+
+Display -h "  Updating network manager config..."
+echo "[main]
+plugins=ifupdown,keyfile
+no-auto-default=*
+dns=none
+
+[ifupdown]
+managed=false" >$VIGRID_TELEPORT_HOME/debian-amd64/etc/NetworkManager/NetworkManager.conf || Error ', setting failed'
+
+Display -h "  Updating hostapd config..."
+echo "interface=wlp2s0
+hw_mode=g
+channel=10
+ieee80211d=1
+country_code=FR
+ieee80211n=1
+wmm_enabled=1
+
+ssid=VIGRIDssid
+auth_algs=3
+wpa=3
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=VIGRIDssid" >$VIGRID_TELEPORT_HOME/debian-amd64/etc/hostapd/hostapd.conf || Error ', setting failed'
+
+# ISO build
+Display "Cleaning existing log files & history..."
+rm $VIGRID_TELEPORT_HOME/debian-amd64/root/.bash_history $VIGRID_TELEPORT_HOME/debian-amd64/root/.viminfo >/dev/null 2>/dev/null
+LOGS=`cd $VIGRID_TELEPORT_HOME/debian-amd64/var/log && ls -1 *.log`
+LOGS="$LOGS messages dmesg syslog lastlog"
+for i in  $LOGS
+do
+  Display -h "Wiping /var/log/$i..."
+  echo -n >"$VIGRID_TELEPORT_HOME/debian-amd64/var/log/$i"
+done
+
+#################
+mkdir -p $VIGRID_TELEPORT_HOME/image/live $VIGRID_TELEPORT_HOME/scratch >/dev/null 2>/dev/null
+touch $VIGRID_TELEPORT_HOME/image/VIGRID_TELEPORT || Error 'Cant touch file, exiting'
+
+Display -h "Updating image directory..."
+cp /home/gns3/vigrid/etc/VIGRIDteleport.tga $VIGRID_TELEPORT_HOME/image/ || Error ',VIGRIDteleport copy failed'
+
+Display "Copying VMlinuz..."
+cp $VIGRID_TELEPORT_HOME/debian-amd64/vmlinuz $VIGRID_TELEPORT_HOME/image/vmlinuz || Error 'Cant copy vmlinuz, exiting'
+cp $VIGRID_TELEPORT_HOME/debian-amd64/initrd.img $VIGRID_TELEPORT_HOME/image/initrd  || Error 'Cant copy initrd, exiting'
+
+Display -h "Copying EFI boot..."
+cp $VIGRID_TELEPORT_HOME/debian-amd64/usr/lib/grub/x86_64-efi/monolithic/grubx64.efi $VIGRID_TELEPORT_HOME/scratch/bootx64.efi || Error ', failed copying'
+
+Display -h "Creating grub.cfg"
+cat <<_EOF_ >$VIGRID_TELEPORT_HOME/scratch/grub.cfg || Error ',creation failed' 
+search --set=root --file /VIGRID_TELEPORT
+
+insmod all_video
+insmod vga
+insmod gfxterm
+insmod gfxterm_background
+
+set gfxmode="640x480x32"
+terminal_input console
+terminal_output gfxterm
+insmod tga
+
+set menu_auto_hide=1
+set timeout=1
+set timeout_style=hidden
+
+background_image --mode stretch /VIGRIDteleport.tga
+
+menuentry "VIGRIDteleport" {
+    linux /vmlinuz boot=live nomodeset quiet splash
+    initrd /initrd
+}
+_EOF_
+
+Display -h "Building SquashFS..."
+rm $VIGRID_TELEPORT_HOME/image/live/filesystem.squashfs 2>/dev/null
+mkdir -p $VIGRID_TELEPORT_HOME/image/live $VIGRID_TELEPORT_HOME/scratch 2>/dev/null
+mksquashfs $VIGRID_TELEPORT_HOME/debian-amd64 $VIGRID_TELEPORT_HOME/image/live/filesystem.squashfs -e boot -noappend -comp gzip || Error 'Cant mksquashfs VIGRIDteleport, exiting'
+
+Display "Building EFI ISO..."
+rm $VIGRID_TELEPORT_HOME/$VIGRID_TELEPORT_HOME-efi.iso >/dev/null 2>/dev/null
+grub-mkstandalone --format=x86_64-efi --output=$VIGRID_TELEPORT_HOME/scratch/bootx64.efi  \
+                --locales="" --fonts="" "boot/grub/grub.cfg=$VIGRID_TELEPORT_HOME/scratch/grub.cfg"
+                
+( cd $VIGRID_TELEPORT_HOME/scratch && dd if=/dev/zero of=efiboot.img bs=1M count=10 && \
+                mkfs.vfat efiboot.img && mmd -i efiboot.img efi efi/boot && \
+                mcopy -i efiboot.img ./bootx64.efi ::efi/boot/ )
+
+grub-mkstandalone --format=i386-pc --output=$VIGRID_TELEPORT_HOME/scratch/core.img \
+                --install-modules="linux normal iso9660 biosdisk memdisk search tar ls all_video gfxterm_background tga" \
+                --modules="linux normal iso9660 biosdisk search all_video gfxterm_background tga" \
+                --locales="" --fonts="" "boot/grub/grub.cfg=$VIGRID_TELEPORT_HOME/scratch/grub.cfg" || Error 'grub-mkstandalone failed, exiting'
+cat /usr/lib/grub/i386-pc/cdboot.img $VIGRID_TELEPORT_HOME/scratch/core.img > $VIGRID_TELEPORT_HOME/scratch/bios.img || Error 'Boot image copy failed, exiting'
+xorriso -as mkisofs -iso-level 3 -full-iso9660-filenames -volid "VIGRID_TELEPORT" \
+        -eltorito-boot boot/grub/bios.img -no-emul-boot -boot-load-size 4 -boot-info-table \
+        --eltorito-catalog boot/grub/boot.cat --grub2-boot-info --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
+        -eltorito-alt-boot -e EFI/efiboot.img -no-emul-boot -append_partition 2 0xef $VIGRID_TELEPORT_HOME/scratch/efiboot.img \
+        -output "$VIGRID_TELEPORT_HOME/VIGRIDteleport-efi.iso" \
+        -graft-points \
+                "$VIGRID_TELEPORT_HOME/image" \
+                /boot/grub/bios.img=$VIGRID_TELEPORT_HOME/scratch/bios.img \
+                /EFI/efiboot.img=$VIGRID_TELEPORT_HOME/scratch/efiboot.img || Error 'xorriso failed, exiting'
+
+echo "Building non-EFI ISO..."
+rm $VIGRID_TELEPORT_HOME/$VIGRID_TELEPORT_HOME.iso >/dev/null 2>/dev/null
+grub-mkstandalone --format=i386-pc --output=$VIGRID_TELEPORT_HOME/scratch/core.img \
+        --install-modules="linux normal iso9660 biosdisk memdisk search tar ls all_video gfxterm_background tga" \
+        --modules="linux normal iso9660 biosdisk search all_video gfxterm_background tga" \
+        --locales="" --fonts="" "boot/grub/grub.cfg=$VIGRID_TELEPORT_HOME/scratch/grub.cfg" || Error 'grub-mkstandalone failed, exiting'
+cat /usr/lib/grub/i386-pc/cdboot.img $VIGRID_TELEPORT_HOME/scratch/core.img >$VIGRID_TELEPORT_HOME/scratch/bios.img || Error 'Boot image copy failed, exiting'
+xorriso -as mkisofs -iso-level 3 -full-iso9660-filenames -volid "VIGRID_TELEPORT" --grub2-boot-info \
+        --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
+        -eltorito-boot boot/grub/bios.img -no-emul-boot -boot-load-size 4 -boot-info-table \
+        --eltorito-catalog boot/grub/boot.cat -output "$VIGRID_TELEPORT_HOME/VIGRIDteleport.iso" \
+        -graft-points "$VIGRID_TELEPORT_HOME/image" /boot/grub/bios.img=$VIGRID_TELEPORT_HOME/scratch/bios.img || Error 'xorriso failed, exiting'
+
+ISO_SIZE_EFI=`stat -c %s $VIGRID_TELEPORT_HOME/VIGRIDteleport-efi.iso`
+ISO_SIZE=`stat -c %s $VIGRID_TELEPORT_HOME/VIGRIDteleport.iso`
+
+Display "VIGRIDteleport ISO are now ready:
+- EFI:    $VIGRID_TELEPORT_HOME/VIGRIDteleport-efi.iso ($ISO_SIZE_EFI bytes)
+- Legacy: $VIGRID_TELEPORT_HOME/VIGRIDteleport.iso ($ISO_SIZE bytes)
+
+You can use tools as BalenaEtcher, Rufus... to burn on USB key.
+"
+) 2>&1 | tee -a $LOG_FILE

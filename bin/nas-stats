@@ -1,0 +1,190 @@
+#!/usr/bin/php
+<?php
+
+// #################################################################################################################################
+// #
+// # This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+// #
+// # (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+// # LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+// #
+// # Each dependancies (c) to their respective owners
+// #
+// ##################################################################################################################################
+
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+// GNS3 functions
+include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+
+// GNS3 nas-load functions
+if (file_exists("/Vstorage/GNS3/vigrid/bin-nas/nas-load_functions.php"))
+{ include "/Vstorage/GNS3/vigrid/bin-nas/nas-load_functions.php"; }
+
+// turn off output buffering
+ob_implicit_flush();
+
+$me=$argv[0];
+
+$usage="$me [ -H Host ] [ -D 'directories' ]";
+
+$opt=getopt("H:D:h");
+$host=$opt['H'];
+$dirs=$opt['D'];
+
+$hostname=gethostname();
+
+$nproc=0;
+$load1="";
+$load_perf1="";
+$load5="";
+$load_perf5="";
+$load15="";
+$load_perf15="";
+
+$cpu_load=$cpu_fields[10];
+$cpu_wa=$cpu_fields[11];
+$cpu_wa_perf=$cpu_fields[12];
+
+if ($host=="") // Local server not NAS, no Vigrid-load then...
+{
+  exec('nproc',$nproc);
+  $nproc=$nproc[0];
+
+  $load=file('/proc/loadavg');
+  $tmp=preg_split('/\s+/',$load[0]);
+  $load1=$tmp[0];
+  printf("%02.02f\n",$load1*100/$nproc);
+  
+  $load5=$tmp[1];
+  printf("%02.02f\n",$load5*100/$nproc);
+
+  $load15=$tmp[2];
+  printf("%02.02f\n",$load15*100/$nproc);
+
+  function keepnotempty($var){ return ($var !== NULL && $var !== FALSE && $var !== ""); }
+
+  unset($tmp);
+  exec('iostat -c',$tmp);
+  $tmp=array_filter($tmp,"keepnotempty");
+  $iostat=array_filter(preg_split('/\s+/',$tmp[sizeof($tmp)]),"keepnotempty");
+  $iostat=$iostat[6];
+  echo $iostat."\n";
+
+  unset($tmp);
+  exec('free',$tmp);
+  $ram=preg_split('/\s+/',$tmp[1]);
+  $swap=preg_split('/\s+/',$tmp[2]);
+  echo $ram[6]."\n";
+  echo $ram[1]."\n";
+
+  echo $swap[3]."\n";
+  echo $swap[1]."\n";
+
+  echo $nproc."\n";
+
+  // Get last lines from /var/log/vigrid-load.log
+  $load_array=VigridLOADextract('/var/log/vigrid-load.log');
+
+  // Get associated DISK values
+  $disks=VigridLOADgetdisk($load_array,$filters_disk);
+
+  $dirs=preg_split('/\s+/',$dirs);
+  foreach ($dirs as $dir)
+  {
+    echo $dir.":";
+    
+    unset($tmp);
+    exec("df -k $dir",$tmp);
+    $df=preg_split('/\s+/',$tmp[1]);
+    
+    $disks_dev=array_values(VigridGETdev($dir));
+    if (!empty($disks_dev))
+    {
+      foreach($disks as $names => $disk_cur)
+      {
+        if ($names==$disks_dev[0])
+        {
+          $rate_in=$disk_cur['rsect'];
+          $rate_out=$disk_cur['wsect'];
+          
+          $unit_in="B/s";
+          $unit_out="B/s";
+          
+          if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB/s"; }
+          if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB/s"; }
+          
+          if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB/s"; }
+          if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB/s"; }
+
+          if ($rate_out>1024) { $rate_out=sprintf("%1.1f",$rate_out/1024); $unit_out="GB/s"; }
+          if ($rate_in>1024)  { $rate_in=sprintf("%1.1f",$rate_in/1024); $unit_in="GB/s"; }
+          
+          $max_in =$disk_cur['rsect_max'];
+          $max_out=$disk_cur['wsect_max'];
+          
+          $max_unit_in="B/s";
+          $max_unit_out="B/s";
+
+          if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB/s"; }
+          if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB/s"; }
+          
+          if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB/s"; }
+          if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB/s"; }
+
+          if ($max_out>1024) { $max_out=sprintf("%1.1f",$max_out/1024); $max_unit_out="GB/s"; }
+          if ($max_in>1024)  { $max_in=sprintf("%1.1f",$max_in/1024); $max_unit_in="GB/s"; }
+
+          $io_pending=$disk_cur['io_pending'];
+          $io_pending_max=$disk_cur['io_pending_max'];
+          
+          break;
+        }
+        else
+        {
+          $rate_in="?";
+          $unit_in="";
+          $max_in="?";
+          $max_unit_in="";
+          $rate_out="?";
+          $unit_out="";
+          $max_out="?";
+          $max_unit_out="";
+          $io_pending="?";
+          $io_pending_max="?";
+        }
+      }
+    }
+    
+    echo $df[3]."/".$df[1].":".$rate_in.$unit_in." (".$max_in,$max_unit_in."):".$rate_out.$unit_out." (".$max_out,$max_unit_out."):".$io_pending." (".$io_pending_max.")\n";
+  }
+}
+else
+{
+  // Host given, must dig into Vigrid configuration to rely over SSH...
+
+  $vigrid_sshkey_nas=VIGRIDconfig('VIGRID_SSHKEY_NAS');
+  if ($vigrid_sshkey_nas=='') { echo "Cant find Vigrid NAS SSH key, exiting\n"; exit(1); }
+
+  $vigrid_sshkey_options=VIGRIDconfig('VIGRID_SSHKEY_OPTIONS');
+  if ($vigrid_sshkey_options=='') { echo "Cant find Vigrid NAS SSH key options, exiting\n"; exit(1); }
+
+  $command="ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$host /usr/local/bin/nas-stats -D $dirs 2>/dev/null";
+  exec($command,$nas_stats);
+  
+  if (empty($nas_stats)) // target file is possibly not present, installing it on remote host
+  {
+    $command="cat /home/gns3/vigrid/bin/nas-stats | ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$host 'mkdir -p /usr/local/bin;cat >/usr/local/bin/nas-stats'";
+    exec($command,$nas_stats);
+
+    $command="ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$host 'chmod 755 /usr/local/bin/nas-stats'";
+    exec($command,$nas_stats);
+
+    $command="ssh -i $vigrid_sshkey_nas $vigrid_sshkey_options root@$host /usr/local/bin/nas-stats -D $dirs 2>/dev/null";
+    exec($command,$nas_stats);
+  }
+  foreach ($nas_stats as $value) { echo $value."\n"; }
+}
+?>

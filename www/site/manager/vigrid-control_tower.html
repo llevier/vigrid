@@ -1,0 +1,857 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Control Tower");
+
+	if ($_GET["gns_reload"] == 1)
+  {
+    $command="sudo /home/gns3/vigrid/bin/vigrid-run -M -A '/usr/sbin/service gns3 reload'";
+    $res=shell_exec($command);
+  }
+  
+  $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+
+	if ($_GET["refresh"] != 0)    { $refresh=HTMLvalue($_GET["refresh"]); }
+	else { $refresh=60; }
+
+	if ($_GET["dispid"] != 0)     { $dispid=HTMLvalue($_GET["dispid"]); }         else { $dispid=0; }
+	if ($_GET["links"] != 0)      { $displinks=HTMLvalue($_GET["links"]); }       else { $displinks=0; }
+	if ($_GET["activeonly"] != 0) { $activeonly=HTMLvalue($_GET["activeonly"]); } else { $activeonly=0; }
+	if ($_GET["openonly"] != 0)   { $openonly=HTMLvalue($_GET["openonly"]); }     else { $openonly=0; }
+	if ($_GET["gnsall"] != 0)     { $gnsall=HTMLvalue($_GET["gnsall"]); }         else { $gnsall=0; }
+	if ($_GET["hostmon"] != 0)    { $hostmon=HTMLvalue($_GET["hostmon"]); }       else { $hostmon=0; }
+
+	// end of metarefresh
+	$refresh_url=getselfurl_controltower();
+	print ("<meta http-equiv=\"refresh\" content=\"".$refresh."; ".$refresh_url."\">\n");
+	// echo "Refresh=".$refresh_url."<BR>\n";
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+  
+  // Get all data
+  // Data format:
+  // $_['STATS'][GNS_IP][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df) ]
+  // $_['STATS'][NAS_IP][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df) ]
+  // Projects:  $_['GNS3'][GNS_IP]['PROJECTS'][]
+  // Nodes:     $_['GNS3'][GNS_IP]['PROJECT_NODES'][GNS_PROJECT_UUID]['NODES'][]
+
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+  
+	// if there are parameters, means start/stop/open something :-)
+	if (($_GET["gnshost"]!="") && ($_GET["project_id"]!="") && ($_GET["status"]!=""))
+	{
+    // Project opening
+    if ($_GET["status"]=="closed")
+    {
+			print("<FONT SIZE=+1 COLOR=\"Red\"><B>Action: </B><FONT COLOR=\"Blue\">");
+      gns_project_command($gns_controller,HTMLvalue($_GET["gnshost"]),HTMLvalue($_GET["project_id"]),"open");
+      print("Opening  project: <B>".$_GET["gnshost"]." / ".HTMLvalue($_GET["project_name"])."</B>\n");
+      print("</FONT></FONT><BR><BR>\n");
+    }
+    else if ($_GET["status"]=="opened") // or closing
+    {
+			print("<FONT SIZE=+1 COLOR=\"Red\"><B>Action: </B><FONT COLOR=\"Blue\">");
+      gns_project_command($gns_controller,HTMLvalue($_GET["gnshost"]),HTMLvalue($_GET["project_id"]),"close");
+      print("Closing  project: <B>".$_GET["gnshost"]." / ".HTMLvalue($_GET["project_name"])."</B>\n");
+      print("</FONT></FONT><BR><BR>\n");
+    }
+		// Node start/stop requested
+    else if (($_GET["status"]=="started") || ($_GET["status"]=="stopped"))
+		{
+			print("<FONT SIZE=+1 COLOR=\"Red\"><B>Action: </B><FONT COLOR=\"Blue\">");
+      
+			if ($_GET["status"]=="started")
+      { $t_text="Stopping"; $t_action="stop"; }
+      elseif ($_GET["status"]=="stopped")
+      { $t_text="Starting"; $t_action="start"; }
+     
+      if (($_GET["node_id"]=="") && ($_GET["node_name"]=="")) // no node ID/name, means whole project
+      {
+        $data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']=gns_getnodes($gns_controller,HTMLvalue($_GET["gnshost"]),HTMLvalue($_GET["project_id"]));
+        for ($k=0;$k<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
+        {
+          gns_node_command($gns_controller,HTMLvalue($_GET["gnshost"]),HTMLvalue($_GET["project_id"]),$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id'],$t_action);
+          print("<li>".$t_text." node: <B>".HTMLvalue($_GET["gnshost"])." / ".HTMLvalue($_GET["project_name"])." / ".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['name']." (ID=".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id'].")</B></li>\n");
+        }
+      }
+      else
+      {
+        gns_node_command($gns_controller,HTMLvalue($_GET["gnshost"]),HTMLvalue($_GET["project_id"]),HTMLvalue($_GET["node_id"]),$t_action);
+        print($t_text." node: <B>".HTMLvalue($_GET["gnshost"])." / ".HTMLvalue($_GET["project_name"])." / ".HTMLvalue($_GET["node_name"])."</B>\n");
+        print("</FONT></FONT>");
+      }
+      print("<BR><BR>\n");
+
+			sleep (2);
+		}
+		else { print("<H4><FONT COLOR=\"Red\"><B>MALFORMED START/STOP URL (".$node_control_url=$node_control_url.HTMLvalue($_GET["status"])."), cowardly doing nothing...</B></FONT></H4><BR>\n"); }
+	}
+  
+  // Toggles
+  print("<TABLE><TR><TD VALIGN=MIDDLE>");
+
+  ?><div class="tooltip"><A HREF="<?php print $refresh_url; ?>"><IMG SRC="/images/reload.png"><span class="tooltiptext_aboveR">Refresh page</span></A></div>&nbsp;&nbsp;&nbsp<?php
+
+  if (preg_match("/\?/",$refresh_url)) { $split_char="&"; } else { $split_char="?"; }
+  $new_url=$refresh_url;
+  $new_url.=$split_char."gns_reload=1";
+
+  ?><div class="tooltip"><A HREF="<?php print $new_url; ?>"><IMG SRC="/images/gns-reload.png"  WIDTH=29 HEIGHT=32><span class="tooltiptext_above">Reload GNS3</span></A></div>&nbsp;&nbsp;&nbsp <?php
+
+  // $new_url=HTMLswitch("hostmon","hostmon","Switch: display host monitoring");
+  ?><div class="tooltip"><A HREF="/manager/vigrid-control_tower-mon.html" TARGET="_hostmon"><IMG SRC="/images/hostmon_on.png" WIDTH=43 HEIGHT=32><span class="tooltiptext_above">Host monitoring</span></A></div>&nbsp;&nbsp;&nbsp;<?php
+
+  $new_url=HTMLswitch("dispid","uuid","Switch: display UUIDs");
+  $new_url=HTMLswitch("links","links","Switch: display network links");
+
+  $new_url=HTMLswitch("openonly","open","Switch: display only opened projects");
+  $new_url=HTMLswitch("activeonly","object","Switch: display only active projects");
+  $new_url=HTMLswitch("gnsall","gnshost","Switch: display only active GNS hosts");
+
+  ?>
+    <div class="tooltip"><A HREF="/manager/vigrid-clone_short.html" TARGET="_vigrid-clone"><IMG SRC="/images/vigrid-clone.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Ondemand clone Manager</span></A></div>&nbsp;&nbsp;&nbsp;
+    <div class="tooltip"><A HREF="/manager/vigrid-clones_industrial.html" TARGET="_vigrid-clones"><IMG SRC="/images/vigrid-clones.png" WIDTH=48 HEIGHT=32><span class="tooltiptext_above">Industrial clones Manager</span></A></div>&nbsp;&nbsp;&nbsp;
+  
+	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=4 pattern="[0-9]{4}"> seconds<?php getselfurl_controltower_form("refresh"); ?></form>
+  </TD></TR></TABLE><?php
+  
+  // If Vigrid design with NAS, show NAS stats
+  $vigrid_type=VIGRIDconfig("VIGRID_TYPE");
+  if ($hostmon==1)
+  {
+    $data_vigrid_stats=VIGRIDgetstatsdataASYNC($gns_controller);
+    
+    if ($vigrid_type!=1) // Design with NAS
+    {
+      ?><H3>NAS server(s)</H3>
+      <TABLE NUMCOL=4 BORDER=1>
+      <TR><TD><B>NAS hostname</B></TD><TD><B>Status</B></TD><TD><B>SSH</B></TD><TD><B>IP address</B></TD>
+      <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD><TD ALIGN=CENTER COLSPAN=2><B>DISK free/total</B></TD><TR>
+      <?php
+      
+      $vigrid_nas=VIGRIDconfig("VIGRID_NAS_SERVER");
+      $nas_list=preg_split("/[\s ]+/",$vigrid_nas);
+      for ($i=0;$i<sizeof(nas_list);$i++)
+      {
+        $nas=explode(":",$nas_list[$i]);
+        $nas_host=$nas[0];
+        $nas_ip=$nas[1];
+        
+        print("<TR><TD>".$nas[0]."</TD>");
+
+        // Check Server up to display monitoring data
+        if (false)
+        { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15></TD>"); }
+        else
+        { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15></TD>"); }
+
+        // Check SSH access
+        if (VIGRIDssh_check($nas[0],VIGRIDconfig("VIGRID_SSHKEY_NAS"),"root")==0)
+        { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_on.png\" WIDTH=20 HEIGTH=20></TD>"); }
+        else
+        { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
+
+        print("<TD ALIGN=RIGHT>".    $nas[1]."</TD>");
+
+        if (isset($data_vigrid_stats['STATS'][$nas_ip]))
+        { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=$data_vigrid_stats['STATS'][$nas_ip]; }
+        else
+        { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+
+        if (($load1==-1) || ($load5==-1) || ($load15==-1))
+        { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          if ($load1>75)       { $color="Red"; }
+          else if ($load1>50)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+
+          if ($load5>75)       { $color="Red"; }
+          else if ($load5>50)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
+
+          if ($load15>75)       { $color="Red"; }
+          else if ($load15>50)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
+        }
+        
+        if ($cpu==-1)
+        { print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          if ($cpu<10)       { $color="Red"; }
+          else if ($cpu<30)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
+        }
+
+        if ($cores==-1)
+        { print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>"); }
+
+        if ($ram_free==-1)
+        {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          $ratio=$ram_total/$ram_free*100;
+          if ($ratio<10)       { $color="Red"; }
+          else if ($ratio<30)  { $color="Orange"; }
+          else                 { $color="Green"; }
+          // Set RAM & swap (units in bytes) to MB or GB
+          if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
+          else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
+          if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
+          else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
+        }
+
+        if ($swap_free==-1)
+        {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          $ratio=$swap_total/$swap_free*100;
+
+          if ($ratio<30)       { $color="Red"; }
+          else if ($ratio<60)  { $color="Orange"; }
+          else                 { $color="Green"; }
+
+          if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
+          else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
+          if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
+          else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
+        }
+
+        if ($disk_df=="")
+        {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          // directories (directory:free/total)
+          $dod=preg_split("/##/",$disk_df);
+
+          print("<TD><TABLE BORDER=0>");
+          for ($do=0;$do<sizeof($dod);$do++)
+          {
+            $f=explode(":",$dod[$do]);
+            $nas_dir=$f[0];
+
+            $f=explode("/",$f[1]);
+            $disk_free=$f[0];
+            $disk_total=$f[1];
+            
+            if ($disk_free<100000000)     { $color="Red"; } // Less than 100GB
+            elseif ($disk_free<150000000) { $color="Orange"; } // Less than 150GB
+            else { $color="Green"; }
+            
+            if ($disk_free/1000000000>1) { $disk_free=sprintf("%02.02f",$disk_free/1000000000); $disk_free_unit=" TB"; }
+            else { $disk_free=sprintf("%02.02f",$disk_free/1000000); $disk_free_unit=" GB"; }
+            if ($disk_total/1000000000>1) { $disk_total=sprintf("%02.02f",$disk_total/1000000000); $disk_total_unit=" TB"; }
+            else { $disk_total=sprintf("%02.02f",$disk_total/1000000); $disk_total_unit=" GB"; }
+          
+            print("<TR><TD>".$nas_dir."</TD><TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$disk_free.$disk_free_unit." / ".$disk_total.$disk_total_unit."</FONT></TD></TR>");
+          }
+          print("</TABLE></TD>\n");
+        }
+        print("</TR>\n");
+      } 
+      print("</TABLE>\n");
+    }
+    
+    ?><H3>GNS Host(s)</H3>
+    <TABLE NUMCOL=4 BORDER=1>
+    <TR><TD><B>Server name</B></TD><TD><B>Status</B></TD>
+    <?php if (VIGRIDconfig("VIGRID_TYPE")!=1) { ?><TD><B>SSH</B></TD><?php } ?>
+    <TD><B>Hostname/IP</B></TD><TD><B>TCP port</B></TD>
+    <?php if ($dispid==1) { print("<TD><B>Compute ID</B></TD>"); } ?>
+    <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD><TD ALIGN=CENTER><B>DISK free/total</B></TD><TR>
+    <?php
+
+    $vigrid_hosts=VIGRIDgetgnshosts($gns_controller);
+    
+    for ($i=0;$i<sizeof($vigrid_hosts);$i++)
+    {
+      $f=explode(":",$vigrid_hosts[$i]);
+      $host_name=$f[0];
+      $host_ip=$f[1];
+      $host_port=$f[2];
+      $host_compute=$f[3];
+    
+      $display=0;
+      if ($_GET["gns_host"]!="")
+      {
+        if ($host_name==HTMLvalue($_GET["gns_host"]))
+        { $display=1; }
+      }
+      else if ($_GET["regex_host"]!="")
+      {
+        if (preg_match("/".HTMLvalue($_GET["regex_host"])."/",$host_name))
+        { $display=1; }
+      }
+      else { $display=1; }
+
+      // Hide inactive GNS hosts by default
+      if ((!isset($data_vigrid['GNS3'][$host_ip])) && ($gnsall==0)) { $display=0; }
+
+      if ($display==1)
+      {
+        if ($host_name==gethostname())
+        { print("<TR><TD><FONT COLOR=Blue><FONT SIZE=+1><B>".$host_name."</FONT></FONT></B></TD>"); }
+        else
+        { print("<TR><TD>".$host_name."</TD>"); }
+
+        // Check Server up to display GNS status data
+        if (isset($data_vigrid['GNS3'][$host_ip]))
+        { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15></TD>"); }
+        else
+        { print("<TD ALIGN=CENTER><IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15></TD>"); }
+
+        // Check SSH access for not Standalone servers
+        if (VIGRIDconfig("VIGRID_TYPE")!=1)
+        {
+          if (isset($data_vigrid_stats['STATS'][$host_ip]))
+          {
+            if (VIGRIDssh_check($host_ip,VIGRIDconfig("VIGRID_SSHKEY_GNS"),"gns3")==0)
+            { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_on.png\" WIDTH=20 HEIGTH=20></TD>"); }
+            else
+            { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
+          }
+          else { print("<TD></TD>"); }
+        }
+
+              
+        print("<TD ALIGN=RIGHT>".    $host_ip."</TD>");
+        print("<TD ALIGN=CENTER>".    $host_port."</TD>");
+
+        if ($dispid==1)
+        {
+          if (gethostname()==$host_name) { print("<TD>local</TD>"); }
+          else { print("<TD>".    $host_compute."</TD>"); }
+        }
+
+        if (isset($data_vigrid_stats['STATS'][$host_ip]))
+        { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=$data_vigrid_stats['STATS'][$host_ip]; }
+        else
+        { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+
+        if (($load1==-1) || ($load5==-1) || ($load15==-1))
+        { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          if ($load1>75)       { $color="Red"; }
+          else if ($load1>50)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+
+          if ($load5>75)       { $color="Red"; }
+          else if ($load5>50)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
+
+          if ($load15>75)       { $color="Red"; }
+          else if ($load15>50)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
+        }
+        
+        if ($cpu==-1)
+        { print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          if ($cpu<10)       { $color="Red"; }
+          else if ($cpu<30)  { $color="Orange"; }
+          else               { $color="Green"; }
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
+        }
+
+        if ($cores==-1)
+        { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
+        else
+        {
+          print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>");
+        }
+
+        if ($ram_free==-1)
+        {	print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
+        else
+        {
+          $ratio=$ram_total/$ram_free*100;
+          if ($ratio<10)       { $color="Red"; }
+          else if ($ratio<30)  { $color="Orange"; }
+          else                         { $color="Green"; }
+          // Set RAM & swap (units in bytes) to MB or GB
+          if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
+          else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
+          if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
+          else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
+        }
+
+        if ($swap_free==-1)
+        {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          $ratio=$swap_total/$swap_free*100;
+
+          if ($ratio<30)       { $color="Red"; }
+          else if ($ratio<60)  { $color="Orange"; }
+          else                         { $color="Green"; }
+
+          if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
+          else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
+          if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
+          else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
+        }
+
+        if ($disk_df==-1)
+        {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+        else
+        {
+          $f=preg_split("/\//",$disk_df);
+          $disk_free=$f[0];
+          $disk_total=$f[1];
+          
+          if ($disk_free<100000000)     { $color="Red"; } // Less than 100GB
+          elseif ($disk_free<150000000) { $color="Orange"; } // Less than 150GB
+          else { $color="Green"; }
+          
+          if ($disk_free/1000000000>1) { $disk_free=sprintf("%02.02f",$disk_free/1000000000); $disk_free_unit=" TB"; }
+          else { $disk_free=sprintf("%02.02f",$disk_free/1000000); $disk_free_unit=" GB"; }
+          if ($disk_total/1000000000>1) { $disk_total=sprintf("%02.02f",$disk_total/1000000000); $disk_total_unit=" TB"; }
+          else { $disk_total=sprintf("%02.02f",$disk_total/1000000); $disk_total_unit=" GB"; }
+          
+          print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$disk_free.$disk_free_unit." / ".$disk_total.$disk_total_unit."</FONT></TD>");
+        }
+        print("<TR>\n");
+      }
+    }
+    print("</TABLE><BR>\n");
+  }
+  ?>
+  
+	<H3>Projects</H3>
+	<TABLE NUMCOL=3 BORDER=1>
+	<TR><TD><B>Host name</B></TD><TD><B>Project name</B></TD><?php if ($dispid==1) { ?><TD><B>Project ID</B></TD> <?php } ?><TD><B>Nodes</B></TD><TR>
+	<TR><TD>preg filter:<BR><form><input type="text" name="regex_host" value="<?php print HTMLvalue($_GET["regex_host"]); ?>"><?php getselfurl_controltower_form("regex_host"); ?></form></TD>
+	<TD>preg filter:<BR><form><input type="text" name="regex_project" value="<?php print HTMLvalue($_GET["regex_project"]); ?>"><?php getselfurl_controltower_form("regex_project"); ?></form></TD>
+	<?php if ($dispid==1) { ?><TD></TD><?php } ?>
+	<TD>preg filter:<BR><form><input type="text" name="regex_node" value="<?php print HTMLvalue($_GET["regex_node"]); ?>"><?php getselfurl_controltower_form("regex_node"); ?></form></TD><TR>
+	<?php
+
+  // Get DHCP leases
+  $dhcp_leases=get_dhcp_leases();
+  
+  // Get Vigrid hosts as name:ip:port:compute_id
+  $vigrid_hosts=VIGRIDgetgnshosts($gns_controller);
+
+  for ($i=0;$i<sizeof($vigrid_hosts);$i++)
+  {
+    $f=explode(":",$vigrid_hosts[$i]);
+    $host_name=$f[0];
+    $host_ip=$f[1];
+    $host_port=$f[2];
+    $host_compute=$f[3];
+
+    // First ensure the host is up, else avoid it...
+    // if (isset($data_vigrid['GNS3'][$host_ip]['COMPUTES']))
+    // $rc=isset($data_vigrid['GNS3'][$host_ip]);
+    // print("RC=$rc ($host_ip/$host_name)\n");
+    if (isset($data_vigrid['GNS3'][$host_ip]))
+		{
+			// if there is a GNS3 controller regex, restrict display to these
+			$display=0;
+			if ($_GET["gns_host"]!="")
+			{
+				if ($host_name==HTMLvalue($_GET["gns_host"]))
+				{ $display=1; }
+			}
+			else if ($_GET["regex_host"]!="")
+			{
+				if (preg_match("/".HTMLvalue($_GET["regex_host"])."/i",$host_name))
+				{ $display=1; }
+			}
+			else { $display=1; }
+
+      // activeonly option=1, restrict display to active (at least a real node) projects only
+      $display_host=1;
+      if (($display==1) && ($activeonly==1))
+      {
+        $a_node_is_started=0;
+				for ($pi=0;$pi<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$pi++)
+        {
+          for ($ni=0;$ni<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES']);$ni++)
+          {
+            if  (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['status']=="started")
+              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="ethernet_switch")
+              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="nat")
+              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="cloud"))
+            { $a_node_is_started=1; break; }
+          }
+          if ($a_node_is_started==1) { break; }
+        }
+        if ($a_node_is_started==0) { $display_host=0; }
+      }
+      
+      if (($display==1) && ($display_host==1))
+			{
+				// Displaying listed projects
+				for ($j=0;$j<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$j++)
+				{
+					// if there is a GNS3 project regex, restrict display to these
+					$display=0;
+					if ($_GET["gns_project"]!="")
+					{
+						if ($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']==HTMLvalue($_GET["gns_project"]))
+						{ $display=1; }
+					}
+					else if ($_GET["regex_project"]!="")
+					{
+						if (preg_match("/".HTMLvalue($_GET["regex_project"])."/i",$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']))
+						{ $display=1; }
+					}
+					else { $display=1; }
+
+          // activeonly option=1, restrict display to active (at least a real node) projects only)
+          $display_project=1;
+          if ($activeonly==1)
+          {
+            $a_node_is_started=0;
+            for ($ni=0;$ni<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']);$ni++)
+            {
+              if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$ni]['status']=="started")
+                && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$ni]['node_type']!="ethernet_switch")
+                && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$ni]['node_type']!="nat")
+                && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$ni]['node_type']!="cloud"))
+              { $a_node_is_started=1; break; }
+            }
+            if ($a_node_is_started==0) { $display_project=0; }
+          }
+          
+          // openonly option, display only opened projects
+          if (($openonly==1) && ($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['status']=="closed"))
+          { $display_project=0; }
+
+					if (($display==1) && ($display_project==1))
+					{
+            if (preg_match("/\?/",$refresh_url)) { $split_char="&"; } else { $split_char="?"; }
+            $new_url=$refresh_url;
+            $new_url.=$split_char."gns_host=".$host_name;
+
+						print("<TR><TD>");
+            if (gethostname()==$host_name) { print("<B>"); }
+
+            print("<A HREF=\"".$new_url."\">".$host_name."</A>");
+
+            if (gethostname()==$host_name) { print("</B>"); }
+            print("</TD>");
+
+						// snapshot by project ?
+						// print("<TD><A HREF=\"/manager/vigrid-snapshot.html?gns_host=".$host_name."&project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."\" TARGET=_snapshot><IMG SRC=\"/images/photo.png\" WIDTH=20 HEIGHT=16></A>&nbsp;".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."</TD>");
+            if (preg_match("/\?/",$refresh_url)) { $split_char="&"; } else { $split_char="?"; }
+            $new_url=$refresh_url;
+            $new_url.=$split_char."gns_project=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'];
+
+						print("<TD><A HREF=\"".$new_url."\">".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."</A><BR><BR>");
+
+            // Get current URL
+						$url_start=getselfurl_controltower();
+            if (preg_match("/\?/",$url_start)) { $split_char="&"; } else { $split_char="?"; }
+            $url_start=$url_start.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=stopped";
+            $url_stop =$url_start.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=started";
+						?>
+            <div class="tooltip"><A HREF="<?php print $url_start; ?>"><IMG SRC="/images/start.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Start project</span></A></div>
+            &nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_stop; ?>"><IMG SRC="/images/stop.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Stop project</span></A></div>
+            <?php
+
+						$url_open=getselfurl_controltower();
+            if (preg_match("/\?/",$url_open)) { $split_char="&"; } else { $split_char="?"; }
+            $url_open =$url_open.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=closed";
+            $url_close=$url_open.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=opened";
+						?>
+            &nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_open; ?>"><IMG SRC="/images/Popen.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Open project</span></A></div>
+            &nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_close; ?>"><IMG SRC="/images/Pclose.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Close project</span></A></div>
+            <?php
+
+            // Project snapshots
+            $url_snapshot="/manager/vigrid-snapshot.html?gns_host=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
+						?><BR><div class="tooltip"><A HREF="<?php print $url_snapshot; ?>" TARGET="_snapshot"><IMG SRC="/images/photo.png" WIDTH=40 HEIGHT=32><span class="tooltiptext_below">Snapshot Manager</span></A></div><?php
+
+            // If project is a clone source, display cloning page
+            $url_clone="/manager/vigrid-clone_short.html?selected_gns_host=".$host_name."&selected_project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&selected_project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
+						?>&nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_clone; ?>" TARGET="_clone"><IMG SRC="/images/vigrid-clone.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_below">Ondemand clone Manager</span></A></div><?php
+
+            $url_clones="/manager/vigrid-clones_industrial.html?selected_gns_host=".$host_name."&selected_project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&selected_project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
+						?>&nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_clones; ?>" TARGET="_clones"><IMG SRC="/images/vigrid-clones.png" WIDTH=48 HEIGHT=32><span class="tooltiptext_below">Industrial clones Manager</span></A></div><?php
+
+            print("</TD>");
+						
+						if ($dispid==1) { print("<TD>".    $data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."</TD>"); }
+						print("<TD ALIGN=CENTER>");
+
+            // check if project is opened. else set display to zero and propose to open project instead
+            if ($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['status']=="closed")
+            {
+              print("<STRONG>Project is currently closed.<BR></STRONG>");
+            }
+            else
+            {
+              ?><TABLE NUMCOL=3 BORDER=1 WIDTH=100%>
+              <TR><TD><B>Node name</B></TD><?php if ($dispid==1) { ?><TD><B>Node ID</B></TD><?php } ?><TD><B>Console</B></TD><TD><B>Status</B></TD>
+              <?php if ($displinks==1) { print("<TD><B>Links DHCP/ARP</B></TD>"); } else { print("<TD><B>DHCP/ARP</B></TD><TR>"); }
+
+              for ($k=0;$k<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
+              {
+                $cores=0;
+                $t=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['command_line'];
+                $t=preg_replace("/^.*-smp /","",$t);
+                $t=preg_replace("/-.*$/","",$t);
+                
+                if (preg_match("/cpus=/",$t))
+                { $cores=preg_replace("/^.*cpus=/","",$t); }
+                $cores=rtrim($cores);
+                
+                $ram=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['properties']['ram'];
+                
+                // if there is a GNS3 node regex, restrict display to these
+                $display=0;
+                if ($_GET["regex_node"]!="")
+                {
+                  if (preg_match("/".HTMLvalue($_GET["regex_node"])."/",$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['name']))
+                  { $display=1; }
+                }
+                else { $display=1; }
+
+                if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_type']=="ethernet_switch")
+                 || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_type']=="nat")
+                 || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_type']=="cloud"))  { $display=0; }
+
+                if ($display==1)
+                {
+                  print("<TR><TD VALIGN=MIDDLE><A HREF=\"/manager/vigrid-snapshot.html?gns_host=".$host_name."&project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&node_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id']."\" TARGET=_snapshot><IMG SRC=\"/images/photo.png\" WIDTH=20 HEIGHT=16></A>&nbsp;");
+                  // if gns server IP matches command line, runs locally, else runs on another host
+
+                  if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started") { print("<FONT COLOR=\"Green\">"); }
+                  else { print("<FONT COLOR=\"Red\">"); }
+
+                  if ((gns_node_on_host($gns_controller['computes'][$i],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k])) && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']==""))
+                  {	print("<B>".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['name']."</B></FONT></TD>"); }
+                  else
+                  {
+                    print($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['name']);
+                    if ($cores!=0) { print(" (<IMG SRC=\"/images/core100x100.png\" WIDTH=12 HEIGHT=12>$cores)"); }
+                    if (($ram>0) && ($ram!="NULL")) { print(" (RAM=$ram"."MB)"); }
+                    print("</FONT></TD>");
+                  }
+                
+                  if ($dispid==1) { print("<TD>".    $data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id']."</TD>"); }
+                  if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=="")
+                  { print("<TD></TD>"); }
+                  else
+                  {
+                    if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console']!="")
+                    {
+                      // normal URI for consoles
+                      $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type'].":";
+                      
+                      // Console host = 0.0.0.0 unknown bug
+                      if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=="0.0.0.0")
+                      { $data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=$host_ip; }
+
+                      // VNC reg hack (not great)
+                      if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']!="vnc") { $uri=$uri."//"; }
+                      $uri=$uri.$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'];
+                      
+                      // noVNC | no TELNET hack
+                      if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="vnc") || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="telnet"))
+                      {
+                        $rc=websockify_check($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console']);
+                        if ($rc>0)
+                        {
+                          // Detect Vigrid control tower
+                          if (preg_match("/\/manager\/vigrid-control_tower\.html/",$refresh_url))
+                          {
+                            $uri=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'];
+                            
+                            if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="vnc")
+                            { $uri=$uri."/noVNC/".$rc."/vnc.html"; } # ...?autoconnect=1&path=/noVNC/".$rc."/websockify";
+                            else { $uri=$uri."/noTELNET/".$rc."/"; }
+                          }
+                          else
+                          {
+                            $uri=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'].":".$rc;
+                            if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="vnc") { $uri=$uri."/vnc.html?autoconnect=1"; }
+                          }
+                        }
+                      }
+                      
+                      print("<TD>");
+                      if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started") && (gns_node_on_host($gns_controller['computes'][$i],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k])))
+                      { print ("<A HREF=\"".$uri."\"");
+                        if (preg_match("/^http/",$uri)) { print(" TARGET=\"console_$rc\""); }
+                        print(">");
+                      }
+                      print($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console']." (".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type'].")");
+                      if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started") && (gns_node_on_host($gns_controller['computes'][$i],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]))) { print("</A>"); }
+                      print("</TD>");
+                    }
+                    else
+                    { print("<TD>".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']."</TD>"); }
+                  }
+                  
+                  // start/stop
+                  $node_control_url=getselfurl_controltower();
+                  if (preg_match("/\?/",$node_control_url)) { $split_char="&"; } else { $split_char="?"; }
+                  $node_control_url=$node_control_url.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&node_name=".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['name']."&node_id=".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id']."&status=".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status'];
+
+                  if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started") || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="stopped"))
+                  {
+                    // if (gns_node_on_host($gns_controller['computes'][$i],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]))
+                    { print("<TD><A HREF=\"".$node_control_url."\">".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']."</A>"); }
+                    // else
+                    // { print("<TD>".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']); }
+                  }
+                  else { print("<TD>".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']); }
+                  print("</TD>\n");
+
+                  // display links ?
+                  if ($displinks==1)
+                  { $links=gns_getlinks($gns_controller,$host_name,$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']); }
+
+                  // network
+                  if ($displinks==1) { print("<TD COLSPAN=2><TABLE>"); }
+                  else { print("<TD>"); }
+                  for ($pp=0;$pp<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports']);$pp++)
+                  {
+                    // must match adapter_number & port_number, per end of link (2 ends)
+                    for ($dl=0;$dl<sizeof($links);$dl++)
+                    {
+                      // display links ?
+                      if ($displinks==1)
+                      {
+                        for ($le=0;$le<2;$le++)
+                        {
+                          if ($displinks==1)
+                          {
+                           if (($links[$dl]['nodes'][$le]['node_id']==$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id'])
+                            && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['adapter_number']==$links[$dl]['nodes'][$le]['adapter_number'])
+                            && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']==$links[$dl]['nodes'][$le]['port_number']))
+                            {
+                              print("<TR><TD><A HREF=\"/manager/vigrid-link_control.html?gnshost=".$host_name."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&link_id=".$links[$dl]['link_id']."\" TARGET=\"link_".$links[$dl]['link_id']."\">".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']."/".$links[$dl]['nodes'][$le]['adapter_number']."</A></TD>");
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    // print("N=".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][0]['mac_address']);
+                    if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][0]['mac_address']!="")
+                    {
+                      $port_status=gns_getlinkstatus($gns_controller,$host_name,$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id'],$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']);
+                      if ($dhcp_leases[$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['mac_address']]!="")
+                      {
+                        if ($displinks==1) { print("<TD>"); }
+                        if ($port_status==1) { print ("<IMG SRC=\"/images/light_on.png\" WIDTH=10 HEIGTH=15>&nbsp;"); }
+                        else { print ("<IMG SRC=\"/images/light_off.png\" WIDTH=10 HEIGTH=15>&nbsp;"); }
+                        // print($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['mac_address']);
+                        print($dhcp_leases[$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['mac_address']]);
+                        if ($displinks==1) { print("</TD></TR>"); }
+                      }
+                      else if ($displinks==1) { print("<TD></TD></TR>"); }
+                    }
+                  }
+                  if ($displinks==1) { print("</TABLE>"); }
+                  print("</TD></TR>");
+                }
+              }
+              print("</TABLE>\n");
+            }
+          print("</TD>");
+					}
+				}
+			}
+		} // ping
+	}
+	print("</TABLE><BR><BR>\n");
+
+	function getselfurl_controltower() // return self url with all arguments (GET)
+	{
+    // for URL: ? or &
+		$arg=0;
+
+		$refresh_url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'].$_SERVER["PHP_SELF"];
+    
+		if ($_GET["regex_host"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_host=".HTMLvalue($_GET["regex_host"]); }
+		if ($_GET["gns_host"]!="")      { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="gns_host=".HTMLvalue($_GET["gns_host"]); }
+		if ($_GET["regex_project"]!="") { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_project=".HTMLvalue($_GET["regex_project"]); }
+		if ($_GET["gns_project"]!="")   { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="gns_project=".HTMLvalue($_GET["gns_project"]); }
+		if ($_GET["regex_node"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="regex_node=".HTMLvalue($_GET["regex_node"]); }
+		if ($_GET["refresh"]!="")       { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="refresh=".HTMLvalue($_GET["refresh"]); }
+		if ($_GET["dispid"]!="")        { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="dispid=".HTMLvalue($_GET["dispid"]); }
+		if ($_GET["links"]!="")         { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="links=".HTMLvalue($_GET["links"]); }
+		if ($_GET["activeonly"]!="")    { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="activeonly=".HTMLvalue($_GET["activeonly"]); }
+		if ($_GET["openonly"]!="")      { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="openonly=".HTMLvalue($_GET["openonly"]); }
+		if ($_GET["gnsall"]!="")        { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="gnsall=".HTMLvalue($_GET["gnsall"]); }
+		if ($_GET["hostmon"]!="")       { if ($arg==0) { $refresh_url.="?"; $arg=1; } else { $refresh_url.="&"; } $refresh_url.="hostmon=".HTMLvalue($_GET["hostmon"]); }
+
+		return($refresh_url);
+	}
+
+	function getselfurl_controltower_form($arg) // create forms fields of all in URL but the one in $arg
+	{
+		$arg_fields=array("regex_host","gns_host","regex_project","gns_project","regex_node","refresh","dispid","links","hostmon","activeonly","openonly","gnsall");
+		for ($field=0;$field<sizeof($arg_fields);$field++)
+		{
+			if ($arg_fields[$field] != $arg)
+			{ if ($_GET[$arg_fields[$field]]!="")
+				{ print("<input type=\"hidden\" name=\"$arg_fields[$field]\"; value=\"".HTMLvalue($_GET[$arg_fields[$field]])."\">"); }
+			}
+		}
+	}
+  
+  function HTMLswitch($htmlarg,$image,$text)
+  {
+    $new_url=getselfurl_controltower();
+    
+    if (strpos($new_url,"?")) { $split_char="&"; } else { $split_char="?"; }
+    
+    $two_args=0;
+    if (strpos($new_url,"&")) { $two_args=1; }
+    
+    if (strpos($new_url,$htmlarg."=1"))
+    {
+      $text_id="off";
+      $new_url=preg_replace("/[?&]".$htmlarg."=[01]/","",$new_url);
+
+      if ($two_args) { $new_url=preg_replace("/&/","?",$new_url,1); }
+      
+      if (strpos($new_url,"?")) { $split_char="&"; } else { $split_char="?"; }
+    }
+    else { $text_id="on"; $new_url.=$split_char.$htmlarg."=1"; }
+    
+    print("<div class=\"tooltip\"><A HREF=\"".$new_url."\"><IMG SRC=\"/images/".$image."_".$text_id.".png\"><span class=\"tooltiptext_above\">".$text."</span></A></div>&nbsp;&nbsp;&nbsp;");
+  }
+?>
+</html>

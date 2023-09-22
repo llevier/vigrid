@@ -1,0 +1,81 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="Usage: $0 -h Host -s Source_ProjectName -t Target_ProjectName"
+
+while getopts 'h:s:t:' OPTIONS
+do
+   case "$OPTIONS" in
+        h)      HOST="$OPTARG";;
+        s)      SOURCE="$OPTARG";;
+        t)      TARGET="$OPTARG";;
+        [?])
+          echo >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+if [ "x$HOST" = "x" -o "x$SOURCE" = "x"  -o "x$TARGET" = "x" ]
+then
+  echo $USAGE
+  exit 1
+fi
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+[ "x$VIGRID_GNS_VERSION" != "x2" -a "x$VIGRID_GNS_VERSION" != "x3" ] && VIGRID_GNS_VERSION=2
+
+CURL="curl --user $VIGRID_GNS_USER:$VIGRID_GNS_PASS"
+
+CHK=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"name\":"|grep "\"$SOURCE\","|wc -l`
+
+if [ $CHK -eq 0 ]
+then
+  echo "I am sorry, but project \"$SOURCE\" does not exist on $HOST, cowardly exiting..."
+  exit 1
+fi
+
+POS=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"(project_id|name)\":"|grep -n "\"$SOURCE\"," | awk '{print $1;}' | sed 's/:.*$//'`
+HEAD=`echo "$POS + 1" | bc`
+PROJECT_ID=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"(project_id|name)\":"|head -$HEAD|tail -1| sed 's/^.* \"//' | sed 's/\".*$//'`
+
+echo "Project \"$SOURCE\" ID is $PROJECT_ID"
+echo
+echo "Duplicating \"$SOURCE\" to \"$TARGET\" on $HOST..."
+echo
+date
+
+RES=`$CURL -X POST "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/duplicate" -d "{\"name\":\"$TARGET\"}" 2>/dev/null`
+echo "$RES"
+
+PROJECT_ID_NEW=`echo "$RES" | grep "project_id"| sed 's/^.*: //' | sed 's/[\",]//g'`
+
+echo
+echo "Duplication done"
+date
+echo
+echo "Project $TARGET has UUID=$PROJECT_ID_NEW"
+

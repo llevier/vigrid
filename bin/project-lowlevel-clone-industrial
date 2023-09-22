@@ -1,0 +1,211 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+USAGE="Usage: $0 -p SourceProjectUUID -P SourceProjectName -z SnapshotMark -T TargetProjectPattern -s ProjectStartingNumber -q NumberOfClones -c ConsoleStartingRange -e ConsoleEndingRange [ -F StorageMode] [ -B BaseDir ] [ -V StorageRoot ] [ -r ReportFile ]"
+
+WWW=0
+
+while getopts 'V:F:B:p:P:z:T:s:q:c:e:r:W' OPTIONS
+do
+  case "$OPTIONS" in
+  W)  WWW=1;;
+  V)  VIGRID_STORAGE_ROOT="$OPTARG";;
+  F)  VIGRID_STORAGE_MODE="$OPTARG";;
+  B)	BASE_DIR="$OPTARG";;
+	p)	PROJECT_UUID="$OPTARG";;
+	P)	PROJECT_NAME="$OPTARG";;
+  z)	SNAP_NAME="$OPTARG";;
+	T)	PROJECT_TARGET="$OPTARG";;
+  s)	PROJECT_START="$OPTARG";;
+  q)	PROJECT_QUANTITY="$OPTARG";;
+  c)	CONSOLE_RANGE_START="$OPTARG";;
+  e)	CONSOLE_RANGE_END="$OPTARG";;
+  r)  REPORT_FILE="$OPTARG";;
+	[?])
+		echo $USAGE
+		exit 1
+		;;
+	esac
+done
+
+shift "$(($OPTIND -1))"
+
+USAGE_SHOW=0
+[ "x$PROJECT_UUID" = "x" -o "x$PROJECT_NAME" = "x" -o "x$SNAP_NAME" = "x" -o "x$PROJECT_TARGET" = "x" -o "x$PROJECT_START" = "x" -o "x$PROJECT_QUANTITY" = "x" -o "x$CONSOLE_RANGE_START" = "x" -o "x$CONSOLE_RANGE_END" = "x" ] && USAGE_SHOW=1
+
+if [ $USAGE_SHOW -eq 1 ]
+then
+  echo $USAGE
+	exit 1
+fi
+
+if [ "x$BASE_DIR" = "x" ]
+then
+  # Loading Vigrid configuration
+  if [ -r $VIGRID_CONF ]
+  then
+    . $VIGRID_CONF 2>/dev/null
+  else
+    echo "Cant find $VIGRID_CONF, exiting"
+    exit 1
+  fi
+
+  # Filesystem will depend on Vigrid design. Will summarize as : NAS or no NAS ?
+  HOSTNAME=`hostname`
+
+  # Getting real physical location of project
+  [ $VIGRID_TYPE -eq 1 ] && GNS3_HOME="/home/gns3/GNS3"
+  [ $VIGRID_TYPE -eq 2 -o $VIGRID_TYPE -eq 5 ] && GNS3_HOME="$VIGRID_STORAGE_ROOT/NFS/$HOSTNAME/GNS3mount/GNS3"
+  [ $VIGRID_TYPE -eq 3 -o $VIGRID_TYPE -eq 4 ] && GNS3_HOME="$VIGRID_STORAGE_ROOT/GNS3/GNS3farm/GNS3"
+else
+  GNS3_HOME="$BASE_DIR"
+fi
+
+if [ "x$GNS3_HOME" = "x" ]
+then
+  echo "BAD=Cant define GNS3_HOME, exiting" | tee -a $VIGRID_LOG
+  exit 1
+fi
+
+if [ "x$VIGRID_STORAGE_MODE" = "x" ]
+then
+  echo "BAD=No Vigrid Storage Mode defined, exiting" | tee -a $VIGRID_LOG
+  exit 1
+fi
+
+PROJECT_DIR="$GNS3_HOME/projects/$PROJECT_UUID"
+
+# If there is a NAS and no BASE_DIR, means master caller is launched. It will launch on NAS its copy with -b path set.
+if [ "x$VIGRID_NAS_SERVER" != "x" -a "x$BASE_DIR" = "x" ]
+then
+  DEFAULT_NAS=`echo $VIGRID_NAS_SERVER| awk '{print $1;}'`
+  DEFAULT_NAS_IP=`echo $DEFAULT_NAS| awk 'BEGIN { FS=":"; } {print $2;}'`
+
+  RUN_FLAGS="-W -V $VIGRID_STORAGE_ROOT -B $GNS3_HOME -F $VIGRID_STORAGE_MODE"
+  [ "x$PROJECT_UUID" != "x" ]        && RUN_FLAGS="$RUN_FLAGS -p $PROJECT_UUID"
+  [ "x$PROJECT_NAME" != "x" ]        && RUN_FLAGS="$RUN_FLAGS -P \"$PROJECT_NAME\""
+  [ "x$SNAP_NAME" != "x" ]           && RUN_FLAGS="$RUN_FLAGS -z \"$SNAP_NAME\""
+  [ "x$PROJECT_TARGET" != "x" ]      && RUN_FLAGS="$RUN_FLAGS -T \"$PROJECT_TARGET\""
+  [ "x$PROJECT_START" != "x" ]       && RUN_FLAGS="$RUN_FLAGS -s $PROJECT_START"
+  [ "x$PROJECT_QUANTITY" != "x" ]    && RUN_FLAGS="$RUN_FLAGS -q $PROJECT_QUANTITY"
+  [ "x$CONSOLE_RANGE_START" != "x" ] && RUN_FLAGS="$RUN_FLAGS -c $CONSOLE_RANGE_START"
+  [ "x$CONSOLE_RANGE_END" != "x" ]   && RUN_FLAGS="$RUN_FLAGS -e $CONSOLE_RANGE_END"
+
+  [ "x$REPORT_FILE" != "x" ]         && RUN_FLAGS="$RUN_FLAGS -r \"$REPORT_FILE\""
+
+  LIST="project-lowlevel-clone-industrial project-lowlevel-clone-ZFS project-lowlevel-reset"
+  for i in $LIST
+  do
+    SIZE_REMOTE=`ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP stat -t %s $VIGRID_STORAGE_ROOT/GNS3/bin/$i 2>/dev/null`
+    SIZE_LOCAL=`stat -t %s /home/gns3/vigrid/bin/$i 2>/dev/null`
+
+    if [ "x$SIZE_REMOTE" != "x$SIZE_LOCAL" ]
+    then
+      cat /home/gns3/vigrid/bin/$i | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP "mkdir -p $VIGRID_STORAGE_ROOT/GNS3/bin;cat >$VIGRID_STORAGE_ROOT/GNS3/bin/$i"
+      ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP chmod 755 $VIGRID_STORAGE_ROOT/GNS3/bin/$i
+    fi
+  done
+
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP $VIGRID_STORAGE_ROOT/GNS3/bin/project-lowlevel-clone-industrial $RUN_FLAGS 2>/dev/null
+  RC=$?
+
+  echo "$WWW_OK""Waiting for 10s in case of ZFS update daemon..."
+  sleep 10
+
+  echo "$WWW_OK""Reloading target GNS3 server"
+  /home/gns3/vigrid/bin/vigrid-run -M -A '/usr/sbin/service gns3 reload'
+
+  exit $RC
+fi
+
+# Back to local mode...
+if [ "x$PROJECT_UUID" = "x" -o "x$PROJECT_NAME" = "x" -o "x$SNAP_NAME" = "x" -o "x$PROJECT_TARGET" = "x" -o "x$PROJECT_START" = "x" -o "x$PROJECT_QUANTITY" = "x" -o "x$CONSOLE_RANGE_START" = "x" -o "x$CONSOLE_RANGE_END" = "x" ]
+then
+  echo $USAGE
+  exit 1
+fi
+
+[ $WWW -eq 1 ] && WWW_OK="OK="
+[ $WWW -eq 0 ] && WWW_BAD="BAD="
+
+# echo "OK=Console range will be $CONSOLE_RANGE_START-$CONSOLE_RANGE_END"
+
+[ $WWW -eq 1 ] && echo "OK=<LI>Sanity checks..."
+[ $WWW -eq 0 ] && echo "OK=Sanity checks..."
+
+CHK="$GNS3_HOME/projects/$PROJECT_UUID/$PROJECT_NAME.gns3"
+if [ ! -r "$CHK" ]
+then
+  [ $WWW -eq 1 ] && echo "BAD=FAIL to find $CHK, exiting</LI>"
+  [ $WWW -eq 0 ] && echo "BAD=FAIL to find $CHK, exiting"
+  exit 1
+fi
+
+HOST=`hostname`
+echo "$WWW_OK""Running on $HOST"
+T_QUANTITY_LEN=$((PROJECT_START+PROJECT_QUANTITY))
+QUANTITY_LEN=${#T_QUANTITY_LEN}  
+
+COUNT=0
+until false
+do
+  COUNT_CUR=$((PROJECT_START+COUNT))
+
+  printf -v TARGET_PROJECT_NAME "%s%0$QUANTITY_LEN""d" "$PROJECT_TARGET" "$COUNT_CUR"
+  
+  DATE=`date +'%Y/%m/%d %H:%M:%S'`
+
+  [ $WWW -eq 1 ] && echo "OK=<LI><STRONG>$DATE: Cloning $PROJECT_NAME ($PROJECT_UUID) as $TARGET_PROJECT_NAME...</STRONG></LI>"
+  [ $WWW -eq 0 ] && echo "$DATE: Cloning $PROJECT_NAME ($PROJECT_UUID) as $TARGET_PROJECT_NAME..." && echo -n "  "
+
+  # Runs on NAS
+  if [ "x$BASE_DIR" != "x" ]
+  then
+    COMMAND="$VIGRID_STORAGE_ROOT/GNS3/bin/project-lowlevel-clone-$VIGRID_STORAGE_MODE"
+  else
+    COMMAND="/home/gns3/vigrid/bin/project-lowlevel-clone-$VIGRID_STORAGE_MODE"
+  fi
+
+  COMMAND_ARGS=""
+  [ $WWW -eq 1 ] && COMMAND_ARGS="$COMMAND_ARGS -W"
+  
+  COMMAND_ARGS="$COMMAND_ARGS -G $GNS3_HOME -P $GNS3_HOME/projects -R $VIGRID_STORAGE_ROOT -c $CONSOLE_RANGE_START -e $CONSOLE_RANGE_END"
+  COMMAND_ARGS="$COMMAND_ARGS -Z \"$SNAP_NAME\" -s $PROJECT_UUID -S \"$PROJECT_NAME\" -T \"$TARGET_PROJECT_NAME\""
+  
+  echo "$WWW_OK""Launching $COMMAND $COMMAND_ARGS"
+  eval $COMMAND $COMMAND_ARGS
+  RC=$?
+  if [ $RC -ne 0 ]
+  then
+    echo "$WWW_BAD""Project cloning failed, exiting"
+    exit $RC
+  fi
+
+  COUNT=$((COUNT+1))
+  
+  [ $COUNT -ge $PROJECT_QUANTITY ] && break
+done
+
+if [ "x$BASE_DIR" = "x" ] # On master server
+then
+  echo "$WWW_OK""Waiting for 10s in case of ZFS update daemon..."
+  sleep 10
+
+  echo "$WWW_OK""Reloading target GNS3 server"
+  /home/gns3/vigrid/bin/vigrid-run -M -A '/usr/sbin/service gns3 reload'
+fi
+
+# echo "OK=Deployment done, dont forget:"
+# echo "OK=1- To make gns3:gns3 owner of the project directory on target hosts"
+# echo "OK=2- To SIGHUP all GNS3 servers..."

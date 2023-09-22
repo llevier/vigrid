@@ -1,0 +1,185 @@
+#!/bin/bash
+########################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+########################################################################################################################
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+PROGRESS=""
+
+USAGE="$0 -h Host -d ZFSpool [ -i SSH_key ] [ -R ] [ -v ]"
+
+while getopts 'd:h:i:vnR' OPTIONS
+do
+  case "$OPTIONS" in
+    h)      HOST_MASTER="$OPTARG";;
+    d)      ZFS_POOL="$OPTARG";;
+    R)      RCLONE=1;;
+    i)      SSH_KEY="$OPTARG";;
+    v)      PROGRESS=1;;
+    n)      DO_NOTHING="-n";;
+    [?])
+      print >&2 $USAGE
+      exit 1
+      ;;
+  esac
+done
+
+[ "x$HOST_MASTER" = "x" -o "x$ZFS_POOL" = "x" ] && echo $USAGE && exit 1
+
+[ "x$PROGRESS" != "x" ] && echo "Rsyncing from $HOST_MASTER:$ZFS_POOL"
+
+SSHDO="ssh"
+if [ "x$SSH_KEY" != "x" ]
+then
+  [ "x$PROGRESS" != "x" ] && echo "  using $SSH_KEY for authentication"
+  SSHDO="$SSHDO -i $SSH_KEY"
+fi
+
+[ "x$DO_NOTHING" != "x" ] && [ "x$PROGRESS" != "x" ] && echo "  running in DRY RUN mode (do nothing)"
+[ "x$RCLONE" != "x" ]     && [ "x$PROGRESS" != "x" ] && echo "  using Rclone sync as well"
+
+if [ "x$PROGRESS" != "x" ]
+then
+  PROGRESS_RSYNC="--progress"
+  PROGRESS_RCLONE="-Pv"
+fi
+
+[ "x$PROGRESS" != "x" ] && echo && echo "### Phase 1: ensuring every dataset is properly mounted..."
+
+# entry control: mounted ZFS datasets
+CHK=`zfs list -o name,mounted|egrep "$ZFS_POOL\s+"|grep "no$"`
+if [ "x$CHK" != "x" ]
+then
+  echo "WARNING, some datasets are not mounted:"
+  echo "$CHK"
+  echo
+  echo "Trying to force mount & sleeping 5s..."
+  zfs mount -a
+  sleep 5
+fi
+
+# checking remove pool exists
+CHK=`$SSHDO $HOST_MASTER zfs list -o name -r $ZFS_POOL |tail -n+2`
+[ "x$CHK" = "x" ] && echo "I am sorry, I cant find a ZFS pool '$ZFS_POOL' on $HOST_MASTER, cowardly exiting" && exit 1
+
+[ "x$PROGRESS" != "x" ] && echo && echo "### Phase 2: checking datasets on $HOST_MASTER exist locally..."
+
+# first detect the dataset slave is missing
+ZFS_LIST=`$SSHDO $HOST_MASTER zfs list -o name -r $ZFS_POOL |tail -n+2`
+
+# Get identified clones as well
+ZFS_CLONES=""
+for i in $ZFS_LIST
+do
+  [ "x$PROGRESS" != "x" ] && echo "Identified dataset: $HOST_MASTER -> $i"
+
+  CHK=`$SSHDO $HOST_MASTER zfs get origin $i |awk '{print $(NF-1);}'|tail -1`
+  if [ "x$CHK" = "x-" ] # it is not a clone
+  then
+    [ "x$PROGRESS" != "x" ] && echo "  Checking for local -> $i..."
+    CHK=`zfs list -o name $i 2>/dev/null`
+
+    if [ "x$CHK" = "x" ]
+    then
+      [ "x$PROGRESS" != "x" ] && echo -n "    $i dataset does not exist locally"
+
+      if [ -d "/$i" ]
+      then
+        [ "x$PROGRESS" != "x" ] && echo && echo -n "      but /$i directory exists locally, erasing it... "
+        rm -rf /$i
+      fi
+
+      echo
+      [ "x$PROGRESS" != "x" ] && echo "    Creating local dataset $i..." && echo
+      zfs create $i
+      [ $? -ne 0 ] && echo "ZFS create $i failed !" && sleep 5
+    fi
+  else
+    [ "x$PROGRESS" != "x" ] && echo "  This dataset is a clone, ignoring it..."
+    ZFS_CLONES="$ZFS_CLONES $i"
+  fi
+done
+
+[ "x$PROGRESS" != "x" ] && echo && echo "### Phase 3: checking local datasets are really existing on $HOST_MASTER..."
+
+# then destroy the ones no longer existing on master
+ZFS_LIST=`zfs list -o name -r $ZFS_POOL |tail -n+2`
+for i in $ZFS_LIST
+do
+  [ "x$PROGRESS" != "x" ] && echo "  Checking for $HOST_MASTER-> $i..."
+
+  CHK=`$SSHDO $HOST_MASTER zfs list -o name $i 2>/dev/null`
+  if [ "x$CHK" != "x" ]
+  then
+    CHK=`$SSHDO $HOST_MASTER zfs get origin $i |awk '{print $(NF-1);}'|tail -1`
+    if [ "x$CHK" != "x-" ] # it is a clone
+    then
+      [ "x$PROGRESS" != "x" ] && echo "    it is a clone, to be destroyed locally"
+      CHK=""
+    fi
+  fi
+
+  if [ "x$CHK" = "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo "    $i dataset does not exist or is a clone on $HOST_MASTER," && echo "      destroying local dataset $i..." && echo
+
+    zfs destroy -r $i
+    [ $? -ne 0 ] && echo "      ZFS destroy $i failed !" && sleep 5
+  fi
+done
+
+[ "x$PROGRESS" != "x" ] && echo && echo "### Phase 4: syncing data of $ZFS_POOL..."
+
+ZFS_MOUNTPOINT=`$SSHDO $HOST_MASTER zfs list -o mountpoint $ZFS_POOL |tail -n+2`
+if [ "x$ZFS_MOUNTPOINT" != "x" ]
+then
+  ZFS_SKIP=""
+  ZFS_MOUNTPOINT_REGEX=`echo "$ZFS_MOUNTPOINT/"|sed 's,\/,\\\/,g'`
+  
+  if [ "x$ZFS_CLONES" != "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo -n "  Extracting clones mountpoints..."
+    rm -f /tmp/rsync-excluded-$$.txt 2>/dev/null
+      
+    # Get clones mountpoints to ignore then...
+    for z in `echo "$ZFS_CLONES" | sed 's/ /\n/g'`
+    do
+      CHK=`$SSHDO $HOST_MASTER zfs get mountpoint -o value $z |tail -1| sed "s,^$ZFS_MOUNTPOINT_REGEX,,g"`
+      echo "$CHK" >>/tmp/rsync-excluded-$$.txt
+      echo "$CHK/**" >>/tmp/rsync-excluded-$$.txt
+      ZFS_SKIP="--exclude-from=/tmp/rsync-excluded-$$.txt"
+      [ "x$PROGRESS" != "x" ] && echo -n "."
+    done
+  fi
+    
+  [ "x$PROGRESS" != "x" ] && [ "x$ZFS_SKIP" != "x" ] && echo "\n  Children clones, skipping directories:" && cat /tmp/rsync-excluded-$$.txt | sed 's/^/    /g'
+  
+  [ "x$PROGRESS" != "x" ] && echo "  Rsyncing $HOST_MASTER:$ZFS_MOUNTPOINT to $ZFS_MOUNTPOINT..."
+
+  [ "x$PROGRESS" != "x" ] && echo "    Deletions first..."
+  rsync -e "$SSHDO" -r $DO_NOTHING $ZFS_SKIP --delete --existing --ignore-existing --ignore-errors --delete-before --delete-excluded --force --max-delete=5000000 --timeout 7200 $PROGRESS_RSYNC $HOST_MASTER:$ZFS_MOUNTPOINT/ $ZFS_MOUNTPOINT/
+
+  [ "x$PROGRESS" != "x" ] && echo "    ...then data..."
+  if [ "x$RCLONE" != "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo "      ...Rclone sync..."
+    rclone sync $DO_NOTHING $ZFS_SKIP --skip-links --sftp-skip-links $PROGRESS_RCLONE $HOST_MASTER:$ZFS_MOUNTPOINT/ $ZFS_MOUNTPOINT/
+  fi
+  
+  [ "x$PROGRESS" != "x" ] && echo "      ...rsync..." 
+  rsync -e "$SSHDO" -EAXDtogrHpav $DO_NOTHING $ZFS_SKIP --prune-empty-dirs --numeric-ids --force --inplace $PROGRESS_RSYNC $HOST_MASTER:$ZFS_MOUNTPOINT/ $ZFS_MOUNTPOINT/
+
+  rm -f /tmp/rsync-excluded-$$.txt 2>/dev/null
+else
+  echo "Cant determine ZFS mountpoint of $ZFS_POOL, exiting."
+  exit 1
+fi
+

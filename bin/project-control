@@ -1,0 +1,216 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+USAGE="Usage: $0 -h Host -p ProjectName -a start|stop|estatus|status|open|close [ -d NodePause_in_sec ] [ -n Specific_Node ] [ -f ]"
+
+FAKE=0
+
+while getopts 'h:p:a:n:d:f' OPTIONS
+do
+   case "$OPTIONS" in
+        f)      FAKE=1;;
+        h)      HOST="$OPTARG";;
+        p)      NAME="$OPTARG";;
+        a)      ACTION="$OPTARG";;
+        n)      NODE_SPECIAL="$OPTARG";;
+        d)      NODE_DELAY="$OPTARG";;
+        [?])
+          echo >&2 $USAGE
+          exit 1
+    ;;
+   esac
+done
+
+if [ "x$HOST" = "x" -o "x$ACTION" = "x" ]
+then
+  echo $USAGE
+  exit 1
+fi
+
+ACTION=`echo $ACTION | tr /A-Z/ /a-z/`
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+[ "x$VIGRID_GNS_VERSION" != "x2" -a "x$VIGRID_GNS_VERSION" != "x3" ] && VIGRID_GNS_VERSION=2
+
+CURL="curl --user $VIGRID_GNS_USER:$VIGRID_GNS_PASS"
+
+CHK=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"name\":"|grep "\"$NAME\","|wc -l`
+
+if [ $CHK -eq 0 ]
+then
+  echo "I am sorry, but that project does not exist, cowardly exiting..."
+  exit 1
+fi
+
+if [ "x$NODE_SPECIAL" != "x" ]
+then
+  echo "Action limited to node: $NODE_SPECIAL"
+fi
+
+POS=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"(project_id|name)\":"|grep -n "\"$NAME\"," | awk '{print $1;}' | sed 's/:.*$//'`
+HEAD=`echo "$POS + 1" | bc`
+PROJECT_ID=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects" 2>/dev/null|egrep "\"(project_id|name)\":"|head -$HEAD|tail -1| sed 's/^.* \"//' | sed 's/\".*$//'`
+
+case "$ACTION" in
+        "start")
+                ;;
+        "open")
+                echo "Opening project \"$NAME\" (ID=$PROJECT_ID)"
+                if [ $FAKE -eq 1 ]
+                then
+                  echo "-f set, no action"
+                else
+                  $CURL -X POST "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/open" -d "{}"
+                fi
+                exit
+                ;;
+        "close")
+                echo "Closing project \"$NAME\" (ID=$PROJECT_ID)..."
+                echo -n "  Setting auto_start & auto_open to false, auto_close to true..."
+                STATUS=`$CURL -v -X PUT "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID" -d "{ \"auto_open\": false,\"auto_start\": false,\"auto_close\": true }" 2>&1`
+                CHK=`echo "$STATUS" | grep "^< HTTP.*200"`
+                if [ "x$CHK" != "x" ]
+                then
+                  echo "Successfull"
+                else
+                  echo "Error"
+                  echo "$STATUS" | grep "^< HTTP"
+                fi
+                
+                echo -n "  Closing project..."
+                if [ $FAKE -eq 1 ]
+                then
+                  echo "-f set, no action"
+                else
+                  STATUS=`$CURL -v -X POST "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/close" -d "{}" 2>&1`
+                  CHK=`echo "$STATUS" | grep "^< HTTP.*204"`
+                  if [ "x$CHK" != "x" ]
+                  then
+                    echo "Successfull"
+                  else
+                    echo "Error"
+                    echo "$STATUS" | grep "^< HTTP"
+                  fi
+                fi
+                exit
+                ;;
+        "stop")
+                ;;
+        "status")
+                echo "Project \"$NAME\" (ID=$PROJECT_ID) status:"
+                $CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID" 2>/dev/null|grep "\"status\""
+                exit
+                ;;
+        "estatus")
+                echo "Project \"$NAME\" (ID=$PROJECT_ID) extended status:"
+                $CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID" 2>/dev/null | egrep "\"(auto_start|auto_open|auto_close|filename|name|path|project_id|status)\""
+                ACTION="status"
+                echo
+                echo "### Node status:"
+                ;;
+esac
+
+[ "x$ACTION" != "xstart" -a "x$ACTION" != "xstop" -a "x$ACTION" != "xstatus" -a "x$ACTION" != "xconsole" ] && exit
+
+NODES=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes" 2>/dev/null|grep node_id| sed 's/^.*node_id": "//'| sed 's/".*$//'`
+#echo "Project has the following nodes: "$NODES
+
+[ "x$NODES" = "x" ] && echo "Cant find nodes in that project" && exit
+
+for i in $NODES
+do
+  NODE_DETAILS=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes/$i" 2>/dev/null`
+  NODE_NAME=`echo "$NODE_DETAILS" |grep "\"name\"" | sed 's/^.*name": "//'| sed 's/".*$//'|head -1`
+  NODE_TYPE=`echo "$NODE_DETAILS" |grep "\"node_type\"" | awk '{print $2;}' | sed 's/[\",]//g'`
+  
+  NODE_CONS_TYPE=`echo "$NODE_DETAILS" | grep "\"console_type\":"|awk '{print $2;}'| sed 's/[",]//g'`
+  NODE_CONS_HOST=`echo "$NODE_DETAILS" | grep "\"console_host\":"|awk '{print $2;}'| sed 's/[",]//g'`
+  NODE_CONS_PORT=`echo "$NODE_DETAILS" | grep "\"console\":"|awk '{print $2;}'| sed 's/[",]//g'`
+  
+  DISPLAY=0
+  [ "x$NODE_SPECIAL" = "x" ] && DISPLAY=1
+  [ "x$NODE_SPECIAL" != "x" -a "x$NODE_NAME" = "x$NODE_SPECIAL" ] && DISPLAY=1
+
+  if [ $DISPLAY -eq 1 ]
+  then
+    # These are always started...
+    if [ "x$NODE_TYPE" != "xcloud" -a "x$NODE_TYPE" != "xnat" -a "x$NODE_TYPE" != "xethernet_switch" ]
+    then
+      echo -n "$NODE_TYPE\t$NAME/$NODE_NAME\t(ID=$i)\t: "
+    
+      case "$ACTION" in
+      "start")
+        echo -n "starting\t"
+        if [ $FAKE -eq 1 ]
+        then
+          echo "-f set, no action"
+        else
+          RES=`$CURL -X POST "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes/$i/start" -d "{}" 2>/dev/null`
+        fi
+        ;;
+      "stop")
+        echo -n "stopping\t"
+        if [ $FAKE -eq 1 ]
+        then
+          echo "-f set, no action"
+        else
+          RES=`$CURL -X POST "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes/$i/stop" -d "{}" 2>/dev/null`
+        fi
+        ;;
+      "console")
+        if [ "x$NODE_CONS_TYPE" = "xvnc" ]
+        then
+          echo "Console VNC $NODE_CONS_HOST:$NODE_CONS_PORT"
+        else
+          echo "Console is not VNC"
+        fi
+        ;;
+      esac
+
+      case "$ACTION" in
+      "start"|"stop"|"status")
+          STATUS=`$CURL "http://$HOST:3080/v$VIGRID_GNS_VERSION/projects/$PROJECT_ID/nodes/$i/$ACTION" -d "{}" 2>/dev/null`
+
+          CHK=`echo "$STATUS" | grep "status.*started"`
+          if [ "x$CHK" != "x" ]
+          then
+              echo "  Node started"
+          else
+              echo "  Node stopped"
+          fi
+        ;;
+      esac
+    fi
+  fi
+
+  # No pause for always living node types...  
+  if [ "x$NODE_DELAY" != "x" -a "x$ACTION" != "xstatus" -a $FAKE -eq 0 -a  "x$NODE_TYPE" != "xcloud" -a "x$NODE_TYPE" != "xnat" -a "x$NODE_TYPE" != "xethernet_switch" ]
+  then
+    echo "Sleeping $NODE_DELAY""s..."
+    sleep $NODE_DELAY
+  fi
+  
+done

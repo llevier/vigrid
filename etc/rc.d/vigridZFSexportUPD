@@ -1,0 +1,47 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: vigrid-ZFSexportUPD
+# REQUIRE: nfsd vigrid-ZFSexportUPDd
+# BEFORE: DAEMON
+# KEYWORD: nojail shutdown
+
+. /etc/rc.subr
+
+name="vigridZFSexportUPD"
+desc="Vigrid NFS exports update daemon for ZFS"
+rcvar="vigridZFSexportUPD_enable"
+
+command_path="/Vstorage/GNS3/vigrid/bin-nas"
+command="vigrid-daemon-ZFSexportsUPD"
+command_flags="-F -R /Vstorage -d -l /var/log/gns3/vigrid.log"
+
+start_cmd="vigridZFSexportUPD_start"
+stop_cmd="vigridZFSexportUPD_stop"
+
+vigridZFSexportUPD_start()
+{
+  chk=`ps waxo command | egrep "$command_path/$command $command_flags" | grep -v grep`
+  if [ "x$chk" != "x" ]
+  then
+    echo -n "(already running)"
+  else
+    $command_path/$command $command_flags || echo -n "($command_path/$command $command_flags) start failed"
+  fi
+}
+
+vigridZFSexportUPD_stop()
+{
+  list=`ps waxo pid,command | egrep "$command_path/$command $command_flags" | grep -v grep | awk '{print $1;}'`
+
+  for i in $list
+  do
+    echo "killing $i..."
+    kill $i
+  done
+}
+
+load_rc_config $name
+run_rc_command "$1"

@@ -1,0 +1,196 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+GNS3_HOME="/home/gns3/GNS3"
+
+USAGE="Usage: $0 [ -c ] -a create|rollback|list -p ProjectUUID [ -n NodeUUID ] [ -s SnapshotID ] [ -h GNShost ]"
+
+COMPACT=0
+while getopts 'ca:p:n:s:h:' OPTIONS
+do	case "$OPTIONS" in
+	a)	ACTION="$OPTARG";;
+	p)	PROJECT_UUID="$OPTARG";;
+	n)	NODE_UUID="$OPTARG";;
+	s)	SNAPSHOT_ID="$OPTARG";;
+	h)	HOST="$OPTARG";;
+  c)  COMPACT=1;;
+	[?])
+		print >&2 $USAGE
+		exit 1
+		;;
+	esac
+done
+shift "$(($OPTIND -1))"
+
+# echo "COMPACT=$COMPACT H=$HOST, P=$PROJECT_UUID, N=$NODE_UUID"
+# echo "A=$ACTION, S=$SNAPSHOT_ID"
+
+if [ "$ACTION" = "x" -o "x$PROJECT_UUID" = "x" ]
+then
+  echo $USAGE
+	exit 1
+fi
+
+# If host is specified, command will be launched via ssh transparent auth
+if [ "x$HOST" != "x" ]
+then
+	SSHDO="ssh -i /home/gns3/.ssh/id_$HOST gns3@$HOST sudo"
+else
+	SSHDO=""
+fi
+
+BTRFSlist()
+{
+  BTRFS_LIST=""
+
+	if [ "x$NODE_UUID" = "x" ]
+	then
+		BTRFS_LIST=`$SSHDO /bin/btrfs sub list $BTRFS_ROOT|awk '{print $NF;}'|egrep "\/projects\/$PROJECT_UUID\/.*\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b"`
+	else
+		BTRFS_LIST=`$SSHDO /bin/btrfs sub list $BTRFS_ROOT|awk '{print $NF;}'|egrep "\/projects\/$PROJECT_UUID\/.*/$NODE_UUID"`
+	fi
+	echo "$BTRFS_LIST"
+}
+
+# Getting real physical location of project
+DIR_CURRENT=`pwd`
+cd $GNS3_HOME/projects/$PROJECT_UUID
+DIR_PROJECT=`/bin/pwd`
+cd $DIR_CURRENT
+BTRFS_ROOT="/"`echo "$DIR_PROJECT" | awk 'BEGIN { FS="/"; } { print $2;}'`
+BTRFS_SNAP=".snapshots"
+BTRFS_ROOT_SNAP="$BTRFS_ROOT/$BTRFS_SNAP"
+[ $COMPACT -eq 0 ] && echo "Project real directory: $DIR_PROJECT (BTRFS root=$BTRFS_ROOT) (BTRFS snapshot root=$BTRFS_ROOT_SNAP)"
+
+# First check snapshot root is already a BTRfs volume
+CHK=`btrfs sub list --sort=path $BTRFS_ROOT_SNAP | head -1 | awk '{print $NF;}'`
+if [ "x$CHK" != "x$BTRFS_SNAP" ]
+then
+  echo "I am sorry but $BTRFS_ROOT_SNAP is not a BTRfs volume. Exiting"
+  exit 1
+fi
+
+ACTION=`echo "$ACTION" | tr /A-Z/ /a-z/`
+case "$ACTION" in
+	"list")
+    [ $COMPACT -eq 0 ] && echo -n "Listing snapshots ($BTRFS_ROOT_SNAP) for project $PROJECT_UUID"
+    if [ "x$NODE_UUID" != "x" ]
+    then 
+      [ $COMPACT -eq 0 ] && echo ", node=$NODE_UUID:"
+    else
+      [ $COMPACT -eq 0 ] && echo ", all nodes:"
+    fi
+    
+		#BTRFS_SNAPS=`$SSHDO /bin/btrfs sub list --sort=path $BTRFS_ROOT_SNAP | egrep " $BTRFS_SNAP\/snap_$PROJECT_UUID(_|@)" | egrep "$NODE_UUID@" | awk '{print $NF;}'`
+		BTRFS_SNAPS=`$SSHDO /bin/btrfs sub list --sort=path $BTRFS_ROOT_SNAP | egrep "top level [0-9]* path snap_$PROJECT_UUID(_|@)" | egrep "$NODE_UUID@" | awk '{print $NF;}'`
+		if [ "x$BTRFS_SNAPS" != "x" ]
+    then
+      for i in $BTRFS_SNAPS
+      do
+        [ $COMPACT -eq 0 ] && echo " S=$i"
+      done
+    else
+      echo "No snapshot detected."
+    fi
+		exit 0
+		;;
+	"create")
+		[ "x$SNAPSHOT_ID" = "x" ] && echo "Cant snapshot, no -s defined" && exit 1
+    # list project nodes
+    # egrep "\/$PROJECT_UUID\/.*\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$"
+    [ $COMPACT -eq 0 ] && echo -n "Snaping shot (RO) project=$PROJECT_UUID"
+    if [ "x$NODE_UUID" != "x" ]
+    then 
+      [ $COMPACT -eq 0 ] && echo -n ", node=$NODE_UUID"
+    else
+      [ $COMPACT -eq 0 ] && echo -n ", all nodes"
+    fi
+    [ $COMPACT -eq 0 ] && echo ", snapshotID=$SNAPSHOT_ID"
+		BTRFS_LIST=$(BTRFSlist)
+		for i in $BTRFS_LIST
+		do
+      NODE_UUID=`echo "$i" | sed 's/^.*\///'`
+			[ $COMPACT -eq 0 ] && echo "  node=$NODE_UUID: $BTRFS_ROOT_SNAP/snap-$PROJECT_UUID"_"$NODE_UUID@$SNAPSHOT_ID"
+      $SSHDO /bin/btrfs sub snap -r "$BTRFS_ROOT/$i" "$BTRFS_ROOT_SNAP/snap_$PROJECT_UUID"_"$NODE_UUID@$SNAPSHOT_ID"
+		done
+		exit 0
+		;;
+	"rollback")
+		[ "x$SNAPSHOT_ID" = "x" ] && echo "Cant rollback, no -s defined" && exit 1
+    
+    [ $COMPACT -eq 0 ] && echo -n "Rolling back project=$PROJECT_UUID"
+    if [ "x$NODE_UUID" != "x" ]
+    then 
+      [ $COMPACT -eq 0 ] && echo ", node=$NODE_UUID, snap=$SNAPSHOT_ID"
+    else
+      [ $COMPACT -eq 0 ] && echo ", all nodes, snap=$SNAPSHOT_ID"
+    fi
+
+    #BTRFS_SNAPS=`$SSHDO /bin/btrfs sub list --sort=path $BTRFS_ROOT_SNAP | egrep " $BTRFS_SNAP\/snap_$PROJECT_UUID(_|@)" | egrep "$NODE_UUID@" | awk '{print $NF;}'`
+		BTRFS_SNAPS=`$SSHDO /bin/btrfs sub list --sort=path $BTRFS_ROOT_SNAP | egrep "top level [0-9]* path snap_$PROJECT_UUID(_|@)" | egrep "$NODE_UUID@" | awk '{print $NF;}'`
+    # echo "$BTRFS_SNAPS ($BTRFS_ROOT_SNAP / $BTRFS_SNAP)"
+    
+		for i in $BTRFS_SNAPS
+		do
+      NODE="snap_$PROJECT_UUID"_"$NODE_UUID@$SNAPSHOT_ID"
+
+      CHK=`echo "$i"| egrep "$NODE"|wc -l`
+			# echo "CHK=$CHK ($i)"
+      # echo "       ($NODE)"
+			if [ $CHK -ge 1 ]
+			then
+        BTRFS_LIST=$(BTRFSlist)
+				#echo "BTRFSlist=$BTRFS_LIST"
+        BTRFS_REAL_NODE_DIR="$BTRFS_ROOT/$BTRFS_LIST"
+        #echo "REAL_DIR=$BTRFS_REAL_NODE_DIR"
+
+        NODE_ID=`basename $i`
+        [ $COMPACT -eq 0 ] && echo -n "  snapshot $NODE_ID: step 1="
+        # double check : volume must have both project & node uuid in path
+        CHK=`echo "$BTRFS_REAL_NODE_DIR" | egrep "\/$PROJECT_UUID\/" | egrep "\/$NODE_UUID$"|wc -l`
+        if [ $CHK -eq 0 ]
+        then
+          echo "$BTRFS_REAL_NODE_DIR does not contain both $PROJECT_UUID & $NODE_UUID, exiting."
+          exit 1
+        fi
+        $SSHDO /bin/btrfs sub delete -c "$BTRFS_REAL_NODE_DIR" >/dev/null 2>/dev/null
+        if [ $? -eq 0 ]
+        then
+          [ $COMPACT -eq 1 ] && echo -n "1=OK;"
+          [ $COMPACT -eq 0 ] && echo -n "OK, step 2="
+          
+          $SSHDO /bin/btrfs sub snap "$BTRFS_ROOT/$i" "$BTRFS_REAL_NODE_DIR" >/dev/null 2>/dev/null
+          if [ $? -eq 0 ]
+          then
+            [ $COMPACT -eq 0 ] && echo "OK. ALL OK"
+            [ $COMPACT -eq 1 ] && echo "2=OK"
+            exit 0
+          else
+            [ $COMPACT -eq 0 ] && echo "NOT OK, exiting. Node $NODE_ID still to snap to original node directory"
+            [ $COMPACT -eq 1 ] && echo "2=BAD;"
+            exit 1
+          fi
+        else
+            [ $COMPACT -eq 0 ] && echo "NOT OK, exiting. Cant delete original node directory. GNS3 running ?"
+            [ $COMPACT -eq 1 ] && echo -n "1=BAD;"
+          exit 1
+        fi
+			fi
+		done
+    [ $COMPACT -eq 1 ] && echo -n "BAD;"
+    echo "UNKNOWN PROJECT_UUID / NODE_UUID / SNAPSHOT_ID: $PROJECT_UUID / $NODE_UUID / $SNAPSHOT_ID"
+		;;
+	*)
+		[ $COMPACT -eq 0 ] && echo "Unknown action"
+		exit 1
+		;;
+esac

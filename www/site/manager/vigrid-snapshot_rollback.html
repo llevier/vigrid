@@ -1,0 +1,302 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  VIGRIDheader("Snapshot Rollback Manager");
+
+  // get controller configuration to extract GNS3 hosts...
+	$gns_controller=gns_getcontrollers();
+	
+  // sort alpha computes...
+  usort($gns_controller['computes'], 'compare_name');
+
+  $vigrid_storage_mode=VIGRIDconfig("VIGRID_STORAGE_MODE");
+
+  // Get all data
+  // Data format:
+  // $_['STATS'][GNS_HOSTNAME][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df) ]
+  // $_['STATS'][NAS_HOSTNAME][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df) ]
+  // Projects:  $_['GNS3'][GNS_HOSTNAME]['PROJECTS'][]
+  // Nodes:     $_['GNS3'][GNS_HOSTNAME]['PROJECT_NODES'][GNS_PROJECT_UUID]['NODES'][]
+
+  $data_vigrid=VIGRIDgetgnsdata($gns_controller);
+
+	$gns_host=		    $_GET["gns_host"];
+	$project_name=    $_GET["project_name"];
+	$project_uuid=    $_GET["project_uuid"];
+	$node_uuid=		    $_GET["node_uuid"];
+  
+  $clone_owner=     $_GET["clone_owner"];
+  $clone_owner_pass=$_GET["clone_owner_pass"];
+	
+	// node mandatory for now, we'll later rollback by project
+	if (($gns_host=="") || ($project_uuid==""))
+	{
+	  print("I need at least GNS host + Project UUID to do my job, exiting\n");
+		exit(1);
+	}
+
+  // if snapshot_id, means rollback requested, then rollback must match snapshot_id
+	$snapshot_id=	    $_GET["snapshot_id"];
+  $rollback=		    $_GET["rollback"];
+
+  // no snapshot_id, it means list snapshots  
+	if ($snapshot_id=="")
+  {
+    list($rc,$gns_snapshots)=get_snapshots($gns_host,$project_uuid,$node_uuid);
+
+		if (sizeof($gns_snapshots)>=1) // always at least 1 line obtained
+		{
+      if ($node_uuid!="")
+      { ?><TABLE BORDER=1><TR><TD><B>Host</B></TD><TD><B>Project</B></TD><TD><B>Node</B></TD><TD COLSPAN=2><B>Snapshot mark</B></TD></TR><?php }
+      else
+      { ?><TABLE BORDER=1><TR><TD><B>Host</B></TD><TD><B>Project</B></TD><TD COLSPAN=2><B>Snapshot mark</B></TD></TR><?php }
+
+			// get controller configuration to extract GNS3 hosts...
+			$project_name=gns_getprojectnamebyuuid($gns_host,$project_uuid);
+			// $node_name=gns_getnodenamebyuuid($gns_host,$project_uuid,$node_uuid);
+
+			for ($i=0;$i<sizeof($gns_snapshots);$i++)
+			{
+				$gns_snapshots[$i]=trim($gns_snapshots[$i]);
+				$snapshot_mark=preg_split("/@snap_/",$gns_snapshots[$i]);
+        
+        // double check snapshot matches project and/or node ID, extracting node ID by the way
+        if ($node_uuid!="")
+        {
+          $snapshot_node_uuid=preg_replace("/^.*_/","",$snapshot_mark[0]);
+          $snapshot_node_uuid=preg_replace("/^.*\//","",$snapshot_node_uuid);
+          $snapshot_node_name=gns_getnodenamebyuuid($gns_host,$project_uuid,$snapshot_node_uuid);
+          if ($snapshot_node_name=="")
+          { $snapshot_node_name="Unknown node UUID $snapshot_node_uuid"; }
+        }
+        
+				$url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER[HTTP_HOST].$_SERVER["PHP_SELF"];
+				$url=$url."?clone_owner=".$clone_owner."&clone_owner_pass=".$clone_owner_pass."&gns_host=".$gns_host."&project_uuid=".$project_uuid."&node_uuid=".$snapshot_node_uuid."&snapshot_id=".$snapshot_mark[1];
+				print("<TR><TD valign=top>".$gns_host."</TD><TD valign=top>".$project_name."</TD>");
+        if ($node_uuid!="")
+        { print("<TD valign=top>".$snapshot_node_name."</TD>"); }
+        print("<TD valign=top>".$snapshot_mark[1]."</TD>");
+				?><TD COLSPAN=3><FORM action="<?php print $_SERVER["PHP_SELF"]; ?>"><input type="submit" value="ROLLBACK">
+				<input type="hidden" name="clone_owner" value="<?php print $clone_owner; ?>">
+				<input type="hidden" name="clone_owner_pass" value="<?php print $clone_owner_pass; ?>">
+				<input type="hidden" name="gns_host" value="<?php print $gns_host; ?>">
+				<input type="hidden" name="project_uuid" value="<?php print $project_uuid; ?>">
+				<input type="hidden" name="node_uuid" value="<?php print $snapshot_node_uuid; ?>">
+				<input type="hidden" name="snapshot_id" value="<?php print $snapshot_mark[1]; ?>">
+				</FORM></TD></TR><?php
+			}
+	?></TABLE><?php
+		}
+		else
+		{
+			?><H3>I am sorry, I found no snapshot to roll back to for that node. But snapshots might exist at project level.</H3><?php
+		}
+    exit;
+  }
+
+	// if a snapshot ID is present, it means rollback
+	if ($snapshot_id!="")
+	{
+		$project_name=gns_getprojectnamebyuuid($gns_host,$project_uuid);
+    
+    if ($node_uuid!="")
+    {
+      $node_name=gns_getnodenamebyuuid($gns_host,$project_uuid,$node_uuid);
+
+      if ($rollback == $snapshot_id) // must match to proceed
+      {
+        // get controller configuration to extract GNS3 hosts...
+        $gns_controller=gns_getcontrollers();
+
+        ?><H2><FONT COLOR="Red">Rolling back process running...</FONT></H2><?php
+        
+        $node_info=gns_getnode_info($gns_controller,$gns_host,$project_uuid,$node_uuid);
+        $node_previous_state=$node_info['status'];
+
+        if ($node_previous_stat=="started")
+        {
+          ?><UL><H3>Stopping node "<?php print $node_name; ?>" of project "<?php print $project_name; ?>".&nbsp;<?php
+          gns_node_command($gns_controller,$gns_host,$project_uuid,$node_uuid,"stop");
+          while (1)
+          {
+            $node_info=gns_getnode_info($gns_controller,$gns_host,$project_uuid,$node_uuid);
+            if ($node_info['status']=="stopped") break;
+            print(".");
+            ob_flush();
+            sleep (1);
+          }
+          
+          ?>done</UL></H3><?php
+        }
+        ?><H3>Rolling back node "<?php print $node_name; ?>" of project "<?php print $project_name; ?>" to snapshot "<?php print $snapshot_id; ?>".&nbsp;<?php
+        list ($rc,$msg)=rollback_snapshot($gns_host,$project_uuid,$node_uuid,$snapshot_id);
+
+        if ($rc==1) { print("<FONT COLOR=Green>SUCCESS</FONT>"); }
+        else { print("<FONT COLOR=Red>FAILED ($msg)</FONT>"); }
+
+        if (preg_match("/^started$/",$node_previous_state))
+        {
+          ?></H3><H3>Starting node "<?php print $node_name; ?>" of project "<?php print $project_name; ?>".&nbsp;<?php
+          gns_node_command($gns_controller,$gns_host,$project_uuid,$node_uuid,"start");
+          while (1)
+          {
+            $node_info=gns_getnode_info($gns_controller,$gns_host,$project_uuid,$node_uuid);
+            if ($node_info['status']=="started") break;
+            print(".");
+            ob_flush();
+            sleep (1);
+          }
+          ?>done</H3><BR><BR><?php
+        }
+        exit(0);
+      }
+    }
+    else // Project rollback
+    {
+      if ($rollback == $snapshot_id) // must match to proceed
+      {
+        // get controller configuration to extract GNS3 hosts...
+        $gns_controller=gns_getcontrollers();
+
+        ?><H2><FONT COLOR="Red">Rollback process running...</FONT></H2><?php
+        
+        ?><UL><H3>Closing project "<?php print $project_name; ?>".&nbsp;<?php
+        gns_project_command($gns_controller,$gns_host,$project_uuid,"close");
+
+        ?>done</H3><?php
+        ?><H3>Rolling back project "<?php print $project_name; ?>".&nbsp;<?php
+
+        ?>done</H3><?php
+        ?><H3>Opening project "<?php print $project_name; ?>".&nbsp;<?php
+        // gns_project_command($gns_controller,$gns_host,$project_uuid,"open");
+        
+        ?>done</H3><?php
+        exit(0);
+      }
+    }
+	  ?>
+		<TABLE><TR><TD VALIGN=TOP><IMG SRC="/images/risky.png" HEIGHT=285 WIDTH=200></TD><TD COLSPAN=3 VALIGN=TOP>
+		<TABLE><TR><TD COLSPAN=3 VALIGN=TOP><H2><FONT COLOR="Red">*** WARNING *** Node/Project rollback</FONT></H2></TD></TR>
+		<TR><TR><TD COLSPAN=3 VALIGN=TOP><H3><FONT COLOR="Red">You requested to rollback the following object:</TD></TR>
+		<TR><TD><B><FONT COLOR="Red">Host:</TD><TD><B><FONT COLOR="Red"><?php print($gns_host); ?></TD><TD></TD></TR>
+		<TR><TD><B><FONT COLOR="Red">Project:</TD><TD><B><FONT COLOR="Red"><?php print($project_name."</TD><TD><FONT COLOR=\"Red\">UUID=".$project_uuid); ?></TD></TR>
+    <?php if ($node_uuid!="") { ?><TR><TD><B><FONT COLOR="Red">Node:</TD><TD><B><FONT COLOR="Red"><?php print($node_name."</TD><TD><FONT COLOR=\"Red\">UUID=".$node_uuid); ?></TD></TR><?php } ?>
+		<TR><TD><B><FONT COLOR="Red">Snapshot:</TD><TD><B><FONT COLOR="Red"><?php print($snapshot_id); ?></TD><TD></TD></TR>
+
+    <?php
+      if (($gns_host=="")
+       || ($project_name=="") || ($project_uuid=="")
+       || (($node_uuid!="") && ($node_name==""))
+       || ($snapshot_id==""))
+      {
+      ?></TABLE><H2><FONT COLOR="Red">ERROR: either unknown GNS3 host, project/node or snapshot ID, cowardly exiting.</FONT></H2>
+      <?php  exit; } ?>
+
+		<TR><TR><TD COLSPAN=3 VALIGN=TOP><BR><H3><FONT COLOR="Red">If you confirm, the node/project will be violently stopped & rollback performed. Nodes will be restarted if previously running. Rollback itself taking just a second.</TD></TR>
+		<TR><TR><TD COLSPAN=3 VALIGN=TOP><FORM action="/manager/vigrid-snapshot.html"><input type="submit" value="CLICK TO ROLLBACK">
+    <input type="hidden" name="clone_owner" value="<?php print $clone_owner; ?>">
+    <input type="hidden" name="clone_owner_pass" value="<?php print $clone_owner_pass; ?>">
+		<input type="hidden" name="gns_host" value="<?php print $gns_host; ?>">
+		<input type="hidden" name="project_uuid" value="<?php print $project_uuid; ?>">
+		<input type="hidden" name="node_uuid" value="<?php print $node_uuid; ?>">
+		<input type="hidden" name="snapshot_id" value="<?php print $snapshot_id; ?>">
+		<input type="hidden" name="rollback" value="<?php print $snapshot_id; ?>">
+		</FORM></TD></TR>
+		</TABLE></TD></TR></TABLE><BR><BR>
+		<?php
+		
+	  exit(0);
+	}
+	
+  if ($node_uuid!="") // Either a node UUID is present, either it is a project global rollback
+	{
+		$gns_snapshots=get_snapshots($gns_host,$project_uuid,$node_uuid);
+		if (sizeof($gns_snapshots)>1) // always at least 1 line obtained
+		{ ?><TABLE BORDER=1><TR><TD><B>Host</B></TD><TD><B>Project</B></TD><TD><B>Node</B></TD><TD COLSPAN=2><B>Snapshot mark</B></TD></TR><?php
+
+			// get controller configuration to extract GNS3 hosts...
+			$project_name=gns_getprojectnamebyuuid($gns_host,$project_uuid);
+			$node_name=gns_getnodenamebyuuid($gns_host,$project_uuid,$node_uuid);
+
+			for ($i=0;$i<sizeof($gns_snapshots)-1;$i++)
+			{
+				$gns_snapshots[$i]=trim($gns_snapshots[$i]);
+				$snapshot_mark=preg_split("/@snap_/",$gns_snapshots[$i]);
+				$url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER[HTTP_HOST].$_SERVER["PHP_SELF"];
+				$url=$url."?gns_host=".$gns_host."&project_uuid=".$project_uuid."&node_uuid=".$node_uuid."&snapshot_id=".$snapshot_mark[1];
+				print("<TR><TD valign=top>".$gns_host."</TD><TD valign=top>".$project_name."</TD><TD valign=top>".$node_name."</TD><TD valign=top>".$snapshot_mark[1]."</TD>");
+				?><TD COLSPAN=3><FORM action="<?php print $_SERVER["PHP_SELF"]; ?>"><input type="submit" value="ROLLBACK">
+				<input type="hidden" name="clone_owner" value="<?php print $clone_owner; ?>">
+				<input type="hidden" name="clone_owner_pass" value="<?php print $clone_owner_pass; ?>">
+				<input type="hidden" name="gns_host" value="<?php print $gns_host; ?>">
+				<input type="hidden" name="project_uuid" value="<?php print $project_uuid; ?>">
+				<input type="hidden" name="node_uuid" value="<?php print $node_uuid; ?>">
+				<input type="hidden" name="snapshot_id" value="<?php print $snapshot_mark[1]; ?>">
+				</FORM></TD></TR><?php
+			}
+	?></TABLE><?php
+		}
+		else
+		{
+			?><H3>I am sorry, I found no snapshot to roll back to for that node</H3><?php
+		  exit;
+		}
+	}
+	else // project wide, will have to get all nodes_id and check each...
+	{
+		// get controller configuration to extract GNS3 hosts...
+		$gns_controller=gns_getcontrollers();
+		
+		// now get nodes list
+		$gns_nodes=gns_getnodes($gns_controller,$gns_host,$project_uuid);
+
+		$project_name=gns_getprojectnamebyuuid($gns_host,$project_uuid);
+
+		?><TABLE NUMCOL=3 BORDER=1><TR><TD><B>Host</B></TD><TD><B>Project</B></TD><TD COLSPAN=2><B>Nodes</B></TD></TR><?php
+
+		print("<TR><TD>".$gns_host."</TD><TD>".$project_name."</TD><TD><TABLE NUMCOL=2 BORDER=1>");
+		print("<TR><TD><B>Name</B></TD><TD><B>Snapshot mark</B></TD></TR>");
+		for ($i=0;$i<sizeof($gns_nodes);$i++)
+		{
+			$uuid=$gns_nodes[$i]['node_id'];
+			$name=$gns_nodes[$i]['name'];
+			
+			$gns_snapshots=get_snapshots($gns_host,$project_uuid,$uuid);
+			
+			if ($gns_snapshots!="")
+			{
+				print("<TR><TD>".$name."</TD><TD>");
+				for ($z=0;$z<sizeof($gns_snapshots)-1;$z++)
+				{
+					$snapshot_mark=preg_split("/@/",$gns_snapshots[$z]);
+					$snapshot_mark[1]=trim($snapshot_mark[1]);
+					print($snapshot_mark[1]);
+				}
+				print("</TD></TR>\n");
+			}
+		}
+		
+		print("</TABLE></TD><TD>");
+		$url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER[HTTP_HOST].$_SERVER["PHP_SELF"];
+		$url=$url."?gns_host=".$gns_host."&project_uuid=".$project_uuid."&snapshot_id=ROLLBACK";
+		print("<A HREF=\"".$url."\">ROLLBACK</A></TD></TR></TABLE>");
+	}
+?>

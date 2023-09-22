@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# $FreeBSD$
+#
+
+# PROVIDE: vigrid-load
+# BEFORE: DAEMON
+# KEYWORD: nojail shutdown
+
+. /etc/rc.subr
+
+name="vigrid-load"
+desc="Vigrid monitoring "
+rcvar="vigrid-load_enable"
+
+command_path="/Vstorage/GNS3/vigrid/bin"
+command="vigrid-load"
+command_flags="-R /Vstorage -l /var/log/vigrid-load.log"
+
+start_cmd="vigrid-load_start"
+stop_cmd="vigrid-load_stop"
+
+vigrid-load_start()
+{
+  chk=`ps waxo command | egrep "$command_path/$command $command_flags" | grep -v grep`
+  if [ "x$chk" != "x" ]
+  then
+    echo -n "(already running)"
+  else
+    $command_path/$command $command_flags || echo -n "($command_path/$command $command_flags) start failed"
+  fi
+}
+
+vigrid-load_stop()
+{
+  list=`ps waxo pid,command | egrep "$command $command_flags" | grep -v grep | awk '{print $1;}'`
+
+  for i in $list
+  do
+    echo "killing $i..."
+    kill $i
+  done
+}
+
+load_rc_config $name
+run_rc_command "$1"

@@ -1,0 +1,121 @@
+#!/bin/sh
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+PROGRESS="--progress"
+#PROGRESS=""
+
+[ "x$PROGRESS" != "x" ] && echo "### Phase 1: checking missing datasets on target..."
+
+# Get identified clones as well
+ZFS_CLONES=""
+
+# creating dataset missing on target FS
+ZFS_LIST=`zfs list -o name -r Vstorage |tail -n+2`
+for i in $ZFS_LIST
+do
+  TARGET=`echo $i | sed 's/Vstorage/Vstorage_BKP/'`
+
+  [ "x$PROGRESS" != "x" ] && echo "Source: Identified dataset: $i"
+
+  # Check if that is a clone (dependant from an origin)
+  CHK=`zfs get origin $i |awk '{print $(NF-1);}'|tail -1`
+  if [ "x$CHK" = "x-" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo "  Target: Checking for $TARGET..."
+
+    CHK=`zfs list $TARGET -o name 2>/dev/null`
+    if [ "x$CHK" = "x" ]
+    then
+      [ "x$PROGRESS" != "x" ] && echo -n "    Target: $TARGET dataset does not exist"
+
+      if [ -d "/$TARGET" ]
+      then
+        [ "x$PROGRESS" != "x" ] && echo -n " but /$TARGET exists, erasing it... "
+        rm -rf /$TARGET
+      fi
+
+      [ "x$PROGRESS" != "x" ] && echo " Target: creating dataset $TARGET..." && echo
+      zfs create $TARGET
+      [ $? -ne 0 ] && echo "Target: ZFS create $TARGET failed !" && sleep 5
+    fi
+  else
+    [ "x$PROGRESS" != "x" ] && echo "  Source: Clone dataset, skipping..."
+    ZFS_CLONES="$ZFS_CLONES $i"
+  fi
+done
+
+echo
+[ "x$PROGRESS" != "x" ] && echo "### Phase 2: checking useless datasets on target..."
+
+# destroy useless datasets on target FS
+ZFS_LIST=`zfs list -r -o name Vstorage_BKP |tail -n+2`
+for i in $ZFS_LIST
+do
+  SOURCE=`echo $i | sed 's/Vstorage_BKP/Vstorage/'`
+
+  [ "x$PROGRESS" != "x" ] && echo "Target: Identified dataset: $i"
+
+  [ "x$PROGRESS" != "x" ] && echo "  Source: Checking for $SOURCE..."
+
+  CHK=`zfs list $SOURCE -o name 2>/dev/null`
+  if [ "x$CHK" != "x" ] # dataset exists, but is that a clone ?
+  then
+    # Check if that is a clone (dependant from an origin)
+    CHK=`zfs get origin $SOURCE |awk '{print $(NF-1);}'|tail -1`
+    if [ "x$CHK" != "x-" ] # that is a clone
+    then
+      [ "x$PROGRESS" != "x" ] && echo "    Source is a clone..."
+      CHK=""
+    fi
+  fi
+
+  if [ "x$CHK" = "x" ] # dataset does not exist or is a clone on source
+  then
+    [ "x$PROGRESS" != "x" ] && echo "    Source: $SOURCE dataset does not exist or is a clone, destroying dataset $i..." && echo
+
+    zfs destroy -r $i
+    [ $? -ne 0 ] && echo "Source: ZFS destroy $i failed !" && sleep 5
+  fi
+done
+
+echo
+[ "x$PROGRESS" != "x" ] && echo "### Phase 3: syncing data to target..."
+
+ZFS_MOUNTPOINT=`$SSHDO $HOST_MASTER zfs list -o mountpoint Vstorage |tail -n+2`
+if [ "x$ZFS_MOUNTPOINT" != "x" ]
+then
+  ZFS_SKIP=""
+  ZFS_MOUNTPOINT_REGEX=`echo "$ZFS_MOUNTPOINT/"|sed 's,\/,\\\/,g'`
+  
+  if [ "x$ZFS_CLONES" != "x" ]
+  then
+    [ "x$PROGRESS" != "x" ] && echo -n "  Extracting clones mountpoints..."
+    rm -f /tmp/rsync-excluded-$$.txt 2>/dev/null
+      
+    # Get clones mountpoints to ignore then...
+    for z in `echo "$ZFS_CLONES" | sed 's/ /\n/g'`
+    do
+      CHK=`$SSHDO $HOST_MASTER zfs get mountpoint -o value $z |tail -1| sed "s,^$ZFS_MOUNTPOINT_REGEX,,g"`
+      echo "$CHK" >>/tmp/rsync-excluded-$$.txt
+      echo "$CHK/**" >>/tmp/rsync-excluded-$$.txt
+      ZFS_SKIP="--exclude-from=/tmp/rsync-excluded-$$.txt"
+      [ "x$PROGRESS" != "x" ] && echo -n "."
+    done
+  fi
+    
+  [ "x$PROGRESS" != "x" ] && [ "x$ZFS_SKIP" != "x" ] && echo "\n  Children clones, skipping directories:" && cat /tmp/rsync-excluded-$$.txt | sed 's/^/    /g'
+
+  echo "  Now Rsyncing"
+  echo "    Deletions first..."
+  rsync -r --delete $ZFS_SKIP --existing --ignore-existing --ignore-errors --delete-before --delete-excluded --force --max-delete=5000000 --timeout 7200 $PROGRESS /Vstorage/ /Vstorage_BKP/
+
+  echo "    ...then data..."
+  rsync -EAXDtogrHpav $ZFS_SKIP --force --numeric-ids --force $PROGRESS --inplace /Vstorage/ /Vstorage_BKP/
+  
+  rm -f /tmp/rsync-excluded-$$.txt 2>/dev/null
+else
+  echo "Cant determine ZFS mountpoint of Vstorage, exiting."
+  exit 1
+fi
+

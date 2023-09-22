@@ -1,0 +1,63 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+echo "$0: protect/unprotect RO a GNS3 project"
+
+PROJECT_UUID=$1
+PROJECT_PROTECTION=$2
+
+if [ "x$PROJECT_UUID" = "x" ]
+then
+  echo "Usage: $0 Project_UUID"
+  exit 1
+fi
+
+GNS3_HOME="/home/gns3/GNS3"
+
+if [ ! -d "$GNS3_HOME/projects/$PROJECT_UUID" ]
+then
+  echo "I am sorry, I cant find that project UUID: $PROJECT_UUID"
+  exit 1
+fi
+
+case "$2" in
+	"RO")
+		PROJECT_PROTECTION="RO"
+		;;
+	"RW")
+		PROJECT_PROTECTION="RW"
+		;;
+	*)
+		echo "I am sorry, I dont know what is '$2' protection. Please use 'RO' or 'RW' instead"
+		exit 1
+		;;
+esac
+
+echo "Identifying ZFS directories used by this project..."
+ZFS_LIST=`zfs list|awk '{print $NF;}'|egrep "$GNS3_HOME/projects/$PROJECT_UUID(/|$)"`
+
+for i in $ZFS_LIST
+do
+  # Get ZFS volumes associated with directory
+	ZFS_VOLUME=`zfs list | grep " $i$" | awk '{print $1;}'`
+	
+  case "$PROJECT_PROTECTION" in
+		"RO")
+			echo "$i: readonly=ON"
+			zfs set readonly=on $ZFS_VOLUME
+			;;
+		"RW")
+			echo "$i: readonly=OFF"
+			zfs set readonly=off $ZFS_VOLUME
+			;;
+	esac
+done

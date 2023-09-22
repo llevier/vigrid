@@ -1,0 +1,113 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             vigrid-load
+# Required-Start:       $remote_fs $network $syslog
+# Required-Stop:        $remote_fs $network $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    Vigrid system monitoring (disk I/O)
+# Description:          Vigrid is a CyberRange/Training extension to GNS3
+### END INIT INFO
+
+set -e
+
+test -x /usr/bin/iostat || exit 1
+( /usr/bin/iostat -V 2>&1 | grep -q "sysstat " ) 2>/dev/null || exit 1
+
+umask 022
+
+. /lib/lsb/init-functions
+
+export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
+
+PIDfile="/run/iostat/vigrid-load.pid"
+PIDdir=`dirname $PIDfile`
+CSVfile="/var/log/vigrid-load.log"
+
+trap '' HUP
+
+ACTION=$1
+# Get options after start...
+if [ -n "$2" ]
+then
+  shift
+  OPTIONS=$*
+  log_daemon_msg "$DESC service options detected: $OPTIONS" "vigrid-load" || true
+fi
+
+VIGRID_LOAD=""
+# Vigrid server
+if [ -x '/home/gns3/vigrid/bin/vigrid-load' ]
+then
+  VIGRID_LOAD="/home/gns3/vigrid/bin/vigrid-load"
+  . /home/gns3/etc/vigrid.conf
+  VIGRID_STORAGE=$VIGRID_STORAGE_ROOT
+fi
+# Vigrid NAS
+if [ -x '/Vstorage/GNS3/vigrid/bin/vigrid-load' ]
+then
+  VIGRID_LOAD="/Vstorage/GNS3/vigrid/bin/vigrid-load"
+  VIGRID_STORAGE="/Vstorage"
+fi
+
+if [ "x$VIGRID_LOAD" = "x" ]
+then
+  log_daemon_msg "Cant find vigrid-load, exiting" "vigrid-load" || true
+  exit 1
+fi
+
+case "$ACTION" in
+  start)
+    log_daemon_msg "Starting $DESC service" "vigrid-load" || true
+
+    # Sanity
+    [ ! -d "$PIDdir" ] && mkdir -p $PIDdir >/dev/null 2>/dev/null # && chown gns3:gns3 $PIDdir
+    [ ! -f "$CSVfile" ] && touch $CSVfile >/dev/null 2>/dev/null  # && chown gns3:gns3 $CSVfile
+
+    start-stop-daemon --start --background --make-pidfile --pidfile $PIDfile --exec $VIGRID_LOAD -- -R $VIGRID_STORAGE -l /var/log/vigrid-load.log
+
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+        log_end_msg 0 || true
+    else
+        log_end_msg 1 || true
+    fi
+    exit $RC
+    ;;
+    
+  stop)
+    log_daemon_msg "Stopping $DESC service" "vigrid-load" || true
+    
+    start-stop-daemon --stop --pidfile $PIDfile --remove-pidfile
+    RC=$?
+    if [ $RC -eq 0 ]
+    then
+        log_end_msg 0 || true
+    else
+        pkill -fe $VIGRID_LOAD -R $VIGRID_STORAGE -l /var/log/vigrid-load.log
+        RC=$?
+        if [ $RC -eq 0 ]
+        then
+          log_end_msg 0 || true
+        else
+          log_end_msg 1 || true
+        fi
+    fi
+    exit $RC
+    ;;
+
+  restart)
+    log_daemon_msg "Restarting $DESC service" "vigrid-load" || true
+    $0 stop $OPTIONS
+    $0 start $OPTIONS
+    break;
+    ;;
+
+  *)
+    log_action_msg "Usage: /etc/init.d/vigrid-load {start|stop|restart}" || true
+    exit 1
+esac
+
+exit 0

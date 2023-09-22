@@ -1,0 +1,118 @@
+#!/usr/bin/php
+<?php
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+// hide notices
+ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+error_reporting(E_ERROR | E_PARSE);
+
+# Verbose level
+$verbose=0;
+
+$opt=getopt("p:n:");
+
+$project_name=$opt['p'];
+$node_name=$opt['n'];
+
+// Vigrid functions
+include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+
+$vigrid_storage_mode=strtoupper(VIGRIDconfig("VIGRID_STORAGE_MODE"));
+$vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+
+// Vigrid home directory
+$gns_home="$vigrid_storage_root/home/gns3";
+$gns_home_projects="$gns_home/GNS3/projects";  
+
+ if ($project_name=="")
+ {
+   print("Usage: $ARGV[0] -p ProjectName [ -n NodeName ]\n");
+   exit(1);
+ }
+
+print("Vigrid dependancies shower
+  Projects home: $gns_home_projects
+  Opening project $project_name configuration file...
+");
+
+if (chdir($gns_home_projects)==0) { print "Cant access $gns_home_projects, exiting\n"; exit(-1); }
+
+$project_config="";
+foreach (glob("*/*.gns3") as $filename)
+{ if (preg_match("/$project_name.gns3$/",$filename)) { $project_config=$filename; } }
+
+if ($project_config=="")
+{
+ print("  Failed to find $project_name configuration file, exiting\n");
+ exit(1);
+}
+
+$project_config_lines=array();
+$fd=fopen($project_config,"r");
+if (!$fd) { print("Cant find $project_name descriptor file exiting\n"); exit(-1); }
+while (!feof($fd))
+{
+  $line=fgets($fd,4096);
+  array_push($project_config_lines,$line);
+}
+fclose($fd);
+
+$qemu_images=array();
+$iou_images=array();
+$ios_images=array();
+
+if ($node_name!="")
+{
+  print("  Restricting dependancies to node $node_name\n");
+
+  $node_details=preg_grep("/\"name\": \"$node_name\"/",$project_config_lines);
+  $t=array_keys($node_details);
+  $node_pos=$t[0];
+
+  $bracket=0;
+  for ($i=$node_pos;$i<sizeof($project_config_lines);$i++)
+  {
+    if ($t=preg_match("/{/",$project_config_lines[$i])) { $bracket++; }
+    if ($t=preg_match("/}/",$project_config_lines[$i])) { $bracket--; }
+
+    if (preg_match("/disk_image\"/",$project_config_lines[$i])) { array_push($qemu_images,$project_config_lines[$i]); }
+    if (preg_match("/\"path\"/",    $project_config_lines[$i])) { array_push($iou_images,$project_config_lines[$i]); }
+    if (preg_match("/\"image\"/",   $project_config_lines[$i])) { array_push($ios_images,$project_config_lines[$i]); }
+    
+    if ($bracket<0) { break; }
+  }
+  $all_images=array_unique(array_merge($qemu_images,$iou_images,$ios_images));
+}
+else
+{
+  $qemu_images=preg_grep("/disk_image\"/",$project_config_lines);
+  $iou_images=preg_grep("/\"path\"/",$project_config_lines);
+  $ios_images=preg_grep("/\"image\"/",$project_config_lines);
+
+  $all_images=array_unique(array_merge($qemu_images,$iou_images,$ios_images));
+}
+
+print("\n");
+
+foreach ($all_images as $image)
+{
+  $f=preg_split("/:/",$image);
+  $image_disk=preg_replace("/\"/","",preg_replace("/,$/","",trim($f[1])));
+  if ($image_disk!="")
+  {
+    if (preg_match("/disk_image\"/",$f[0]))   { print("Appliance Qemu disk:"); }
+    else if (preg_match("/\"path\"/",$f[0]))  { print("Appliance IOU disk :"); }
+    else if (preg_match("/\"image\"/",$f[0])) { print("Appliance IOS image:"); }
+    
+    print(" '$image_disk', '$image_disk.md5sum'\n");
+  }
+}
+

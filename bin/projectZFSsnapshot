@@ -1,0 +1,427 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+USAGE="Usage: $0 -a list|size|CONVproject|ADDclone|DELclone|ADDhistory|DELhistory|SWAPsnap|ROLLback -p ProjectUUID [ -P ProjectName ] [ -b BaseGNSdir ] [ -n NodeUUID ] [ -s SnapshotID ] [ -S ]"
+
+SHOW_SIZE=0
+
+while getopts 'a:p:P:n:s:b:h:S' OPTIONS
+do
+  case "$OPTIONS" in
+	h)	GNS_HOST="$OPTARG";;
+	b)	BASE_DIR="$OPTARG";;
+	a)	ACTION="$OPTARG";;
+	p)	PROJECT_UUID="$OPTARG";;
+	P)	PROJECT_NAME="$OPTARG";;
+	n)	NODE_UUID="$OPTARG";;
+	s)	SNAPSHOT_ID="$OPTARG";;
+	S)	SHOW_SIZE=1;;
+	[?])
+		echo $USAGE
+		exit 1
+		;;
+	esac
+done
+
+shift "$(($OPTIND -1))"
+
+USAGE_SHOW=0
+[ "x$ACTION" = "x" -o "x$PROJECT_UUID" = "x" ] && USAGE_SHOW=1
+[ "x$ACTION" = "xlist" ] && USAGE_SHOW=0
+
+if [ $USAGE_SHOW -eq 1 ]
+then
+  echo $USAGE
+	exit 1
+fi
+
+if [ "x$BASE_DIR" = "x" ]
+then
+  # Loading Vigrid configuration
+  if [ -r $VIGRID_CONF ]
+  then
+    . $VIGRID_CONF 2>/dev/null
+  else
+    echo "Cant find $VIGRID_CONF, exiting"
+    exit 1
+  fi
+
+  # Filesystem will depend on Vigrid design. Will summarize as : NAS or no NAS ?
+  HOSTNAME=`hostname`
+
+  # Getting real physical location of project
+  [ $VIGRID_TYPE -eq 1 ] && GNS3_HOME="/home/gns3/GNS3"
+  [ $VIGRID_TYPE -eq 2 -o $VIGRID_TYPE -eq 5 ] && GNS3_HOME="/Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3"
+  [ $VIGRID_TYPE -eq 3 -o $VIGRID_TYPE -eq 4 ] && GNS3_HOME="/Vstorage/GNS3/GNS3farm/GNS3"
+else
+  GNS3_HOME="$BASE_DIR"
+fi
+
+if [ "x$GNS3_HOME" = "x" ]
+then
+  echo "Cant define GNS3_HOME, exiting" | tee -a $VIGRID_LOG
+  exit 1
+fi
+
+PROJECT_DIR="$GNS3_HOME/projects/$PROJECT_UUID"
+
+# If there is a NAS and no BASE_DIR, means master caller is launched. It will launch on NAS its copy with -b path set.
+if [ "x$VIGRID_NAS_SERVER" != "x" -a "x$BASE_DIR" = "x" ]
+then
+  DEFAULT_NAS=`echo $VIGRID_NAS_SERVER| awk '{print $1;}'`
+  DEFAULT_NAS_IP=`echo $DEFAULT_NAS| awk 'BEGIN { FS=":"; } {print $2;}'`
+
+  RUN_FLAGS="-a $ACTION -b $GNS3_HOME"
+  [ "x$PROJECT_UUID" != "x" ] && RUN_FLAGS="$RUN_FLAGS -p $PROJECT_UUID"
+  [ "x$NODE_UUID" != "x" ]    && RUN_FLAGS="$RUN_FLAGS -n $NODE_UUID"
+  [ "x$SNAPSHOT_ID" != "x" ]  && RUN_FLAGS="$RUN_FLAGS -s $SNAPSHOT_ID"
+  [ $SHOW_SIZE -eq 1 ]     && RUN_FLAGS="$RUN_FLAGS -S"
+
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP rm /Vstorage/GNS3/bin/projectZFSsnapshot 2>/dev/null
+
+  ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP /Vstorage/GNS3/bin/projectZFSsnapshot $RUN_FLAGS 2>/dev/null
+  RC=$?
+
+  if [ $RC -eq 127 ] # target file is not present, possibly, installing it on remote host
+  then
+    cat /home/gns3/vigrid/bin/projectZFSsnapshot | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP 'mkdir -p /Vstorage/GNS3/bin;cat >/Vstorage/GNS3/bin/projectZFSsnapshot'
+    ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP chmod 755 /Vstorage/GNS3/bin/projectZFSsnapshot
+
+    ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$DEFAULT_NAS_IP /Vstorage/GNS3/bin/projectZFSsnapshot $RUN_FLAGS 2>/dev/null
+    RC=$?
+  fi
+  
+  exit $RC
+fi
+
+# Back to local mode...
+cd $PROJECT_DIR
+if [ $? -ne 0 ]
+then
+  echo "Cant find project $PROJECT_UUID, exiting"
+  exit 1
+fi
+
+DIR_PROJECT=`/bin/pwd`
+
+# Check Project is already a ZFS dataset
+# echo -n "OK=Identifying dataset ($DIR_PROJECT)..."
+PATTERN="\/projects"
+[ "x$PROJECT_UUID" != "x" ] && PATTERN="\/$PROJECT_UUID$"
+
+ZFS_DATASET=`zfs list -o name $DIR_PROJECT | grep "$PATTERN"`
+if [ "x$ZFS_DATASET" = "x" ]
+then
+  ZFS_CHK=0
+else
+  ZFS_CHK=1
+fi
+
+[ "x$PROJECT_UUID" = "x" -a "x$ACTION" != "xlist" ] && echo "BAD=Bad or missing project UUID, exiting" && exit 1
+
+T=`dirname $DIR_PROJECT`
+# echo -n "OK=Identifying parent dataset ($T)..."
+
+[ "x$T" = "x" ] && echo "BAD=Parent dataset cant be empty, exiting" && exit 1
+
+# T must end with /projects
+CHK=`echo $T|grep "\/projects"|wc -l`
+if [ $CHK -ne 0 ]
+then
+  ZFS_DATASET_PARENT=`zfs list -o name $T | grep "\/projects"`
+  ZFS_CHK_PARENT=`echo "$ZFS_DATASET_PARENT"|grep "\/projects$"|wc -l`
+
+  # Sanity controls
+  [ $ZFS_CHK_PARENT -eq 0 ] && echo "BAD=Parent is not a ZFS dataset" && exit 3 # Parent is not a ZFS dataset
+else
+  ZFS_DATASET_PARENT=$ZFS_DATASET
+  ZFS_CHK_PARENT=1
+fi
+
+# echo "$ZFS_DATASET_PARENT ($ZFS_CHK_PARENT)"
+
+# Convert project to ZFS dataset
+if [ "x$ACTION" = "xCONVproject" ]
+then
+  [ $ZFS_CHK -ne 0 ] && echo "BAD=Project $PROJECT_UUID is already on a ZFS dataset, exiting" && exit 0
+
+  [ "x$SNAPSHOT_ID" != "xCONV" ] && echo "BAD=Incorrect snapshot ID" && exit 1
+
+  # Actions to convert:
+  # 1- Stopping & closing project
+  # 2- Renaming project dir to .old
+  # 3- Creating ZFS dataset for project dirname
+  # 4- Xfering data...
+  # 5- Checking file per file
+  # 6- Deleting old directory
+
+  [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ] && HOST="172.29.0.254"
+
+  # 1
+  # If on NAS, no action
+  # /home/gns3/vigrid/bin/project-control -h $GNS_HOST -p $PROJECT_UUID -a stop
+  # /home/gns3/vigrid/bin/project-control -h $GNS_HOST -p $PROJECT_UUID -a close
+  # echo "OK=Stopping & closing $PROJECT_UUID done"
+
+  echo "OK=Conversion of project $PROJECT_UUID starting..."
+
+  # 2
+  mv $DIR_PROJECT $DIR_PROJECT.old 
+  [ $? -ne 0 ] && echo "BAD=Renaming of $DIR_PROJECT failed" && exit 1
+  [ ! -d $DIR_PROJECT.old -o -d $DIR_PROJECT ]  && echo "BAD=Renaming of $DIR_PROJECT failed" && exit 1
+  echo "OK=Renaming $DIR_PROJECT to .old done"
+
+  # 3
+  echo "OK=Creating ZFS dataset '$ZFS_DATASET_PARENT/$PROJECT_UUID'"
+  zfs create -p "$ZFS_DATASET_PARENT/$PROJECT_UUID"
+  if [ $? -ne 0 ]
+  then
+    echo "BAD=Cant create ZFS dataset '$ZFS_DATASET_PARENT/$PROJECT_UUID'"
+
+    echo "OK=Rolling back $DIR_PROJECT renaming..."
+    mv $DIR_PROJECT.old $DIR_PROJECT || echo "BAD=Cant rename .old to $DIR_PROJECT too"
+    echo "OK=Rolled back renaming of $DIR_PROJECT"
+
+    exit 1
+  fi
+  echo "OK=$ZFS_DATASET_PARENT/$PROJECT_UUID ZFS dataset created"
+  
+  # 4
+  # rsync -az --inplace $DIR_PROJECT.old/* $DIR_PROJECT/
+  # rclone is *much* faster
+  rclone sync $DIR_PROJECT.old $DIR_PROJECT
+  [ $? -ne 0 ] && echo "BAD=Project data replication failed" && exit 1
+  chown -R gns3:gns3 $DIR_PROJECT
+  [ $? -ne 0 ] && echo "BAD=Cant chown replicated project data" && exit 1
+  echo "OK=$DIR_PROJECT data replicated & ownership changed"
+  
+  # 5
+  # diff -r $DIR_PROJECT.old $DIR_PROJECT
+  # [ $? -ne 0 ] && echo "BAD=Directory content is not matching" && exit 1
+  # echo "OK=Directory contents are matching"
+  
+  # 6
+  rm -rf $DIR_PROJECT.old
+  [ $? -ne 0 ] && echo "Cant delete .old directory" && exit 1
+  echo "OK=.old directory now erased"
+  
+  exit 0
+fi
+
+[ $ZFS_CHK -eq 0 ] && echo "BAD=Project is not a ZFS dataset" && exit 2
+
+# List UUID DIRs of project
+DIRlist()
+{
+
+  # Node undefined
+  if [ "x$NODE_UUID" = "x" ]
+  then
+      # Project defined
+    if [ "x$PROJECT_UUID" = "x" ]
+    then
+      C="$GNS3_HOME/projects/*/project-files/*/*"
+    else
+      ls -1d $DIR_PROJECT  2>/dev/null
+      C="$DIR_PROJECT/project-files/*/*"
+    fi
+  else
+    C="$DIR_PROJECT/project-files/*/$NODE_UUID"
+  fi
+
+  if [ "x$PROJECT_UUID" != "x" ]
+  then
+    ls -1d $C 2>/dev/null | egrep "\/$PROJECT_UUID\/.*\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$"
+  else
+    ls -1d $GNS3_HOME/projects/* 2>/dev/null | egrep "\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$"
+    ls -1d $C 2>/dev/null | egrep "\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b$"
+  fi
+}
+
+# List UUID ZFS dataset of project
+ZFSlist()
+{
+  # zfs list -o name $ZFS_ROOT| tail -n +2 | sort -u
+  for i in $DIR_LIST
+  do
+    # Getting real physical location of project
+    DIR_I="N/A"
+    cd $i
+    [ $? -eq 0 ] && DIR_I=`/bin/pwd`
+
+    ZFS_I=`zfs list -o mountpoint,name | egrep "^$DIR_I[\s ]+" | awk '{print $1;}'`
+
+    # Check snapshot root is already a ZFS dataset. If so, display it.
+    if [ "x$ZFS_I" != "x" ]
+    then
+      # echo "I am sorry but $DIR_I is not on a ZFS dataset. Exiting"
+      zfs list -o name $ZFS_I 2>/dev/null | tail -n +2
+    fi
+  done
+
+}
+
+# Returns ZFS dataset size
+ZFSdataset_size()
+{
+  for i in $ZFS_LIST
+  do
+    zfs list -o used,name $i 2>/dev/null | tail -n +2 | grep "\/$PROJECT_UUID$" | awk '{print $1;}'
+  done
+}
+
+# Lists UID ZFS snapshoted datasets
+ZFSlist_snaps()
+{
+  for i in $ZFS_LIST
+  do
+    if [ "x$SNAPSHOT_ID" != "x" ]
+    then
+      zfs list -r -o name -t snapshot $i 2>/dev/null | tail -n +2 | grep "@$SNAPSHOT_ID$"
+    else
+      zfs list -r -o name -t snapshot $i 2>/dev/null | tail -n +2
+    fi
+  done
+}
+
+DIR_LIST=$(DIRlist)
+# echo "### DIR_LIST"
+# echo "$DIR_LIST"
+
+if [ "x$NODE_UUID" != "x" ]
+then
+  CHK=`echo "$DIR_LIST" | grep "$NODE_UUID"`
+  if [ "x$CHK" = "x" ]
+  then
+    echo "BAD=Node $NODE_UUID does not exist in project $PROJECT_UUID, exiting"
+    exit 1
+  fi
+fi
+
+CHK=`echo "$DIR_LIST" | grep "$PROJECT_UUID"`
+if [ "x$CHK" = "x" ]
+then
+  echo "BAD=Cant find project $PROJECT_UUID, exiting"
+  exit 1
+fi
+
+ZFS_LIST=$(ZFSlist)
+# echo "### ZFS_LIST"
+# echo "$ZFS_LIST"
+
+ZFS_NODE=0
+if [ "x$NODE_UUID" != "x" ]
+then
+  CHK=`echo "$ZFS_LIST" | egrep "\/$NODE_UUID"`
+  [ "x$CHK" != "x" ] && ZFS_NODE=1
+fi
+
+ZFS_SNAPS=$(ZFSlist_snaps)
+# echo "### ZFS_SNAPS"
+# echo "$ZFS_SNAPS"
+
+case "$ACTION" in
+  "size")
+    [ "x$PROJECT_UUID" != "x" ] && echo -n "OK=Project $PROJECT_UUID size: "
+    ZFS_SIZE=$(ZFSdataset_size)
+    echo "$ZFS_SIZE"
+    ;;
+  "list")
+    [ "x$NODE_UUID" != "x" -a $ZFS_NODE -eq 0 ] && echo "BAD=WARNING! No ZFS dataset for node $NODE_UUID, falling back to parent dataset"
+    for i in $ZFS_SNAPS
+    do
+      echo -n "S=$i"
+      if [ $SHOW_SIZE -eq 1 ]
+      then
+        REFER=`zfs list -t snapshot -o refer,name $i 2>/dev/null | tail -n +2 | awk '{print $1;}'`
+        echo ":$REFER"
+      else
+        echo
+      fi
+    done
+    exit 0
+    ;;
+	"ADDclone")
+    echo "OK=Now creating clone mark $SNAPSHOT_ID"
+    OUT=`zfs snapshot -r $ZFS_DATASET@clonesource_$SNAPSHOT_ID 2>&1`
+    RC=$?
+    [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
+    [ $RC -eq 0 ] && echo "OK=SUCCESS"
+    break;
+		;;
+	"DELclone")
+    echo "OK=Now deleting clone mark $SNAPSHOT_ID"
+    OUT=`zfs destroy $ZFS_DATASET@clonesource_$SNAPSHOT_ID 2>&1`
+    RC=$?
+    [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
+    [ $RC -eq 0 ] && echo "OK=SUCCESS"
+    break;
+		;;
+	"ADDhistory")
+    echo "OK=Now creating history mark $SNAPSHOT_ID"
+    OUT=`zfs snapshot -r $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
+    RC=$?
+    [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
+    [ $RC -eq 0 ] && echo "OK=SUCCESS"
+    break;
+		;;
+	"DELhistory")
+    echo "OK=Now deleting history mark $SNAPSHOT_ID"
+    OUT=`zfs destroy $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
+    RC=$?
+    [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
+    [ $RC -eq 0 ] && echo "OK=SUCCESS"
+    break;
+		;;
+	"ROLLback")
+    echo "OK=Now rolling back project $PROJECT_NAME ($PROJECT_UUID) to snapshot $SNAPSHOT_ID"
+    OUT=`zfs rollback $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
+    RC=$?
+    [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
+    [ $RC -eq 0 ] && echo "OK=SUCCESS"
+    break;
+		;;
+	"SWAPsnap")
+    echo "OK=Now switching format of mark $SNAPSHOT_ID"
+    echo "OK=  Identifying format of mark $SNAPSHOT_ID"
+    OUT=`zfs list -r -t snapshot -o name $ZFS_DATASET | grep "$SNAPSHOT_ID$"`
+    IFSBAK=$IFS
+    IFS="
+"
+    for i in $OUT
+    do
+      FORMAT=`echo "$i" | sed 's/^.*@//' | sed 's/_.*$//'`
+      case "$FORMAT" in
+        "clonesource")
+          echo "OK=    Detected Clone mark $SNAPSHOT_ID, changing to History mark"
+          OUT=`zfs rename $ZFS_DATASET@clonesource_$SNAPSHOT_ID $ZFS_DATASET@snap_$SNAPSHOT_ID 2>&1`
+          RC=$?
+          ;;
+        "snap")
+          echo "OK=    Detected History mark $SNAPSHOT_ID, changing to Clone mark"
+          OUT=`zfs rename $ZFS_DATASET@snap_$SNAPSHOT_ID $ZFS_DATASET@clonesource_$SNAPSHOT_ID  2>&1`
+          RC=$?
+          ;;
+      esac
+      
+      [ $RC -ne 0 ] && echo "BAD=Error $RC ($OUT)"
+      [ $RC -eq 0 ] && echo "OK=SUCCESS"
+    done
+    break;
+		;;
+  *)
+		echo "BAD=Unknown action ($action)"
+		exit 1
+		;;
+esac

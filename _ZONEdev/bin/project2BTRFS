@@ -1,0 +1,139 @@
+#!/bin/sh
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+echo "$0: convert GNS3 project into a list of BTRFS volumes for snaping shot"
+
+GNS3_HOME="/home/gns3/GNS3"
+
+PROJECT_UUID=$1
+
+if [ "x$PROJECT_UUID" = "x" ]
+then
+  echo "Usage: $0 Project_UUID"
+  exit 1
+fi
+
+BTRFScreate()
+{
+  # equal to btrfs sub create -p (ref: mkdir -p)
+  OIFS=$IFS
+  IFS='/'
+  DIRS=$1
+
+  TMP_DIR=""
+  
+  for x in $DIRS
+  do
+    if [ "x$x" != "x" ]
+    then
+      TMP_DIR=`echo "$TMP_DIR/$x"`
+      # echo "    creating $TMP_DIR"
+      btrfs sub create "$TMP_DIR" >/dev/null 2>/dev/null
+      chown $GNS3_UID:$GNS3_GID "$TMP_DIR"
+    fi
+  done
+
+  IFS=$OIFS
+}
+
+GNS3_UID=`stat --format %u $GNS3_HOME`
+GNS3_GID=`stat --format %g $GNS3_HOME`
+
+if [ $GNS3_UID -eq 0 -o $GNS3_GID -eq 0 ]
+then
+  echo "Detected $GNS3_HOME is owned by UID/GID 0, cant be. Exiting."
+	exit 1
+fi
+
+if [ ! -d "$GNS3_HOME/projects/$PROJECT_UUID" ]
+then
+  echo "I am sorry, I cant find that project UUID: $PROJECT_UUID"
+  exit 1
+fi
+
+echo "This script must only be launched if gns3 service is stopped."
+echo -n "That is the case ? [y/n] "
+read ANS
+
+case $ANS in
+	y|Y)
+		break
+		;;
+	*)
+		echo "Exiting then..."
+		exit 1
+		;;
+esac
+echo
+
+# Ensuring at least ~gns3/GNS3/projects is a BTRfs volume
+DIR_CURRENT=`pwd`
+cd $GNS3_HOME/projects
+DIR_PROJECTS=`/bin/pwd`
+cd $DIR_CURRENT
+CHK=`btrfs sub list $DIR_PROJECTS | grep "\/projects$" |wc -l`
+if [ $CHK -eq 0 ]
+then
+  echo "~gns3/GNS3/projects is not a BTRfs volume. That is mandatory. Exiting."
+  exit 1
+fi
+
+# Getting real physical location of project
+DIR_CURRENT=`pwd`
+cd $GNS3_HOME/projects/$PROJECT_UUID
+DIR_PROJECT=`/bin/pwd`
+cd $DIR_CURRENT
+
+echo "Project real directory: $DIR_PROJECT"
+
+CHK=`btrfs sub list $DIR_PROJECT | grep "$PROJECT_UUID" |wc -l`
+DIR_PROJECT_BTRFS=0
+if [ $CHK -ne 0 ]
+then
+  DIR_PROJECT_BTRFS=1
+  echo "  this is a BTRfs volume"
+else
+  echo "  this is NOT a BTRfs volume"
+fi
+BTRFS_ROOT="/"`echo "$DIR_PROJECT" | awk 'BEGIN { FS="/"; } { print $2;}'`
+BTRFS_ROOT_SNAP="$BTRFS_ROOT/.snapshots"
+
+echo "Listing project uuid nodes directories..."
+LIST=`find $DIR_PROJECT -type d -print | egrep "\/$PROJECT_UUID\/.*\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b" | sort -u`
+
+echo "Renaming Project directory or BTRfs volume to temp name: $PROJECT_UUID.old"
+if [ $DIR_PROJECT_BTRFS -eq 1 ]
+then
+  btrfs sub snap $DIR_PROJECT $DIR_PROJECT.old #2>/dev/null
+  btrfs sub delete -c $DIR_PROJECT  #2>/dev/null
+else
+  mv $DIR_PROJECT $DIR_PROJECT.old
+fi
+
+echo "Creating node directories..."
+for i in $LIST
+do
+  echo "  $i"
+  BTRFScreate "$i"
+done
+
+echo "Now cloning project (can be looooonnnnnggggg depending on size) ..."
+rsync --delete --delete-before --inplace -rlHpogtz --numeric-ids $DIR_PROJECT.old/ /$DIR_PROJECT
+
+echo "Finally deleting $DIR_PROJECT.old..."
+if [ $DIR_PROJECT_BTRFS -eq 1 ]
+then
+  btrfs sub delete -c $DIR_PROJECT.old 2>/dev/null
+fi
+rm -rf $DIR_PROJECT.old 2>/dev/null
+
+echo "Task done. Dont forget to restart gns3 service ;-)"

@@ -428,7 +428,7 @@ report(1,$www_ok."    Source dataset: $source_dataset\n");
 $target_dataset="$zfs_gns_home_projects/$to_project_uuid";
 report(1,$www_ok."    Target dataset: $target_dataset\n");
 
-$command="zfs clone \"$source_dataset\" \"$target_dataset\"";
+$command="zfs clone -r \"$source_dataset\" \"$target_dataset\"";
 report(3,$www_ok."    Executing $command\n");
 list($rc,$res)=get_exec($command,"    ",true);
 if ($rc!=0) { report(0,$www_bad."    Cloning order failed ($rc)\n"); }

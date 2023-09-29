@@ -590,6 +590,8 @@ for ($d=0;$d<sizeof($dirs_uuid);$d++)
         else if ($from_project_dir_norename==0) // Dont rename if asked
         {
           report(4,$www_ok."      Moving $dir_source\n          To $dir_target...");
+          
+          // Considering all directories are not datasets
           $rc=rename($dir_source,$dir_target);
           if ($rc==true)
           { report(4,$www_ok."done...\n"); }

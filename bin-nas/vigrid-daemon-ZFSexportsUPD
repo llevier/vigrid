@@ -120,10 +120,13 @@ while (1)
     }
   }
   $matches=array_values($matches);
+  // print_r($export_toremove);
   
   // Getting ZFS dataset list
   list($rc,$zfs_list)=get_exec("zfs list -o mountpoint","",false);
   $zfs_list=array_map('trim',$zfs_list);
+  
+  // print_r($zfs_list);
   
   // Creating new export to merge that all...
   $export_new=array();
@@ -132,13 +135,21 @@ while (1)
   {
     // Clean export line from [CR] etc.
     $f=preg_split("/[\s ]+/",trim($exports[$l]));
-
+    // print("Export dir=$f[0]\n");
+    
     // Managing existings, always put again...until they are in $matches
-    if ((($exports[$l]=="") || ($f[0]=="")) // not empty
+    if ((($exports[$l]=="") || ($f[0]=="") || preg_match("/^#/",$f[0])) // not empty
      || ((!(in_array(trim($exports[$l]),$export_new))) // not already in the new export list
      && (!(in_array($f[0],$export_toremove))))) // not in the ones to remove array as well
     {
-      array_push($export_new,$exports[$l]);
+      // Ensuring exported dir still is a ZFS dataset
+      if ((preg_match("/^\//",$f[0])) && (!array_search($f[0],$zfs_list,true))) // a directory
+      {
+        if ($verbose) { report("  $exports[$l] is no longer in a ZFS dataset, removing it from exports\n"); }
+        $exports[$l]="";
+      }
+      else
+      { array_push($export_new,$exports[$l]); }
     }
     
     // Ok, now what about new $matches that could be in this directory tree ?

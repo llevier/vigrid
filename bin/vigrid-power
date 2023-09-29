@@ -109,12 +109,12 @@ do
   then
     echo "I am sorry, I cant find $i in Power slaves hosts. Skipping it"
   else
-    echo "### Executing on $TARGET_NAME ($TARGET_IP): $ARGS"
+    echo "### Executing on $TARGET_NAME ($TARGET_IP): $ORDER"
     
     # Their offer: diffie-hellman-group14-sha1,diffie-hellman-group1-sha1
     if [ "x$VIGRID_POWER_ACCESS" = "xSSH" ]
     then
-      eval sshpass -p "'$POWER_PASS'" ssh -o UserKnownHostsFile=/dev/null $VIGRID_SSHKEY_OPTIONS $POWER_USER@$i $ORDER 2>&1 | sed 's/^/  /'
+      eval sshpass -p "'$POWER_PASS'" ssh -o UserKnownHostsFile=/dev/null $VIGRID_SSHKEY_OPTIONS $POWER_USER@$TARGET_IP $ORDER 2>&1 | sed 's/^/  /'
     fi
     [ $? -ne 0 ] && echo "### ORDER FAILED !"
   fi

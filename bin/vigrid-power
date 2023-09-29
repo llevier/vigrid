@@ -89,12 +89,33 @@ ORDER="power $ACTION"
 
 for i in $LIST
 do
-  echo "### Executing on $i: $ARGS"
-  
-  # Their offer: diffie-hellman-group14-sha1,diffie-hellman-group1-sha1
-  if [ "x$VIGRID_POWER_ACCESS" = "xSSH" ]
+  TARGET_IP=""
+  TARGET_NAME=""
+  for host in $VIGRID_POWER_SLAVE_HOSTS
+  do
+    HOST=`echo $host | awk 'BEGIN { FS=":"; } { print $2; }'`
+    NAME=`echo $host | awk 'BEGIN { FS=":"; } { print $1; }'`
+    
+    CHK=`echo "$i" | grep -i "$NAME"`
+    if [ "x$CHK" != "x" ]
+    then
+      TARGET_IP=$HOST
+      TARGET_NAME=$NAME
+      break
+    fi
+  done
+
+  if [ "x$TARGET_NAME" = "x" -o "x$TARGET_IP" = "x" ]
   then
-    eval sshpass -p "'$POWER_PASS'" ssh -o UserKnownHostsFile=/dev/null $VIGRID_SSHKEY_OPTIONS $POWER_USER@$i $ORDER 2>&1 | sed 's/^/  /'
+    echo "I am sorry, I cant find $i in Power slaves hosts. Skipping it"
+  else
+    echo "### Executing on $TARGET_NAME ($TARGET_IP): $ARGS"
+    
+    # Their offer: diffie-hellman-group14-sha1,diffie-hellman-group1-sha1
+    if [ "x$VIGRID_POWER_ACCESS" = "xSSH" ]
+    then
+      eval sshpass -p "'$POWER_PASS'" ssh -o UserKnownHostsFile=/dev/null $VIGRID_SSHKEY_OPTIONS $POWER_USER@$i $ORDER 2>&1 | sed 's/^/  /'
+    fi
+    [ $? -ne 0 ] && echo "### ORDER FAILED !"
   fi
-  [ $? -ne 0 ] && echo "### ORDER FAILED !"
 done

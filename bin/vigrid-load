@@ -162,8 +162,12 @@ while (1)
     $net_array=preg_grep("/ state UP /",$res);
     $net_array=preg_replace("/: <.*$/","",$net_array);
     $net_array=preg_replace("/^.* /","",$net_array);
-    $nets=implode(" ",$net_array);
 
+    // Ignoring docker0
+    $net_array=preg_replace("/^docker0/","",$net_array);
+    
+    $nets=implode(" ",$net_array);
+    
     if ($verbose==1) { print ("Network interfaces UP are ".$nets."\n"); }
   }
   else

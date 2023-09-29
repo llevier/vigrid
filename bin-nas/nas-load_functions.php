@@ -135,7 +135,7 @@ function VigridLOADgetnet($load_array,$filters_net)
      || ((empty($filters_net)) && ($f[1]=="N")))
     {
       $name=$f[2];
-
+      
       $net[$name]['bytes_in']=$f[3];
       $net[$name]['bytes_in_max']=$f[4];
       $net[$name]['bytes_out']=$f[5];
@@ -161,8 +161,8 @@ function VigridLOADgetnet($load_array,$filters_net)
           {
             $t=file("/sys/class/net/$name/$filename/speed");
             
-            $net[$name_lower]=preg_replace("/lower_/","",$filename);
-            
+            $name_lower=preg_replace("/lower_/","",$filename);
+           
             if ($value_min==0) { $value_min=trim($t[0]); }
             else if ($t[0]<$value_min) { $value_min=trim($t[0]); }
             
@@ -175,6 +175,7 @@ function VigridLOADgetnet($load_array,$filters_net)
       }
     }
   }
+  
   return($net);
 }
 

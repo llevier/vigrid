@@ -46,7 +46,7 @@ if (!function_exists('report'))
 function gen_mac()
 {
   $md5_str=md5(random_int(0,0xffffff));
-  $md5_str=preg_replace('/ff/','/fa/',$md5_str);
+  $md5_str=str_replace('ff','fa',$md5_str);
   $mac=str_split($md5_str,2);
    
   return sprintf( '02:%s:%s:%s:%s:%s',$mac[0],$mac[1],$mac[2],$mac[3],$mac[4]);

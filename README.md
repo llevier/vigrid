@@ -1,6 +1,6 @@
 # Vigrid
 
-<STRONG>Vigrid now exists in <A HREF="https://github.com/llevier/vigrid/tree/v1.0">v1.0, first stable version</A></STRONG>.
+<STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.1">v1.1, validated for Ubuntu 22LTS</A></STRONG>.
 
 Vigrid is an extension to the GNS3 Hypervisor to turn it to a Cyber Range or a industrial training platform.
 
@@ -94,10 +94,7 @@ Feel free to contact me.
   <TR><TD><B>Topic</B></TD>
   <TD><B>Status</B></TD></TR>
   <TR><TD>First GNS3v3 tests</TD>
-  <TD>Ongoing</TD></TR>
-  <TR><TD>Install procedure for Vigrid NAS under FreeBSD. Please pay attention /etc/exports becomes with a new format. It means Vigrid servers must be updated to stop using autofs + mount automatically Vigrid NAS shares. That remains manual at this time.<BR>
-  Install script available at <A HREF="https://raw.githubusercontent.com/llevier/vigrid/main/install/vigrid1-nas-install.sh">this location</A></TD>
-  <TD>DONE</TD></TR>
+  <TD>Postponed to new RBAC model on GNS3v3</TD></TR>
   <TR><TD>Error handling by command in install scripts (failing command can be rerun endlessly)</TD>
   <TD>Queued</TD></TR>
   <TR><TD>Change Control Tower display (project first column, then host) so start button automatically select best available host</TD>

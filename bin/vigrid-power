@@ -96,7 +96,7 @@ do
     HOST=`echo $host | awk 'BEGIN { FS=":"; } { print $2; }'`
     NAME=`echo $host | awk 'BEGIN { FS=":"; } { print $1; }'`
     
-    CHK=`echo "$i" | grep -i "$NAME"`
+    CHK=`echo "$i" | grep -i "^$NAME$"`
     if [ "x$CHK" != "x" ]
     then
       TARGET_IP=$HOST

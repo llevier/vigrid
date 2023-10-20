@@ -10,8 +10,6 @@
 ##
 ##################################################################################################################################
 
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/gns3/vigrid/bin
-
 VIGRID_CONF="/home/gns3/etc/vigrid.conf"
 
 if [ ! -r $VIGRID_CONF ]
@@ -27,7 +25,9 @@ then
   exit 1
 fi
 
-USAGE="$0 [ -H 'Host list' (format Name:IP Name:IP...) ] [ -K sshkey ] [ -U user ] -A 'shell command(s)' [ -S ] [ -M ]
+[ ! -f /usr/bin/sshpass ] && apt install -y sshpass
+
+USAGE="$0 [ -H 'Host list' (format Name Name...) ] [ -K sshkey ] [ -U user ] -A 'shell command(s)' [ -S ] [ -M ]
   Upon no user or SSHkey, assuming gns3 from Vigrid configuration. -M to include server itself in action"
 
 SEC=0
@@ -55,7 +55,7 @@ done
 
 if [ "x$LIST" = "x" ]
 then
-  echo "No host, using Vigrid configuration"
+  echo "No hosts list, using Vigrid configuration"
 
   # hostname:IP:port
   HOSTNAME=`hostname`
@@ -63,20 +63,22 @@ then
   then
     LIST="$HOSTNAME:127.0.0.1:3080"
   fi
-  
+
   for i in $VIGRID_GNS_SLAVE_HOSTS
   do
-    NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
     HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+    NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
     
-    CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
+    CHK=`echo $HOSTNAME|grep -i "^$NAME$"|wc -l`
     if [ $CHK -eq 0 ]
     then
-      LIST="$LIST $HOST:$NAME"
+      LIST="$LIST $NAME"
+    else
+      echo "Skipping myself..."
     fi
   done
 fi
-
+  
 [ "x$LIST" = "x" ] && echo "No host anywhere, exiting" && exit 1
 
 if [ $SEC -eq 0 ]
@@ -93,23 +95,28 @@ echo "Command(s) to execute: $ACTION"
 
 for i in $LIST
 do
-  NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
-  HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+  TARGET_IP=""
+  TARGET_NAME=""
+  for host in $VIGRID_GNS_SLAVE_HOSTS
+  do
+    HOST=`echo $host | awk 'BEGIN { FS=":"; } { print $2; }'`
+    NAME=`echo $host | awk 'BEGIN { FS=":"; } { print $1; }'`
+    
+    CHK=`echo "$i" | grep -i "^$NAME$"`
+    if [ "x$CHK" != "x" ]
+    then
+      TARGET_IP=$HOST
+      TARGET_NAME=$NAME
+      break
+    fi
+  done
 
-  echo
- 
-  echo "### Executing on $NAME ($HOST):"
-  echo
-  
-  T=`date +'%b %d %H:%M:%S'`
-
-  if [ "x$NAME" = "x$HOSTNAME" ]
-  # local execution, no SSH
+  if [ "x$TARGET_NAME" = "x" -o "x$TARGET_IP" = "x" ]
   then
-    echo "$T vigrid-run: launched \'$ACTION\' on me ($HOSTNAME)..." >>/var/log/gns3/vigrid.log
+    echo "$T vigrid-run: launched '$ACTION' on me ($HOSTNAME)..." | tee -a /var/log/gns3/vigrid.log
     eval $ACTION $SEC
   else
-    echo "$T vigrid-run: launched \'$ACTION\' on $HOST..." >>/var/log/gns3/vigrid.log
+    echo "$T vigrid-run: launched '$ACTION' on $TARGET_NAME ($TARGET_IP)..." | tee -a /var/log/gns3/vigrid.log
     eval ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS $GNS_USER@$HOST \'$ACTION\' $SEC
   fi
   RC=$?
@@ -118,9 +125,3 @@ do
     echo \'$ACTION\' failed with RC=$RC
   fi
 done
-
-echo "### Waiting for all children..."
-wait
-
-echo "### OK ALL DONE"
-

@@ -89,7 +89,7 @@
     
     $vigrid_nas=VIGRIDconfig("VIGRID_NAS_SERVER");
     $nas_list=preg_split("/[\s ]+/",$vigrid_nas);
-    for ($i=0;$i<sizeof(nas_list);$i++)
+    for ($i=0;$i<sizeof($nas_list);$i++)
     {
       $nas=explode(":",$nas_list[$i]);
       $nas_host=$nas[0];

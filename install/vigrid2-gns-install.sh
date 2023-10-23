@@ -2187,6 +2187,10 @@ server {
     }
   }
 
+  # Vigrid API
+  location /vigrid-api
+  { rewrite ^/vigrid-api/(.*)$ /manager/vigrid-api.html?order=$1 permanent; }
+
   # Vigrid management pages
   location /manager
   {

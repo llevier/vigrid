@@ -164,7 +164,7 @@
         else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
         if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
         else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit."&nbsp;/&nbsp;".$ram_total.$ram_total_unit."</FONT></TD>");
       }
 
       if ($swap_free==-1)
@@ -184,7 +184,7 @@
         else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
         if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
         else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit."&nbsp;/&nbsp;".$swap_total.$swap_total_unit."</FONT></TD>");
       }
 
       if ($disk_data=="")

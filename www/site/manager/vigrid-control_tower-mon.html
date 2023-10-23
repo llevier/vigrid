@@ -399,7 +399,9 @@
       {	print("<TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
-        $ratio=$swap_total/$swap_free*100;
+        if (($swap_total>0) && ($swap_free>0))
+        { $ratio=$swap_total/$swap_free*100; }
+        else { $ratio=100; }
 
         if ($ratio<30)       { $color="Red"; }
         else if ($ratio<60)  { $color="Orange"; }

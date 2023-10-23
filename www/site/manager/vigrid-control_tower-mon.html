@@ -219,9 +219,9 @@
           else { $color="Green"; }
           
           if (intval($disk_free[$do])/1000000000>1) { $disk_free[$do]=sprintf("%02.02f",intval($disk_free[$do])/1000000000); $disk_free_unit=" TB"; }
-          else { $disk_free[$do]=sprintf("%02.02f",intval($disk_free[$do])/1000000); $disk_free_unit=" GB"; }
+          else { $disk_free[$do]=sprintf("%02.02f",intval($disk_free[$do])/1000000); $disk_free_unit="GB"; }
           if (intval($disk_total[$do])/1000000000>1) { $disk_total[$do]=sprintf("%02.02f",intval($disk_total[$do])/1000000000); $disk_total_unit=" TB"; }
-          else { $disk_total[$do]=sprintf("%02.02f",intval($disk_total[$do])/1000000); $disk_total_unit=" GB"; }
+          else { $disk_total[$do]=sprintf("%02.02f",intval($disk_total[$do])/1000000); $disk_total_unit="GB"; }
 
           if ($disk_total[$do]>0)
           { print("<FONT COLOR=$color>".$disk_free[$do].$disk_free_unit."&nbsp;/&nbsp;".$disk_total[$do].$disk_total_unit."</FONT><BR>"); }

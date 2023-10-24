@@ -95,7 +95,7 @@
 
       $size="%-".$name_len."s";
 
-      $json_array['disk'][$names]['rates']="$rate_in/$unit_in/$max_in/$max_unit_in/$rate_out/$unit_out/$max_out/$max_unit_out";
+      $json_array['disk'][$names]['rates']="$rate_in$unit_in/$max_in$max_unit_in/$rate_out$unit_out/$max_out$max_unit_out";
       
       $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
       
@@ -134,7 +134,7 @@
       if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
       if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
 
-      $json_array['net'][$names]="$rate_out/$unit_out/$max_out/$max_unit_out/$rate_in/$unit_in/$max_in/$max_unit_in/".$net_cur['speed'];
+      $json_array['net'][$names]="$rate_out$unit_out/$max_out$max_unit_out/$rate_in$unit_in/$max_in$max_unit_in/".$net_cur['speed'];
     }
 
     if ($json_array) { echo json_encode($json_array); }

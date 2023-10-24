@@ -22,9 +22,9 @@
 
 	if ($_GET["order"]=="") { exit; }
   
-  $order=$_GET["order"];
+  $order=preg_split("/\//",strtolower($_GET["order"]));
   
-  if ($order=="config")
+  if ($order[0]=="config")
   {
     $vigrid_config_file=file("/home/gns3/etc/vigrid.conf");
     if ($vigrid_config_file===false) { print("CANT LOAD Vigrid Configuration file"); exit; }
@@ -58,47 +58,50 @@
       $f=preg_split("/=/",$line);
       $param=$f[0];
       $value=preg_replace('/"/','',preg_replace("/^$param=/","",$line));
-      
-      if ($param!="")
+
+      if (($order[1]!="") && ($order[1]==strtolower($param))) // specific parameter value is requested
       {
-        // Multiple values here
-        if (($param=="VIGRID_GNS_SLAVE_HOSTS") || ($param=="VIGRID_POWER_SLAVE_HOSTS"))
+        if ($param!="")
         {
-          array($json_array[$param]);
-
-          $v=explode(" ",$value);
-
-          // final value to display
-          for ($k=0;$k<sizeof($v);$k++)
+          // Multiple values here
+          if (($param=="VIGRID_GNS_SLAVE_HOSTS") || ($param=="VIGRID_POWER_SLAVE_HOSTS"))
           {
-            // we keep VIGRID_GNS_SLAVE_HOSTS
-            $json_array[$param][]=$v[$k];
+            array($json_array[$param]);
 
-            // we generate VIGRID_GNS_SLAVE_HOSTS_PUBLIC for direct external GNS3 API access
-            if (($param=="VIGRID_GNS_SLAVE_HOSTS") && ($vigrid_config_translation_table!=""))
+            $v=explode(" ",$value);
+
+            // final value to display
+            for ($k=0;$k<sizeof($v);$k++)
             {
-              $vigrid_host=preg_split("/:/",$v[$k]);
-              $public="$vigrid_host[1]:$vigrid_host[2]";
-              
-              foreach ($vigrid_config_translation_table as $translation_source => $translation_target)
+              // we keep VIGRID_GNS_SLAVE_HOSTS
+              $json_array[$param][]=$v[$k];
+
+              // we generate VIGRID_GNS_SLAVE_HOSTS_PUBLIC for direct external GNS3 API access
+              if (($param=="VIGRID_GNS_SLAVE_HOSTS") && ($vigrid_config_translation_table!=""))
               {
-                if (($translation_source!="") && (preg_match("/$translation_source/", "$vigrid_host[1]:$vigrid_host[2]")))
+                $vigrid_host=preg_split("/:/",$v[$k]);
+                $public="$vigrid_host[1]:$vigrid_host[2]";
+                
+                foreach ($vigrid_config_translation_table as $translation_source => $translation_target)
                 {
-                  $public="$translation_target";
-                  break;
+                  if (($translation_source!="") && (preg_match("/$translation_source/", "$vigrid_host[1]:$vigrid_host[2]")))
+                  {
+                    $public="$translation_target";
+                    break;
+                  }
                 }
+                $json_array['VIGRID_GNS_SLAVE_HOSTS_PUBLIC'][]=$public;
               }
-              $json_array['VIGRID_GNS_SLAVE_HOSTS_PUBLIC'][]=$public;
             }
           }
+          else
+          { $json_array[$param]=$value; }
         }
-        else
-        { $json_array[$param]=$value; }
       }
     }
-    echo json_encode($json_array);
+    if ($json_array) { echo json_encode($json_array); }
     exit;
   }
   else
-  { print("UNKNOWN CALL API: $order"); exit; }
+  { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
 ?>

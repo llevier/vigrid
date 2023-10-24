@@ -24,6 +24,9 @@
   
   $order=preg_split("/\//",strtolower($_GET["order"]));
   
+  // create fake sub order to ease later program code
+  if ($order[1]=="") { $order[1]=generateRandomString(64); }
+  
   if ($order[0]=="config")
   {
     $vigrid_config_file=file("/home/gns3/etc/vigrid.conf");
@@ -59,7 +62,7 @@
       $param=$f[0];
       $value=preg_replace('/"/','',preg_replace("/^$param=/","",$line));
 
-      if (($order[1]!="") && ($order[1]==strtolower($param))) // specific parameter value is requested
+      if (($order[1]==strtolower($param)) || ($order[1]=="vigrid_gns_slave_hosts_public")) // specific parameter value is requested
       {
         if ($param!="")
         {
@@ -74,7 +77,7 @@
             for ($k=0;$k<sizeof($v);$k++)
             {
               // we keep VIGRID_GNS_SLAVE_HOSTS
-              $json_array[$param][]=$v[$k];
+              if ($order[1]==strtolower($param)) { $json_array[$param][]=$v[$k]; }
 
               // we generate VIGRID_GNS_SLAVE_HOSTS_PUBLIC for direct external GNS3 API access
               if (($param=="VIGRID_GNS_SLAVE_HOSTS") && ($vigrid_config_translation_table!=""))
@@ -90,11 +93,11 @@
                     break;
                   }
                 }
-                $json_array['VIGRID_GNS_SLAVE_HOSTS_PUBLIC'][]=$public;
+                if ($order[1]=='vigrid_gns_slave_hosts_public') { $json_array['VIGRID_GNS_SLAVE_HOSTS_PUBLIC'][]=$public; }
               }
             }
           }
-          else
+          else if ($order[1]==strtolower($param))
           { $json_array[$param]=$value; }
         }
       }
@@ -104,4 +107,10 @@
   }
   else
   { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
+
+  exit;
+  
+  function generateRandomString($length) {
+      return substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length/strlen($x)) )),1,$length);
+  }
 ?>

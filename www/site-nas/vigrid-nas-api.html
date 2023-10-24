@@ -35,7 +35,7 @@
   {
     array($json_array);
     
-    $t=file('/proc/fs/nfsd/threads');
+    exec("ps ax|grep nfsd|grep -v grep|wc -l",$t);
     $nfsd_threads=trim($t[0]);
 
     $t=array_values(preg_grep("/^RPCNFSDCOUNT=/",file('/etc/default/nfs-kernel-server')));

@@ -1,0 +1,151 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  // GNS3 nas-load functions
+  include "/Vstorage/GNS3/vigrid/bin-nas/nas-load_functions.php";
+
+  // Associated Vigrid NGinx config:
+  // location /vigrid-api
+  // { rewrite ^/vigrid-api/(.*)$ /manager/vigrid-nas-api.html?order=$1 permanent; }
+
+	if ($_GET["order"]=="") { exit; }
+  
+  $order=preg_split("/\//",strtolower($_GET["order"]));
+  
+  // create fake sub order to ease later program code
+  if ($order[1]=="") { $order[1]=generateRandomString(64); }
+  
+  if ($order[0]=="load")
+  {
+    array($json_array);
+    
+    $t=file('/proc/fs/nfsd/threads');
+    $nfsd_threads=trim($t[0]);
+
+    $t=array_values(preg_grep("/^RPCNFSDCOUNT=/",file('/etc/default/nfs-kernel-server')));
+    $f=explode("=",trim($t[0]));
+    $nfsd_config=$f[1];
+
+    $json_array['hostname']=gethostname();
+
+    // Get last lines from /var/log/vigrid-load.log
+    $load_array=VigridLOADextract('/var/log/vigrid-load.log');
+    
+    // Get associated CPU values
+    $cpu=VigridLOADgetcpu($load_array);
+
+    $nproc=$cpu['nproc'];
+    
+    $json_array['nfsd']="$nfsd_threads/$nfsd_config/$nproc";
+    
+    $json_array['cpuload']['1m']=$cpu['load1']."/".$cpu['load_perf1']."%";
+    $json_array['cpuload']['5m']=$cpu['load5']."/".$cpu['load_perf5']."%";
+    $json_array['cpuload']['15m']=$cpu['load15']."/".$cpu['load_perf15']."%";
+
+    $json_array['cpuload']['avg']=$cpu['cpu_load']."%";
+    $json_array['cpu-iowaits']['avg']=$cpu['cpu_wa']."/".$cpu['cpu_wa_perf']."%";
+
+    // Disk filter ?
+    // if (!empty($filter_disk)) { $filters_disk=explode(",",$filter_disk); }
+
+    // Get associated DISK values
+    $disks=VigridLOADgetdisk($load_array,$filters_disk);
+
+    foreach($disks as $names => $disk_cur)
+    {
+      $rate_in=$disk_cur['rsect'];
+      $rate_out=$disk_cur['wsect'];
+      
+      $unit_in="B";
+      $unit_out="B";
+      
+      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB"; }
+      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB"; }
+      
+      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB"; }
+      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB"; }
+      
+      $max_in =$disk_cur['rsect_max'];
+      $max_out=$disk_cur['wsect_max'];
+      
+      $max_unit_in="B";
+      $max_unit_out="B";
+
+      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB"; }
+      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB"; }
+      
+      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
+      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
+
+      $size="%-".$name_len."s";
+
+      $json_array['disk'][$names]['rates']="$rate_in/$unit_in/$max_in/$max_unit_in/$rate_out/$unit_out/$max_out/$max_unit_out";
+      
+      $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
+      
+      $json_array['disk'][$names]['wait']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
+    }
+
+    // Same for net
+    if (!empty($filter_net)) { $filters_net=explode(",",$filter_net); }
+
+    // Get associated NET values
+    $nets=VigridLOADgetnet($load_array,$filters_net);
+    
+    foreach($nets as $names => $net_cur)
+    {
+      $rate_in=$net_cur['bytes_in'];
+      $rate_out=$net_cur['bytes_out'];
+      
+      $unit_in="B";
+      $unit_out="B";
+      
+      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB"; }
+      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB"; }
+      
+      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB"; }
+      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB"; }
+      
+      $max_in =$net_cur['bytes_in_max'];
+      $max_out=$net_cur['bytes_out_max'];
+      
+      $max_unit_in="B";
+      $max_unit_out="B";
+
+      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB"; }
+      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB"; }
+      
+      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
+      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
+
+      $json_array['net'][$names]="$rate_out/$unit_out/$max_out/$max_unit_out/$rate_in/$unit_in/$max_in/$max_unit_in/".$net_cur['speed'];
+    }
+
+    if ($json_array) { echo json_encode($json_array); }
+    exit;
+  }
+  else
+  { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
+
+  exit;
+  
+  function generateRandomString($length) {
+      return substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length/strlen($x)) )),1,$length);
+  }
+?>

@@ -785,7 +785,7 @@ chmod 755 /Vstorage/GNS3/bin/vigrid-update || Error 'Cant chmod /home/gns3/bin/v
 Display -h "  Launching vigrid-update..."
 /Vstorage/GNS3/bin/vigrid-update || Error 'vigrid-update failed,'  
 
-Display "Installing PHP CLI..." && apt install -y php-cli || Error 'Install failed,'
+Display "Installing PHP CLI & FPM..." && apt install -y php-cli php-fpm php-curl php-mail php-net-smtp || Error 'Install failed,'
 Display "Removing Apache2 forced install..." && apt purge -y apache2* || Error 'Uninstall failed,'
   
 if [ "x$FS" = "xZFS" ] # Vigrid ZFS daemon update script
@@ -805,6 +805,245 @@ Display -h -n "Adding miscellaneous packages..."
 apt install -y iotop atop sysstat rsync rclone openntpd ntpdate fio || Error "Failed,"
 
 # Adding Vigrid monitoring
+Display -h "  Configuring PHP pools..."
+
+PHP_VER=`php -v|head -1|awk '{print $2;}'| awk 'BEGIN { FS="."; } { print $1"."$2; }'`
+Display -h "    PHP version is $PHP_VER."
+
+Display -h "    Removing default PHP pools..."
+rm /etc/php/$PHP_VER/fpm/pool.d/* || Error 'Cant remove pool,'
+
+Display -h "    Adding Vigrid standard pool..."
+echo "; Start a new pool named 'vigrid-www'.
+; the variable $pool can be used in any directive and will be replaced by the
+; pool name ('www' here)
+[gns3-www]
+
+; Unix user/group of processes
+; Note: The user is mandatory. If the group is not set, the default user's group
+;       will be used.
+user = www-data
+group = www-data
+
+; The address on which to accept FastCGI requests.
+; Valid syntaxes are:
+;   'ip.add.re.ss:port'    - to listen on a TCP socket to a specific IPv4 address on
+;                            a specific port;
+;   '[ip:6:addr:ess]:port' - to listen on a TCP socket to a specific IPv6 address on
+;                            a specific port;
+;   'port'                 - to listen on a TCP socket to all addresses
+;                            (IPv6 and IPv4-mapped) on a specific port;
+;   '/path/to/unix/socket' - to listen on a unix socket.
+; Note: This value is mandatory.
+listen = /run/php/php$PHP_VER-fpm.sock
+
+; Set permissions for unix socket, if one is used. In Linux, read/write
+; permissions must be set in order to allow connections from a web server. Many
+; BSD-derived systems allow connections regardless of permissions.
+; Default Values: user and group are set as the running user
+;                 mode is set to 0660
+listen.owner = www-data
+listen.group = www-data
+;listen.mode = 0660
+
+; Choose how the process manager will control the number of child processes.
+; Possible Values:
+;   static  - a fixed number (pm.max_children) of child processes;
+;   dynamic - the number of child processes are set dynamically based on the
+;             following directives. With this process management, there will be
+;             always at least 1 children.
+;             pm.max_children      - the maximum number of children that can
+;                                    be alive at the same time.
+;             pm.start_servers     - the number of children created on startup.
+;             pm.min_spare_servers - the minimum number of children in 'idle'
+;                                    state (waiting to process). If the number
+;                                    of 'idle' processes is less than this
+;                                    number then some children will be created.
+;             pm.max_spare_servers - the maximum number of children in 'idle'
+;                                    state (waiting to process). If the number
+;                                    of 'idle' processes is greater than this
+;                                    number then some children will be killed.
+;  ondemand - no children are created at startup. Children will be forked when
+;             new requests will connect. The following parameter are used:
+;             pm.max_children           - the maximum number of children that
+;                                         can be alive at the same time.
+;             pm.process_idle_timeout   - The number of seconds after which
+;                                         an idle process will be killed.
+; Note: This value is mandatory.
+pm = dynamic
+
+; The number of child processes to be created when pm is set to 'static' and the
+; maximum number of child processes when pm is set to 'dynamic' or 'ondemand'.
+; This value sets the limit on the number of simultaneous requests that will be
+; served. Equivalent to the ApacheMaxClients directive with mpm_prefork.
+; Equivalent to the PHP_FCGI_CHILDREN environment variable in the original PHP
+; CGI. The below defaults are based on a server without much resources. Don't
+; forget to tweak pm.* to fit your needs.
+; Note: Used when pm is set to 'static', 'dynamic' or 'ondemand'
+; Note: This value is mandatory.
+pm.max_children = 8
+
+; The number of child processes created on startup.
+; Note: Used only when pm is set to 'dynamic'
+; Default Value: min_spare_servers + (max_spare_servers - min_spare_servers) / 2
+pm.start_servers = 4
+
+; The desired minimum number of idle server processes.
+; Note: Used only when pm is set to 'dynamic'
+; Note: Mandatory when pm is set to 'dynamic'
+pm.min_spare_servers = 2
+
+; The desired maximum number of idle server processes.
+; Note: Used only when pm is set to 'dynamic'
+; Note: Mandatory when pm is set to 'dynamic'
+pm.max_spare_servers = 5
+
+; Limits the extensions of the main script FPM will allow to parse. This can
+; prevent configuration mistakes on the web server side. You should only limit
+; FPM to .php extensions to prevent malicious users to use other extensions to
+; execute php code.
+; Note: set an empty value to allow all extensions.
+; Default Value: .php
+;security.limit_extensions = .php .php3 .php4 .php5 .php7
+security.limit_extensions = .php .php3 .php4 .php5 .php7 .html .htm
+
+; Extending default PHP script timeout
+request_terminate_timeout = 300
+
+; Default Value: nothing is defined by default except the values in php.ini and
+;                specified at startup with the -d argument
+;php_admin_value[sendmail_path] = /usr/sbin/sendmail -t -i -f www@my.domain.com
+;php_flag[display_errors] = off
+;php_admin_value[error_log] = /var/log/fpm-php.www.log
+;php_admin_flag[log_errors] = on
+;php_admin_value[memory_limit] = 32M" >/etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
+
+Display -h "Enabling & starting PHP-FPM..."
+systemctl enable php$PHP_VER-fpm
+service php$PHP_VER-fpm start
+
+Display -h -n "Adding NGinx for Vigrid-load API..."
+Display -h "  Updating apt sources for NGinx..."
+echo "deb http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
+
+Display -h "  Adding NGinx key..."
+curl -fsSL https://nginx.org/keys/nginx_signing.key | apt-key add - || Error 'Add failed,'
+apt-key fingerprint ABF5BD827BD9BF62 || Error 'Fingerprint add failed,'
+
+Display -h "  Updating system..." && apt update -y  || Error 'Update failed,'
+Display -h "  Installing NGinx & extras..." && apt install -y nginx || Error 'Install failed,'
+
+Display -h -n "  Checking NGinx version >=1.19..."
+VER=`nginx -V 2>&1|head -1|sed 's/^.*nginx\///'| awk 'BEGIN { FS="."; } { print $1"."$2; }'`
+if [ 1 -eq "$(echo "$VER >= 1.19" | bc)" ]
+then
+  Display -h "OK"
+else
+  Error "NGinx version ($VER) must be >=1.19."
+fi
+
+Display -h "  Configuring NGinx..."
+rm -f /etc/nginx/conf.d/*
+
+  echo "#
+# Vigrid Vigrid-load API
+#
+server {
+  listen 443 ssl default;
+  server_name localhost;
+
+  # Take fullchain here, not cert.pem
+  ssl_certificate      /etc/nginx/ssl/localhost.crt;
+  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
+
+  ssl_session_cache    builtin:1000 shared:SSL:1m;
+  ssl_session_timeout  5m;
+
+  ssl_protocols   TLSv1.2 TLSv1.3;
+  ssl_ciphers  HIGH:!aNULL:!MD5;
+  ssl_prefer_server_ciphers  on;
+
+  # hide version
+  server_tokens        off;
+
+  access_log /var/log/nginx/access.log;
+  error_log /var/log/nginx/error.log;
+
+  root   /Vstorage/GNS3/vigrid/www/site-nas;
+
+  # Vigrid home page
+  location /
+  {
+    # sanity
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { log_not_found off; }
+
+    location ~* \.(htm|html|php)$
+    {
+      try_files \$uri =404;
+      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
+      fastcgi_index                 index.html;
+      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+      include                       /etc/nginx/fastcgi_params;
+      fastcgi_param PATH_INFO       \$fastcgi_path_info;
+      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
+  }
+
+  # Vigrid API
+  location /vigrid-api
+  { rewrite ^/vigrid-api/(.*)$ /vigrid-nas-api.html?order=$1 permanent; }
+}
+" >>/etc/nginx/conf.d/CyberRange-443.conf
+
+  echo "#
+# Vigrid NGinx configuration file
+#
+worker_processes auto;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+user www-data;
+
+events {
+        worker_connections 2048;
+}
+
+http {
+
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+
+        server_tokens off;
+
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+  
+        # Logging Settings
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log;
+
+        # Gzip Settings
+        gzip on;
+
+        # Virtual Host Configs
+        include /etc/nginx/conf.d/*.conf;
+}" >/etc/nginx/nginx.conf
+
+Display -h "Adding www-data user to gns3 group..."
+usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'
+
+Display -h "Generating SSL certificate for localhost..."
+mkdir -p /etc/nginx/ssl >/dev/null 2>/dev/null
+( printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth") | openssl req -x509 -out /etc/nginx/ssl/localhost.crt -keyout /etc/nginx/ssl/localhost.key -newkey rsa:2048 -nodes -sha256 -subj '/CN=localhost' || Error 'Certificate generation failed,'
+
+Display -h "Enabling & starting NGinx..."
+systemctl enable nginx
+service nginx start
+
 Display "Installing & enabling Vigrid-load monitoring..."
 cp /Vstorage/GNS3/vigrid/etc/init.d/vigrid-load /etc/init.d/
 cp /Vstorage/GNS3/vigrid/etc/logrotate.d/vigrid-load /etc/logrotate.d/

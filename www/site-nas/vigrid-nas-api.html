@@ -22,11 +22,30 @@
 
   // Associated Vigrid NGinx config:
   // location /vigrid-api
-  // { rewrite ^/vigrid-api/(.*)$ /manager/vigrid-nas-api.html?order=$1 permanent; }
-
+  // {
+    // rewrite ^/vigrid-api/(.*)$ /vigrid-nas-api.html?order=$1 break;
+    // proxy_pass https://localhost;
+    // proxy_pass_request_body on;
+    // proxy_set_header Host $host;
+    // proxy_set_header X-Real-IP $remote_addr;
+    // proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    // proxy_set_header X-Forwarded-Proto $scheme;
+    // proxy_set_header Upgrade $http_upgrade;
+    // proxy_set_header Connection "upgrade";
+  // }
+  
 	if ($_GET["order"]=="") { exit; }
   
   $order=preg_split("/\//",strtolower($_GET["order"]));
+  $json=file_get_contents('php://input');
+  $post=json_decode($json,true);
+
+  // Disk filter ?
+  if (!empty($post['disk'])) { $filters_disk=explode(",",$post['disk']); }
+  // Net filter ?
+  if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
+  // Directories ?
+  if (!empty($post['dirs'])) { $dirs_list=explode(",",$post['dirs']); }
   
   // create fake sub order to ease later program code
   if ($order[1]=="") { $order[1]=generateRandomString(64); }
@@ -61,8 +80,9 @@
     $json_array['cpuload']['avg']=$cpu['cpu_load']."%";
     $json_array['cpu-iowaits']['avg']=$cpu['cpu_wa']."/".$cpu['cpu_wa_perf']."%";
 
-    // Disk filter ?
-    // if (!empty($filter_disk)) { $filters_disk=explode(",",$filter_disk); }
+    $ram_data=getSystemMemInfo();
+    $json_array['ram']=$ram_data['MemFree']."/".$ram_data['MemTotal'];
+    $json_array['swap']=$ram_data['SwapFree']."/".$ram_data['SwapTotal'];
 
     // Get associated DISK values
     $disks=VigridLOADgetdisk($load_array,$filters_disk);
@@ -93,13 +113,12 @@
       if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
       if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
 
-      $size="%-".$name_len."s";
-
-      $json_array['disk'][$names]['rates']="$rate_in$unit_in/$max_in$max_unit_in/$rate_out$unit_out/$max_out$max_unit_out";
-      
-      $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
-      
-      $json_array['disk'][$names]['wait']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
+      if (preg_grep("/^$names$/",$filters_disk))
+      {
+        $json_array['disk'][$names]['rates']="$rate_in$unit_in/$max_in$max_unit_in/$rate_out$unit_out/$max_out$max_unit_out";
+        $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
+        $json_array['disk'][$names]['waits']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
+      }
     }
 
     // Same for net
@@ -134,7 +153,22 @@
       if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
       if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
 
-      $json_array['net'][$names]="$rate_out$unit_out/$max_out$max_unit_out/$rate_in$unit_in/$max_in$max_unit_in/".$net_cur['speed'];
+      if (preg_grep("/^$names$/",$filters_net))
+      { $json_array['net'][$names]="$rate_out$unit_out/$max_out$max_unit_out/$rate_in$unit_in/$max_in$max_unit_in/".$net_cur['speed']; }
+    }
+    
+    if (!empty($dirs_list))
+    {
+      foreach ($dirs_list as $dir)
+      {
+        if (file_exists($dir) && is_dir($dir))
+        {
+          $disk_free =HumanSize(disk_free_space($dir));
+          $disk_total=HumanSize(disk_total_space($dir));
+
+          $json_array['dirs'][$dir]="$disk_free/$disk_total";
+        }
+      }
     }
 
     if ($json_array) { echo json_encode($json_array); }
@@ -147,5 +181,28 @@
   
   function generateRandomString($length) {
       return substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length/strlen($x)) )),1,$length);
+  }
+
+  function getSystemMemInfo() 
+  {       
+    $data = explode("\n", file_get_contents("/proc/meminfo"));
+    $meminfo = array();
+    foreach ($data as $line) {
+        list($key, $val) = explode(":", $line);
+        $meminfo[$key] = strtoupper(preg_replace("/ /","",trim($val)));
+    }
+    return $meminfo;
+  }
+
+  function HumanSize($Bytes)
+  {
+    $Type=array("", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB");
+    $Index=0;
+    while($Bytes>=1024)
+    {
+      $Bytes/=1024;
+      $Index++;
+    }
+    return("".sprintf("%.02f".$Type[$Index],$Bytes));
   }
 ?>

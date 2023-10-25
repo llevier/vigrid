@@ -1,0 +1,57 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // turn off output buffering
+  ob_implicit_flush();
+
+  // GNS3 nas-load functions
+  include "/home/gns3/vigrid/bin-nas/nas-load_functions.php";
+
+  // API functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-host-api_functions.php";
+
+  // Associated Vigrid NGinx config:
+  // location /vigrid-api
+  // {
+    // rewrite ^/vigrid-api/(.*)$ /vigrid-host-api.html?order=$1 break;
+  // }
+  
+	if ($_GET["order"]=="") { exit; }
+  
+  $order=preg_split("/\//",strtolower($_GET["order"]));
+  $json=file_get_contents('php://input');
+  $post=json_decode($json,true);
+
+  // Net filter ?
+  if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
+  // Directories ?
+  if (!empty($post['dirs'])) { $dirs_list=explode(",",$post['dirs']); }
+  
+  // create fake sub order to ease later program code
+  if ($order[1]=="") { $order[1]=generateRandomString(64); }
+  
+  if ($order[0]=="load")
+  {
+    array($json_array);
+    API_load($json_array);
+    
+    exit;
+  }
+  else
+  { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
+
+  exit; 
+?>

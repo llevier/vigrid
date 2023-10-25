@@ -15,7 +15,10 @@
   
   // turn off output buffering
   ob_implicit_flush();
-
+  
+  // API functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-host-api_functions.php";
+  
   // Associated Vigrid NGinx config:
   // location /vigrid-api
   // { rewrite ^/vigrid-api/(.*)$ /manager/vigrid-api.html?order=$1 permanent; }
@@ -23,8 +26,15 @@
 	if ($_GET["order"]=="") { exit; }
   
   $order=preg_split("/\//",strtolower($_GET["order"]));
-  
-  if ($order[0]=="config")
+
+  if ($order[0]=="load")
+  {
+    array($json_array);
+    API_load($json_array);
+
+    exit;
+  }
+  else if ($order[0]=="config")
   {
     $vigrid_config_file=file("/home/gns3/etc/vigrid.conf");
     if ($vigrid_config_file===false) { print("CANT LOAD Vigrid Configuration file"); exit; }

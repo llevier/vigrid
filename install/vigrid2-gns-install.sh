@@ -583,7 +583,6 @@ else
 fi
 
 Display -h "Moving home to Vstorage..."
-
 rsync -az --inplace /home /Vstorage/ >/dev/null 2>/dev/null
 rm -rf /home  >/dev/null 2>/dev/null
 ln -s /Vstorage/home / || Error 'Link failed,'
@@ -1937,9 +1936,15 @@ chmod 755 /usr/local/bin/websocat || Error 'Cant chmod websocat, mostly likely i
 Display "Installing PHP CLI..." && apt install -y php-cli || Error 'Install failed,'
 
 # GNS3 independant server, either standalone or mastering a farm
-if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
+if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 5 ]
 then
-  Display "Installing PHP FPM..." && apt install -y php-fpm php-curl php-mail php-net-smtp || Error 'Install failed,'
+  Display "Installing PHP FPM..." && apt install -y php-fpm || Error 'Install failed,'
+
+  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
+  then
+    apt install -y php-curl php-mail php-net-smtp || Error 'Install failed,'
+  fi
+
   Display "Removing Apache2 forced install..." && apt purge -y apache2* || Error 'Uninstall failed,'
 
   Display -h "  Configuring PHP pools..."
@@ -2055,6 +2060,10 @@ request_terminate_timeout = 300
 ;php_admin_flag[log_errors] = on
 ;php_admin_value[memory_limit] = 32M" >/etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
 
+  Display -h "Enabling & starting PHP-FPM..."
+  systemctl enable php$PHP_VER-fpm
+  service php$PHP_VER-fpm start
+
   # NGinx for Vigrid extensions
   Display -h "Installing NGinx server..."
   Display -h "  Installing required packages..." && apt install -y curl bc gnupg2 ca-certificates lsb-release || Error 'Install failed,'
@@ -2081,7 +2090,10 @@ request_terminate_timeout = 300
 
   Display -h "  Configuring NGinx..."
   rm -f /etc/nginx/conf.d/*
-  echo "#
+
+  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
+  then
+    echo "#
 # Vigrid Authentication/authorization for HTTP + GNS3 clients
 #
 server {
@@ -2136,7 +2148,7 @@ server {
   }
 }" >/etc/nginx/conf.d/CyberRange-vigrid-auth-8001.conf
 
-  echo "#
+    echo "#
 # Vigrid HTTPS access for Extensions + GNS3 Heavy client
 #
 server {
@@ -2361,6 +2373,86 @@ server {
 
   try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
 }" >>/etc/nginx/conf.d/CyberRange-443.conf
+  else
+    # For Vigrid slave, Vigrid-API for loads
+    echo "#
+# Vigrid HTTPS access for Vigrid-API
+#
+server {
+  listen 443 ssl default;
+  server_name localhost;
+
+  # Take fullchain here, not cert.pem
+  ssl_certificate      /etc/nginx/ssl/localhost.crt;
+  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
+
+  ssl_session_cache    builtin:1000 shared:SSL:1m;
+  ssl_session_timeout  5m;
+
+  ssl_protocols   TLSv1.2 TLSv1.3;
+  ssl_ciphers  HIGH:!aNULL:!MD5;
+  ssl_prefer_server_ciphers  on;
+
+  # hide version
+  server_tokens        off;
+
+  access_log /var/log/nginx/access.log;
+  error_log /var/log/nginx/error.log;
+
+  root   /home/gns3/vigrid/www/site;
+
+  # Vigrid home page
+  location /
+  {
+    # sanity
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { log_not_found off; }
+
+    location ~ \.css  { add_header Content-Type text/css; }
+    location ~ \.js   { add_header Content-Type application/x-javascript; }
+    location ~ \.eot  { add_header Content-Type application/vnd.ms-fontobject; }
+    location ~ \.woff { add_header Content-Type font/woff; }
+
+    location ~* \.(htm|html|php)\$
+    {
+      try_files                     \$uri =404;
+      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
+      fastcgi_index                 index.html;
+      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+      # Minimum output buffering
+      fastcgi_buffers               2 4k;
+      fastcgi_busy_buffers_size     4k;
+      fastcgi_buffering             off;
+      # fastcgi_buffer_size           8k; 
+      include                       /etc/nginx/fastcgi_params;
+      fastcgi_read_timeout          300;
+      fastcgi_param PATH_INFO       \$fastcgi_path_info;
+      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
+  }
+
+  location /manager
+  {
+    deny all;
+    return 404;
+  }
+
+  # Vigrid API, load only
+  location /vigrid-api
+  { rewrite ^/vigrid-api/(.*)$ /vigrid-host-api.html?order=\$1 permanent; }
+
+  location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {
+    expires 7d;
+  }
+
+  location ~ /\.ht {
+      deny  all;
+  }
+
+  try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
+}
+" >>/etc/nginx/conf.d/CyberRange-443-api.conf
+  fi
 
   echo "#
 # Vigrid NGinx configuration file
@@ -2400,7 +2492,8 @@ http {
 
         # Virtual Host Configs
         include /etc/nginx/conf.d/*.conf;
-}" >/etc/nginx/nginx.conf
+}
+" >/etc/nginx/nginx.conf
 
   Display -h "Adding www-data user to gns3 group..."
   usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'
@@ -2413,17 +2506,20 @@ http {
   systemctl enable nginx
   service nginx start
 
-  Display "Creating $VIGRID_PASSWD with a login/pass=vigrid/vigrid"
-  echo "vigrid:{PLAIN}vigrid" >$VIGRID_PASSWD
-  Display "Also adding gns3 credentials to $VIGRID_PASSWD"
-  echo "$GNS3_USER:{PLAIN}$GNS3_PASS" >>$VIGRID_PASSWD
-  chown gns3:gns3 $VIGRID_PASSWD >/dev/null 2>/dev/null
-  chmod 640 $VIGRID_PASSWD >/dev/null 2>/dev/null
+  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
+  then
+    Display "Creating $VIGRID_PASSWD with a login/pass=vigrid/vigrid"
+    echo "vigrid:{PLAIN}vigrid" >$VIGRID_PASSWD
+    Display "Also adding gns3 credentials to $VIGRID_PASSWD"
+    echo "$GNS3_USER:{PLAIN}$GNS3_PASS" >>$VIGRID_PASSWD
+    chown gns3:gns3 $VIGRID_PASSWD >/dev/null 2>/dev/null
+    chmod 640 $VIGRID_PASSWD >/dev/null 2>/dev/null
 
-  Display "Installing clientless console requirements..."
-  apt install -y novnc websockify || Error 'Cant install packages,'
+    Display "Installing clientless console requirements..."
+    apt install -y novnc websockify || Error 'Cant install packages,'
 
-  Display -h "Installing SSLh..." && apt install -y sslh || Error 'Install failed,'
+    Display -h "Installing SSLh..." && apt install -y sslh || Error 'Install failed,'
+  fi
 
   # Cyber range network design on master server = network I/O gateway
   if [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ]

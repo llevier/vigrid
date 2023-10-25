@@ -20,6 +20,9 @@
   // GNS3 nas-load functions
   include "/Vstorage/GNS3/vigrid/bin-nas/nas-load_functions.php";
 
+  // API functions
+  include "/Vstorage/GNS3/vigrid/www/site/manager/vigrid-host-api_functions.php";
+
   // Associated Vigrid NGinx config:
   // location /vigrid-api
   // {
@@ -61,148 +64,33 @@
     $f=explode("=",trim($t[0]));
     $nfsd_config=$f[1];
 
-    $json_array['hostname']=gethostname();
-
-    // Get last lines from /var/log/vigrid-load.log
-    $load_array=VigridLOADextract('/var/log/vigrid-load.log');
+    $json_array['nfsd']="$nfsd_threads/$nfsd_config";
     
-    // Get associated CPU values
-    $cpu=VigridLOADgetcpu($load_array);
-
-    $nproc=$cpu['nproc'];
-    
-    $json_array['nfsd']="$nfsd_threads/$nfsd_config/$nproc";
-    
-    $json_array['cpuload']['1m']=$cpu['load1']."/".$cpu['load_perf1']."%";
-    $json_array['cpuload']['5m']=$cpu['load5']."/".$cpu['load_perf5']."%";
-    $json_array['cpuload']['15m']=$cpu['load15']."/".$cpu['load_perf15']."%";
-
-    $json_array['cpuload']['avg']=$cpu['cpu_load']."%";
-    $json_array['cpu-iowaits']['avg']=$cpu['cpu_wa']."/".$cpu['cpu_wa_perf']."%";
-
-    $ram_data=getSystemMemInfo();
-    $json_array['ram']=$ram_data['MemFree']."/".$ram_data['MemTotal'];
-    $json_array['swap']=$ram_data['SwapFree']."/".$ram_data['SwapTotal'];
+    // Disk filter ?
+    if (!empty($filter_disk)) { $filters_disk=explode(",",$filter_disk); }
 
     // Get associated DISK values
     $disks=VigridLOADgetdisk($load_array,$filters_disk);
 
     foreach($disks as $names => $disk_cur)
     {
-      $rate_in=$disk_cur['rsect'];
-      $rate_out=$disk_cur['wsect'];
+      $rate_in=HumanSize($disk_cur['rsect']);
+      $rate_out=HumanSize($disk_cur['wsect']);
       
-      $unit_in="B";
-      $unit_out="B";
+      $max_in =HumanSize($disk_cur['rsect_max']);
+      $max_out=HumanSize($disk_cur['wsect_max']);
       
-      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB"; }
-      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB"; }
-      
-      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB"; }
-      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB"; }
-      
-      $max_in =$disk_cur['rsect_max'];
-      $max_out=$disk_cur['wsect_max'];
-      
-      $max_unit_in="B";
-      $max_unit_out="B";
-
-      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB"; }
-      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB"; }
-      
-      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
-      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
-
-      if (preg_grep("/^$names$/",$filters_disk))
-      {
-        $json_array['disk'][$names]['rates']="$rate_in$unit_in/$max_in$max_unit_in/$rate_out$unit_out/$max_out$max_unit_out";
-        $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
-        $json_array['disk'][$names]['waits']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
-      }
+      $json_array['disk'][$names]['rates']="$rate_in/$max_in/$rate_out/$max_out";
+      $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
+      $json_array['disk'][$names]['waits']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
     }
 
-    // Same for net
-    if (!empty($filter_net)) { $filters_net=explode(",",$filter_net); }
-
-    // Get associated NET values
-    $nets=VigridLOADgetnet($load_array,$filters_net);
+    API_load($json_array);
     
-    foreach($nets as $names => $net_cur)
-    {
-      $rate_in=$net_cur['bytes_in'];
-      $rate_out=$net_cur['bytes_out'];
-      
-      $unit_in="B";
-      $unit_out="B";
-      
-      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="KB"; }
-      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="KB"; }
-      
-      if ($rate_out>1024) { $rate_out=sprintf("%d",$rate_out/1024); $unit_out="MB"; }
-      if ($rate_in>1024)  { $rate_in=sprintf("%d",$rate_in/1024); $unit_in="MB"; }
-      
-      $max_in =$net_cur['bytes_in_max'];
-      $max_out=$net_cur['bytes_out_max'];
-      
-      $max_unit_in="B";
-      $max_unit_out="B";
-
-      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="KB"; }
-      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="KB"; }
-      
-      if ($max_out>1024) { $max_out=sprintf("%d",$max_out/1024); $max_unit_out="MB"; }
-      if ($max_in>1024)  { $max_in=sprintf("%d",$max_in/1024); $max_unit_in="MB"; }
-
-      if (preg_grep("/^$names$/",$filters_net))
-      { $json_array['net'][$names]="$rate_out$unit_out/$max_out$max_unit_out/$rate_in$unit_in/$max_in$max_unit_in/".$net_cur['speed']; }
-    }
-    
-    if (!empty($dirs_list))
-    {
-      foreach ($dirs_list as $dir)
-      {
-        if (file_exists($dir) && is_dir($dir))
-        {
-          $disk_free =HumanSize(disk_free_space($dir));
-          $disk_total=HumanSize(disk_total_space($dir));
-
-          $json_array['dirs'][$dir]="$disk_free/$disk_total";
-        }
-      }
-    }
-
-    if ($json_array) { echo json_encode($json_array); }
     exit;
   }
   else
   { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
 
-  exit;
-  
-  function generateRandomString($length) {
-      return substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length/strlen($x)) )),1,$length);
-  }
-
-  function getSystemMemInfo() 
-  {       
-    $data = explode("\n", file_get_contents("/proc/meminfo"));
-    $meminfo = array();
-    foreach ($data as $line) {
-        list($key, $val) = explode(":", $line);
-        $meminfo[$key] = strtoupper(preg_replace("/ /","",trim($val)));
-    }
-    return $meminfo;
-  }
-
-  function HumanSize($Bytes)
-  {
-    $Type=array("", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB");
-    $Index=0;
-    while($Bytes>=1024)
-    {
-      $Bytes/=1024;
-      $Index++;
-    }
-    return("".sprintf("%.02f".$Type[$Index],$Bytes));
-  }
+  exit;  
 ?>

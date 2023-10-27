@@ -11,6 +11,7 @@
 #################################################################################################################################
 
 VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+VIGRID_TRANSLATION_TABLE="/home/gns3/etc/vigrid-translation-table.conf"
 
 if [ ! -r $VIGRID_CONF ]
 then
@@ -62,7 +63,7 @@ do
   if [ "x$CHK" = "x" ]
   then
     CHK=`echo $VIGRID_GNS_SLAVE_HOSTS|grep "$SLAVE_IP:"`
-    [ "x$CHK" = "x" ]  && break
+    [ "x$CHK" = "x" ] && break
     echo "I am sorry but that IP address is already present in Vigrid slaves list:"
     echo $VIGRID_GNS_SLAVE_HOSTS
     echo
@@ -83,14 +84,27 @@ done
 
 until false
 do
-  echo -n "Please provide the hostname of this slave: "
+  echo -n "Please provide a hostname for this slave: "
   read SLAVE_HOST
   if [ "x$SLAVE_HOST" != "x" ]
   then
     CHK=`echo $VIGRID_GNS_SLAVE_HOSTS|grep "$SLAVE_HOST:"`
-    [ "x$CHK" = "x" ]  && break
+    [ "x$CHK" = "x" ] && break
     echo "I am sorry but that hostname is already present in Vigrid slaves list:"
     echo $VIGRID_GNS_SLAVE_HOSTS
+    echo
+  fi
+done
+
+until false
+do
+  echo -n "Please provide a *public* FQDN for this slave: "
+  read SLAVE_FQDN
+  if [ "x$SLAVE_FQDN" != "x" ]
+  then
+    CHK=`echo $SLAVE_FQDN|grep "^.*\..*\..*$"`
+    [ "x$CHK" = "x" ] && break
+    echo "I am sorry but '$SLAVE_FQDN' that does not look like a FQDN (host.domain.tld...)"
     echo
   fi
 done
@@ -101,6 +115,7 @@ do
   
 Host:           $SLAVE_HOST
 IP address:port $SLAVE_IP:$SLAVE_PORT
+Public FQDN:    $SLAVE_FQDN
 
 Do you confirm this [y/N] ? "
   read ANS
@@ -123,9 +138,6 @@ echo "VIGRID_GNS_SLAVE_HOSTS=\"$VIGRID_GNS_SLAVE_HOSTS\"" >>/tmp/temp$T
 mv /tmp/temp$T $VIGRID_CONF
 [ $? -ne 0 ] && echo "Replacement of $VIGRID_CONF failed, no Slave added"
 
-# /etc/hosts to update
-# /etc/nginx/conf.d/CyberRange-443.conf: taking server {}, changing /v2 -> / + adding auth_basic
-
 echo "  Adding host to /etc/hosts..."
 CHK_IP=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_IP"`
 CHK_HOST=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_HOST"`
@@ -138,13 +150,30 @@ else
   [ "x$CHK_HOST" != "x" ] && echo "      $CHK_HOST"
 fi
 
-echo "  Checking & updating /etc/nginx/conf.d/CyberRange-443.conf..."
-NGINX_CONFIG=`cat /etc/nginx/conf.d/CyberRange-443.conf`
+echo "  Updating Vigrid API translation table $VIGRID_TRANSLATION_TABLE..."
+CHK=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT=https://$SLAVE_FQDN"`
+if [ "x$CHK" = "x" ]
+then
+  CHK=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT="`
+  if [ "x$CHK" = "x" ]
+  then
+    echo "    WARNING !! There is already a translation for $SLAVE_IP:$SLAVE_PORT:"
+    cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT=" | sed 's/^/    /g'
+  else
+    echo "$SLAVE_IP:$SLAVE_PORT=https://$SLAVE_FQDN" >>$VIGRID_TRANSLATION_TABLE
+  fi
+else
+  echo "    Warning, $SLAVE_IP:$SLAVE_PORT=https://$SLAVE_FQDN already exists"
+fi
 
-NGINX_SLAVE="
+echo "  Checking & updating NGinx virtual hosts..."
+NGINX_CONFIG="
+#
+# Vigrid HTTPS access for Slave %%SLAVE_HOST%% (%%SLAVE_FQDN%%), %%SLAVE_IP%%:%%SLAVE_PORT%%
+#
 server {
   listen 127.0.0.1:443 ssl;
-  server_name %%SLAVE_HOST%%;
+  server_name %%SLAVE_HOST%% %%SLAVE_FQDN%%;
 
   # Take fullchain here, not cert.pem
   ssl_certificate      /etc/nginx/ssl/localhost.crt;
@@ -154,6 +183,7 @@ server {
   ssl_session_timeout  5m;
 
   ssl_protocols   TLSv1.2 TLSv1.3;
+  ssl_ciphers  HIGH:!aNULL:!MD5;
   ssl_prefer_server_ciphers  on;
 
   # hide version
@@ -162,22 +192,61 @@ server {
   access_log /var/log/nginx/access.log;
   error_log /var/log/nginx/error.log;
 
-  root   /home/gns3/vigrid/www/site;
-  index  index.html index.htm index.php;
-
-  # Vigrid auth + redirect to slave
-  location /
+  # Vigrid API
+  location /vigrid-api
   {
-    # Basic authentication
-    auth_basic \"Vigrid's access, who are you ?\";
-    auth_basic_user_file /home/gns3/etc/vigrid-passwd;
+    rewrite ^/vigrid-api/(.*)\$ /vigrid-host-api.html?order=\$1 break;
 
+    proxy_pass https://%%SLAVE_IP%%;
+
+    proxy_pass_request_body on;
+
+    proxy_set_header Host \$host;
+    proxy_set_header Authorization \$auth_header;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \"Upgrade\";
+  }
+
+  # GNS Heavy client
+  location /v2
+  {
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
     auth_request_set \$auth_header \$upstream_http_authorization;
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
+
+    # GNS3 maximum timeout = 1h
+    proxy_connect_timeout       3600;
+    proxy_send_timeout          3600;
+    proxy_read_timeout          3600;
+    send_timeout                3600;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \"Upgrade\";
+
+    proxy_pass http://%%SLAVE_IP%%:%%SLAVE_PORT%%;
+  }
+
+  # GNS Heavy client
+  location /v3
+  {
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
+
+    proxy_set_header Host \$host;
+    proxy_set_header Authorization \$auth_header;
+
+    # GNS3 maximum timeout = 1h
+    proxy_connect_timeout       3600;
+    proxy_send_timeout          3600;
+    proxy_read_timeout          3600;
+    send_timeout                3600;
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
@@ -200,32 +269,34 @@ server {
     proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_set_header        X-Forwarded-Host \$server_name;  
   }
-}"
+}
+"
 
 for i in $VIGRID_GNS_SLAVE_HOSTS
 do
   SLAVE_HOST=`echo $i|awk 'BEGIN {FS=":";} { print $1;}'`
   SLAVE_IP=`echo $i|awk 'BEGIN {FS=":";} { print $2;}'`
   SLAVE_PORT=`echo $i|awk 'BEGIN {FS=":";} { print $3;}'`
-  
-  CHK_SERVERNAME=`echo "$NGINX_CONFIG"|egrep -i "server_name\s+.*$SLAVE_HOST.*;"`
-  CHK_PROXYPASS=`echo "$NGINX_CONFIG"|egrep "proxy_pass\s+http:\/\/$SLAVE_IP:$SLAVE_PORT.*;"`
+  SLAVE_FQDN=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT="| awk -F '=' '{print $NF;}'`
 
-  if [ "x$CHK_SERVERNAME" = "x" -o "x$CHK_PROXYPASS" = "x" ]
+  NGINX_SLAVE_CONFIG="/etc/nginx/conf.d/CyberRange-$SLAVE_FQDN-443.conf"
+
+  if [ ! -f $NGINX_SLAVE_CONFIG ]
   then
-    SLAVE_FROM_HOSTS=`cat /etc/hosts|egrep "^$SLAVE_IP\s*"|head -1`
-    
-    echo "    Vigrid slave '$i' not present in NGinx configuration, adding it..."
-    if [ "x$SLAVE_FROM_HOSTS" != "x" ]
-    then
-      SLAVE_HOST=`echo $SLAVE_FROM_HOSTS | sed "s/^$SLAVE_IP\s*//"`
-      echo "      Using '$SLAVE_HOST' as server names"
-    fi
-    echo "$NGINX_SLAVE" | sed "s/%%SLAVE_HOST%%/$SLAVE_HOST/" | sed "s/%%SLAVE_IP%%/$SLAVE_IP/" | sed "s/%%SLAVE_PORT%%/$SLAVE_PORT/" >>/etc/nginx/conf.d/CyberRange-443.conf
+    echo "  $NGINX_SLAVE_CONFIG does not exist for %%SLAVE_HOST%% (%%SLAVE_FQDN%%), %%SLAVE_IP%%:%%SLAVE_PORT%%, creating it"
+
+    echo "$NGINX_CONFIG" | sed "s/%%SLAVE_HOST%%/$SLAVE_HOST/" | sed "s/%%SLAVE_IP%%/$SLAVE_IP/" \
+     | sed "s/%%SLAVE_PORT%%/$SLAVE_PORT/" | sed "s/%%SLAVE_FQDN%%/$SLAVE_FQDN/" >$NGINX_SLAVE_CONFIG
   fi
-  
-  echo "Dont forget to have all Vigrid slaves hosts declared into your host file with Vigrid Master IP address."
 done
+
+echo -n "  Restarting NGinx..."
+service nginx restart
+if [ $? -ne 0 ]
+then
+  echo "    Apparently NGinx has some issues and cant restart, please check and correct. Once done, press [RETURN]"
+  read CR
+fi
 
 echo "Adding slave SSH access"
 /home/gns3/vigrid/bin/vigrid-sshcheck -a -s /home/gns3/etc/id_GNS3 -u gns3 -h $SLAVE_IP

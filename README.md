@@ -21,13 +21,18 @@ You may also think it as 'V grid' (Virtualization Grid).
 Vigrid extension is copyrighted to Laurent LEVIER, licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
 ### Last updates ###
+Vigrid (main) is now API ready:
+<BR>- New NGinx+PHP installations to provide device load details are now part of install scripts.
+<BR>- Requests performed over HTTPS will provide cpu/network/disk details in JSON format.
+<BR>- Added to vigrid-addslave the actions to add Slave to Master NGinx configuration and then address them via Vigrid Master.
+
+<BR>- Still to update Vigrid Web pages to move to API and no longer use the dirty SSH scripts.
+<BR>- Ongoing developpement of a JS interface, expected much faster response than current synchronous PHP.
+
 New service : Vigrid deployer. Its mission is to massively install operating systems on baremetal or virtual machines.
-
 To install it, runs on your Vigrid NAS:
-
-<code>sudo /Vstorage/GNS3/bin/vigrid-update</code>
-
-<code>sudo /Vstorage/GNS3/install/vigrid1-deployer-install.sh</code>
+<BR><code>sudo /Vstorage/GNS3/bin/vigrid-update</code>
+<BR><code>sudo /Vstorage/GNS3/install/vigrid1-deployer-install.sh</code>
 
 Nota : Vigrid-deployer will install a DHCP server on the Vigrid NAS, it might conflict with your own one.
 

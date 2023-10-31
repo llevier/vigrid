@@ -48,7 +48,7 @@
   // Net filter ?
   if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
   // Directories ?
-  if (!empty($post['dirs'])) { $dirs_list=explode(",",$post['dirs']); }
+  if (!empty($post['dir'])) { $filters_dir=explode(",",$post['dir']); }
   
   // create fake sub order to ease later program code
   if ($order[1]=="") { $order[1]=generateRandomString(64); }
@@ -56,7 +56,7 @@
   if ($order[0]=="load")
   {
     array($json_array);
-    
+
     exec("ps ax|grep nfsd|grep -v grep|wc -l",$t);
     $nfsd_threads=trim($t[0]);
 
@@ -66,9 +66,9 @@
 
     $json_array['nfsd']="$nfsd_threads/$nfsd_config";
     
-    // Disk filter ?
-    if (!empty($filter_disk)) { $filters_disk=explode(",",$filter_disk); }
-
+    // Get last lines from /var/log/vigrid-load.log
+    $load_array=VigridLOADextract('/var/log/vigrid-load.log');    
+    
     // Get associated DISK values
     $disks=VigridLOADgetdisk($load_array,$filters_disk);
 
@@ -85,8 +85,8 @@
       $json_array['disk'][$names]['waits']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
     }
 
-    API_load($json_array);
-    
+    API_load($json_array,$filters_net,$filters_dir);
+
     exit;
   }
   else

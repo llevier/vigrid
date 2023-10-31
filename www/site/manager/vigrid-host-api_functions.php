@@ -1,6 +1,6 @@
 <?php
 
-function API_load($json_array)
+function API_load($json_array,$filters_net,$filters_dir)
 {
   $json_array['hostname']=gethostname();
 
@@ -23,9 +23,6 @@ function API_load($json_array)
   $json_array['ram']=$ram_data['MemFree']."/".$ram_data['MemTotal'];
   $json_array['swap']=$ram_data['SwapFree']."/".$ram_data['SwapTotal'];
 
-  // Same for net
-  if (!empty($filter_net)) { $filters_net=explode(",",$filter_net); }
-
   // Get associated NET values
   $nets=VigridLOADgetnet($load_array,$filters_net);
 
@@ -40,16 +37,16 @@ function API_load($json_array)
     { $json_array['net'][$names]="$rate_out/$max_out/$rate_in/$max_in/".$net_cur['speed']; }
   }
   
-  if (!empty($dirs_list))
+  if (!empty($filters_dir))
   {
-    foreach ($dirs_list as $dir)
+    foreach ($filters_dir as $dir)
     {
       if (file_exists($dir) && is_dir($dir))
       {
         $disk_free =HumanSize(disk_free_space($dir));
         $disk_total=HumanSize(disk_total_space($dir));
 
-        $json_array['dirs'][$dir]="$disk_free/$disk_total";
+        $json_array['dir'][$dir]="$disk_free/$disk_total";
       }
     }
   }

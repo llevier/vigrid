@@ -95,27 +95,29 @@ function VigridLOADgetdisk($load_array,$filters_disk)
   {
     $f=preg_split("/\s+/",$load_array[$i]);
 
-    if (((!empty($filters_disk)) && (preg_grep("/^$f[2]$/",$filters_disk)))
-     || ((empty($filters_disk)) && ($f[1]=="D")))
+    if ($f[1]=="D")
     {
-      $name=$f[2];
+      if (((!empty($filters_disk)) && (preg_grep("/^$f[2]$/",$filters_disk))) || (empty($filters_disk)))
+      {
+        $name=$f[2];
 
-      $disk[$name]['time']=$f[0];
-      $disk[$name]['out']=sprintf("%d",$f[2]);
-      $disk[$name]['in']=sprintf("%d",$f[3]);
+        $disk[$name]['time']=$f[0];
+        $disk[$name]['out']=sprintf("%d",$f[2]);
+        $disk[$name]['in']=sprintf("%d",$f[3]);
 
-      $disk[$name]['rs']             =sprintf("%d",$f[3]);
-      $disk[$name]['rs_max']         =sprintf("%d",$f[4]);
-      $disk[$name]['rsect']          =sprintf("%d",$f[5]);
-      $disk[$name]['rsect_max']      =sprintf("%d",$f[6]);
+        $disk[$name]['rs']             =sprintf("%d",$f[3]);
+        $disk[$name]['rs_max']         =sprintf("%d",$f[4]);
+        $disk[$name]['rsect']          =sprintf("%d",$f[5]);
+        $disk[$name]['rsect_max']      =sprintf("%d",$f[6]);
 
-      $disk[$name]['ws']             =sprintf("%d",$f[7]);
-      $disk[$name]['ws_max']         =sprintf("%d",$f[8]);
-      $disk[$name]['wsect']          =sprintf("%d",$f[9]);
-      $disk[$name]['wsect_max']      =sprintf("%d",$f[10]);
+        $disk[$name]['ws']             =sprintf("%d",$f[7]);
+        $disk[$name]['ws_max']         =sprintf("%d",$f[8]);
+        $disk[$name]['wsect']          =sprintf("%d",$f[9]);
+        $disk[$name]['wsect_max']      =sprintf("%d",$f[10]);
 
-      $disk[$name]['io_pending']     =sprintf("%d",$f[11]);
-      $disk[$name]['io_pending_max'] =sprintf("%d",$f[12]);
+        $disk[$name]['io_pending']     =sprintf("%d",$f[11]);
+        $disk[$name]['io_pending_max'] =sprintf("%d",$f[12]);
+      }
     }
   }
   return($disk);
@@ -131,47 +133,47 @@ function VigridLOADgetnet($load_array,$filters_net)
   {
     $f=preg_split("/\s+/",$load_array[$i]);
     
-    if (((!empty($filters_net)) && (preg_grep("/^$f[2]$/",$filters_net)))
-     || ((empty($filters_net)) && ($f[1]=="N")))
+    if ($f[1]=="N")
     {
-      $name=$f[2];
-      
-      $net[$name]['bytes_in']=$f[3];
-      $net[$name]['bytes_in_max']=$f[4];
-      $net[$name]['bytes_out']=$f[5];
-      $net[$name]['bytes_out_max']=$f[6];
-      
-      // Get NIC speed as well
-      if ($net[$name]['speed']==0)
+      if (((!empty($filters_net)) && (preg_grep("/^$f[2]$/",$filters_net))) || (empty($filters_net)))
       {
-        $t=file("/sys/class/net/$name/speed");
-        $net[$name]['speed']=trim($t[0]);
-      }
-    
-      if ($net[$name]['speed']=="") // bridge_port(s)
-      {
-        $wd_cur=getcwd();
-        chdir("/sys/class/net/$name/");
+        $name=$f[2];
         
-        // List lower(s), extract min speed as default value
-        $value_min=0;
-        foreach (glob("lower_*") as $filename)
+        $net[$name]['bytes_in']=$f[3];
+        $net[$name]['bytes_in_max']=$f[4];
+        $net[$name]['bytes_out']=$f[5];
+        $net[$name]['bytes_out_max']=$f[6];
+        
+        // Get NIC speed as well
+        if ($net[$name]['speed']==0)
         {
-          if (!preg_match("/gns3/",$filename)) // Ignoring GNS3 taps
-          {
-            $t=file("/sys/class/net/$name/$filename/speed");
-            
-            $name_lower=preg_replace("/lower_/","",$filename);
-           
-            if ($value_min==0) { $value_min=trim($t[0]); }
-            else if ($t[0]<$value_min) { $value_min=trim($t[0]); }
-            
-            $net[$name_lower]['speed']=$value_min;
-          }
+          $t=file("/sys/class/net/$name/speed");
+          $net[$name]['speed']=trim($t[0]);
         }
-        $net[$name]['speed']=$value_min;
-        
-        chdir($wd_cur);
+      
+        if ($net[$name]['speed']=="") // bridge_port(s)
+        {
+          $wd_cur=getcwd();
+          chdir("/sys/class/net/$name/");
+          
+          // List lower(s), extract min speed as default value
+          $value_min=0;
+          foreach (glob("lower_*") as $filename)
+          {
+            if (!preg_match("/gns3/",$filename)) // Ignoring GNS3 taps
+            {
+              $t=file("/sys/class/net/$name/$filename/speed");
+              
+              $name_lower=preg_replace("/lower_/","",$filename);
+             
+              if ($value_min==0) { $value_min=trim($t[0]); }
+              else if ($t[0]<$value_min) { $value_min=trim($t[0]); }
+            }
+          }
+          $net[$name]['speed']=$value_min;
+          
+          chdir($wd_cur);
+        }
       }
     }
   }

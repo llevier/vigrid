@@ -343,6 +343,11 @@
     else
     {
       list($ram_free,$ram_total)=explode("/",$stats_data['ram']);
+
+      // removing units (MB/...)
+      $ram_total=preg_replace("/[a-zA-Z]/","",$ram_total);
+      $ram_free=preg_replace("/[a-zA-Z]/","",$ram_free);
+
       $ratio=$ram_total/$ram_free*100;
       if ($ratio<10)       { $color="Red"; }
       else if ($ratio<30)  { $color="Orange"; }
@@ -361,6 +366,11 @@
     {
       // There might be no swap on server...
       list($swap_free,$swap_total)=explode("/",$stats_data['swap']);
+
+      // removing units (MB/...)
+      $swap_total=preg_replace("/[a-zA-Z]/","",$swap_total);
+      $swap_free=preg_replace("/[a-zA-Z]/","",$swap_free);
+
       if (($swap_total>0) && ($swap_free>0))
       { $ratio=$swap_total/$swap_free*100; }
       else { $ratio=100; }

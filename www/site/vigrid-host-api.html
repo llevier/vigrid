@@ -17,6 +17,9 @@
   // turn off output buffering
   ob_implicit_flush();
 
+  // GNS3 functions
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+
   // GNS3 nas-load functions
   include "/home/gns3/vigrid/bin-nas/nas-load_functions.php";
 
@@ -46,7 +49,19 @@
   if ($order[0]=="load")
   {
     array($json_array);
-    API_load($json_array,null,null);
+
+    // Vigrid-API is for hosts, not NAS
+    if (VIGRIDconfig("VIGRID_MONITOR_GNS_NET")!="")
+    { $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_NET")); }
+    else
+    { $filters_net=null; }
+
+    if (VIGRIDconfig("VIGRID_MONITOR_GNS_DIR")!="")
+    { $filters_dir=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_DIR")); }
+    else
+    { $filters_dir=null; }
+    
+    API_load($json_array,$filters_net,$filters_dir);
     
     exit;
   }

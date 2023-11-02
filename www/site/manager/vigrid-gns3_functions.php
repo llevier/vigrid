@@ -261,33 +261,37 @@
     $dirs="";
     if ($vigrid_type==1) { $dirs="$vigrid_storage_root/home/gns3/GNS3"; }
     if ($vigrid_type==2) { $dirs="$vigrid_storage_root/NFS/$hostname/GNS3"; }
-    if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3 $vigrid_storage_root/NFS/$hostname/var-lib-docker"; }
-    
-    $fd=popen("sudo -u gns3 /home/gns3/vigrid/bin/nas-stats -H $nas_host -D \"$dirs\"","r");
+    if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3,$vigrid_storage_root/NFS/$hostname/var-lib-docker"; }
 
-    $load1=fgets($fd,4096);
-    $load5=fgets($fd,4096);
-    $load15=fgets($fd,4096);
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_URL, "https://$nas_host/vigrid-api/load");
+    curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dir\":\"$dirs\" }");
+    $data=curl_exec($ch);
+		$stats_nas=json_decode($data,true);
+		curl_close($ch);
     
-    $cpu=fgets($fd,4096);
-    $ram_free=fgets($fd,4096);
-    $ram_total=fgets($fd,4096);
-    $swap_free=fgets($fd,4096);
-    $swap_total=fgets($fd,4096);
-    $cores=fgets($fd,4096);
+    return($stats_nas);
+   
+    // list($ram_free,$ram_total)=explode("/",$stats_nas['ram']);
+    // list($swap_free,$swap_total)=explode("/",$stats_nas['swap']);
     
     // Unknown list of directory outputs from here
-    $dirs=array();
-		while (!feof($fd))
-		{
-			$line=trim(fgets($fd,4096));
-      array_push($dirs,$line);
-    }
-    $disk_data=implode("##",$dirs);
-      
-		pclose($fd);
-    
-    return array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data);
+    // $dirs=array();
+		// while (!feof($fd))
+		// {
+			// $line=trim(fgets($fd,4096));
+      // array_push($dirs,$line);
+    // }
+    // $disk_data=implode("##",$dirs);
+
+    // return array($stats_nas['cpuload']['1m'],$stats_nas['cpuload']['5m'],$stats_nas['cpuload']['15m'],$stats_nas['cpuload']['avg'],
+     // $ram_free,$ram_total,$swap_free,$swap_total,$stats_nas['nproc'],$disk_data);     
   }  
 
 	// get DHCP leases : WARNING, totally dependant of DHCP server + implementation.
@@ -1496,9 +1500,9 @@
 
     // Loading descriptions
     $t=file_get_contents($vigrid_config_desc);
-    $vigrid_params_desc=json_decode($t,true);
+    if ($t) { return(json_decode($t,true)); }
 
-    return($vigrid_params_desc);
+    return(null);
   }
 
   function VIGRIDparam_getform($vigrid_params_desc,$param_name)
@@ -1509,7 +1513,7 @@
       { return($vigrid_params_desc[$p]['FORM']); }
     }
     return(null);
-}
+  }
   
   function VIGRIDconfig($var_wanted)
   {

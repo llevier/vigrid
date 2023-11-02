@@ -45,9 +45,16 @@ function API_load($json_array,$filters_net,$filters_dir)
       {
         $disk_free =HumanSize(disk_free_space($dir));
         $disk_total=HumanSize(disk_total_space($dir));
+        
+        // to determine which device is below directory
+        // 1- get btrfs/ZFS dataset for this directory
+        // 2- extract top level pool for this dataset
+        // 3- get device for this pool
+        $disk_dev="";
 
-        $json_array['dir'][$dir]="$disk_free/$disk_total";
-      }
+        $json_array['dir'][$dir]['space']="$disk_free/$disk_total";
+        $json_array['dir'][$dir]['mount']=$disk_dev;
+     }
     }
   }
 

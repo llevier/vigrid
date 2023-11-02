@@ -117,6 +117,30 @@
   },
 
   {
+    "NAME": "VIGRID_MONITOR_NAS_NET",
+    "DESCRIPTION": "Vigrid NAS network interfaces to monitor, oftenly the one used for NFS sharing.",
+    "VALUE_TEXT": "Please provide a list of network interfaces, separated with a coma:<BR>",
+    "FORM": "FILE",
+    "PATTERN": "/[a-zA-Z0-9]@_-,]+"
+  },
+
+  {
+    "NAME": "VIGRID_MONITOR_NAS_DISK",
+    "DESCRIPTION": "Vigrid NAS disk special files to monitor, oftenly the one used for shared filesystems.",
+    "VALUE_TEXT": "Please provide a list of special files (without path - eg. /dev/ -), separated with a coma:<BR>",
+    "FORM": "FILE",
+    "PATTERN": "/[a-zA-Z0-9],]+"
+  },
+
+  {
+    "NAME": "VIGRID_MONITOR_GNS_NET",
+    "DESCRIPTION": "Vigrid GNS Host (either Master or Slave) network interfaces to monitor.",
+    "VALUE_TEXT": "Please provide a list of network interfaces, separated with a coma:<BR>",
+    "FORM": "FILE",
+    "PATTERN": "/[a-zA-Z0-9]@_-,]+"
+  },
+
+  {
     "NAME": "VIGRID_DHCP_SERVER",
     "DESCRIPTION": "Vigrid needs a DHCP server to get the IP addresses obtained for the virtual devices attached to a real cloud.",
     "VALUE_TEXT": "Please provide a pair at format 'hostname:IPaddress': ",

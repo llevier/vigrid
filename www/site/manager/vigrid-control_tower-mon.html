@@ -83,8 +83,8 @@
     ?><H3>NAS server(s)</H3>
     <TABLE NUMCOL=4 BORDER=1>
     <TR><TD><B>NAS hostname</B></TD><TD><B>Status</B></TD><TD><B>SSH</B></TD><TD><B>IP address</B></TD>
-    <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD>
-    <TD ALIGN=CENTER><B>Directory</TD><TD ALIGN=CENTER><B>free/total</B></TD><TD ALIGN=CENTER><B>BW read cur (max)</B></TD><TD ALIGN=CENTER><B>BW write cur (max)</B></TD><TD ALIGN=CENTER><B>IOps cur (max)</B></TD><TR>
+    <TD ALIGN=CENTER><B>Load<BR>1m</B></TD><TD ALIGN=CENTER><B>Load<BR>5m</B></TD><TD ALIGN=CENTER><B>Load<BR>15m</B></TD><TD ALIGN=CENTER><B>CPU<BR>idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD>
+    <TD ALIGN=CENTER><B>Directories</TD><TD ALIGN=CENTER><B>free/total</B></TD><TD ALIGN=CENTER><B>Devices</B></TD><TD ALIGN=CENTER><B>BW read<BR>cur/max</B></TD><TD ALIGN=CENTER><B>BW write<BR>cur/max</B></TD><TD ALIGN=CENTER><B>IOps read<BR>cur/max</B></TD><TD ALIGN=CENTER><B>IOps write<BR>cur/max</B></TD><TD ALIGN=CENTER><B>IO waits<BR>cur/max</B></TD><TR>
     <?php
     
     $vigrid_nas=VIGRIDconfig("VIGRID_NAS_SERVER");
@@ -110,51 +110,60 @@
       { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
 
       print("<TD ALIGN=RIGHT>".    $nas[1]."</TD>");
-
+      
       if (isset($data_vigrid_stats['STATS'][$nas_ip]))
-      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data)=$data_vigrid_stats['STATS'][$nas_ip]; }
+      { $nas_data=$data_vigrid_stats['STATS'][$nas_ip]; }
       else
-      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+      { $nas_data=null; }
 
-      if (($load1==-1) || ($load5==-1) || ($load15==-1))
+      if ((!$nas_data['cpuload']['1m']) || (!$nas_data['cpuload']['5m']) || (!$nas_data['cpuload']['15m']))
       { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
-        if ($load1>75)       { $color="Red"; }
-        else if ($load1>50)  { $color="Orange"; }
+        list($load1_val,$load1_per)=explode("/",$nas_data['cpuload']['1m']);
+        $load1_per=preg_replace("/%/","",$load1_per);
+        if ($load1_per>75)       { $color="Red"; }
+        else if ($load1_per>50)  { $color="Orange"; }
         else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1_per."%</FONT></TD>");
 
-        if ($load5>75)       { $color="Red"; }
-        else if ($load5>50)  { $color="Orange"; }
+        list($load5_val,$load5_per)=explode("/",$nas_data['cpuload']['5m']);
+        $load5_per=preg_replace("/%/","",$load5_per);
+        if ($load5_per>75)       { $color="Red"; }
+        else if ($load5_per>50)  { $color="Orange"; }
         else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5_per."%</FONT></TD>");
 
-        if ($load15>75)       { $color="Red"; }
-        else if ($load15>50)  { $color="Orange"; }
+        list($load15_val,$load15_per)=explode("/",$nas_data['cpuload']['15m']);
+        $load15_per=preg_replace("/%/","",$load15_per);
+        if ($load15_per>75)       { $color="Red"; }
+        else if ($load15_per>50)  { $color="Orange"; }
         else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
+        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15_per."%</FONT></TD>");
       }
       
-      if ($cpu==-1)
+      if (!$nas_data['cpuload']['avg'])
       { print("<TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
+        $cpu=preg_replace("/%/","",$nas_data['cpuload']['avg']);
+        $cpu=100-floatval($cpu);
         if ($cpu<10)       { $color="Red"; }
         else if ($cpu<30)  { $color="Orange"; }
         else               { $color="Green"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
+        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".sprintf("%.02f",$cpu)."%</FONT></TD>");
       }
 
-      if ($cores==-1)
+      if (!$nas_data['nproc'])
       { print("<TD ALIGN=CENTER>N/A</TD>"); }
       else
-      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>"); }
+      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$nas_data['nproc']."</FONT></TD>"); }
 
-      if ($ram_free==-1)
+      if (!$nas_data['ram'])
       {	print("<TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
+        list($ram_free,$ram_total)=explode("/",$nas_data['ram']);
         $ratio=$ram_total/$ram_free*100;
         if ($ratio<10)       { $color="Red"; }
         else if ($ratio<30)  { $color="Orange"; }
@@ -167,11 +176,12 @@
         print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit."&nbsp;/&nbsp;".$ram_total.$ram_total_unit."</FONT></TD>");
       }
 
-      if ($swap_free==-1)
+      if (!$nas_data['swap'])
       {	print("<TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
         // There might be no swap on server...
+        list($swap_free,$swap_total)=explode("/",$nas_data['swap']);
         if (($swap_total>0) && ($swap_free>0))
         { $ratio=$swap_total/$swap_free*100; }
         else { $ratio=100; }
@@ -187,69 +197,58 @@
         print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit."&nbsp;/&nbsp;".$swap_total.$swap_total_unit."</FONT></TD>");
       }
 
-      if ($disk_data=="")
+      if (!$nas_data['dir'])
       {	print("<TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
-        // directories (directory:free/total:bw_r_cur (bw_r_max):bw_w_cur (bw_w_max):iops_cur (iops_max))
-        $dod=preg_split("/##/",$disk_data);
-        
         print("<TD VALIGN=TOP>");
-        for ($do=0;$do<sizeof($dod);$do++)
-        {
-          $f=explode(":",$dod[$do]);
-          $nas_dir=$f[0];
-          $bw_r[$do]=$f[2];
-          $bw_w[$do]=$f[3];
-          $iops[$do]=$f[4];
-
-          $f=explode("/",$f[1]);
-          $disk_free[$do]=$f[0];
-          $disk_total[$do]=$f[1];
-
-          if ($disk_total[$do]>0) { print($nas_dir."<BR>"); }
-        }
+        foreach ($nas_data['dir'] as $dir_name => $dir_values)
+        { print("$dir_name<BR>"); }
         print("</TD>");
 
         print("<TD VALIGN=TOP>");
-        for ($do=0;$do<sizeof($dod);$do++)
-        {
-          if ($disk_free[$do]<100000000)     { $color="Red"; } // Less than 100GB
-          elseif ($disk_free[$do]<150000000) { $color="Orange"; } // Less than 150GB
-          else { $color="Green"; }
-          
-          if (intval($disk_free[$do])/1000000000>1) { $disk_free[$do]=sprintf("%02.02f",intval($disk_free[$do])/1000000000); $disk_free_unit=" TB"; }
-          else { $disk_free[$do]=sprintf("%02.02f",intval($disk_free[$do])/1000000); $disk_free_unit="GB"; }
-          if (intval($disk_total[$do])/1000000000>1) { $disk_total[$do]=sprintf("%02.02f",intval($disk_total[$do])/1000000000); $disk_total_unit=" TB"; }
-          else { $disk_total[$do]=sprintf("%02.02f",intval($disk_total[$do])/1000000); $disk_total_unit="GB"; }
+        foreach ($nas_data['dir'] as $dir_name => $dir_values)
+        { print("$dir_values<BR>"); }
+        print("</TD>");
 
-          if ($disk_total[$do]>0)
-          { print("<FONT COLOR=$color>".$disk_free[$do].$disk_free_unit."&nbsp;/&nbsp;".$disk_total[$do].$disk_total_unit."</FONT><BR>"); }
+        print("<TD VALIGN=TOP ALIGN=CENTER>");
+        foreach ($nas_data['disk'] as $disk_name => $disk_values)
+        { print("$disk_name<BR>"); }
+        print("</TD>");
+
+        print("<TD VALIGN=TOP ALIGN=CENTER>");
+        foreach ($nas_data['disk'] as $disk_name => $disk_values)
+        {
+          $f=explode("/",$disk_values['rates']);
+          print("$f[0]/$f[1]<BR>");
         }
         print("</TD>");
 
         print("<TD VALIGN=TOP ALIGN=CENTER>");
-        for ($do=0;$do<sizeof($dod);$do++)
+        foreach ($nas_data['disk'] as $disk_name => $disk_values)
         {
-          if ($disk_total[$do]>0)
-          { print($bw_r[$do]."<BR>"); }
+          $f=explode("/",$disk_values['rates']);
+          print("$f[2]/$f[3]<BR>");
+        }
+        print("</TD>");
+        print("<TD VALIGN=TOP ALIGN=CENTER>");
+        foreach ($nas_data['disk'] as $disk_name => $disk_values)
+        {
+          $f=explode("/",$disk_values['iops']);
+          print("$f[0]/$f[1]<BR>");
         }
         print("</TD>");
 
         print("<TD VALIGN=TOP ALIGN=CENTER>");
-        for ($do=0;$do<sizeof($dod);$do++)
+        foreach ($nas_data['disk'] as $disk_name => $disk_values)
         {
-          if ($disk_total[$do]>0)
-          { print($bw_w[$do]."<BR>"); }
+          $f=explode("/",$disk_values['iops']);
+          print("$f[2]/$f[3]<BR>");
         }
         print("</TD>");
-
         print("<TD VALIGN=TOP ALIGN=CENTER>");
-        for ($do=0;$do<sizeof($dod);$do++)
-        {
-          if ($disk_total[$do]>0)
-          { print($iops[$do]."<BR>"); }
-        }
+        foreach ($nas_data['disk'] as $disk_name => $disk_values)
+        { print($disk_values['waits']."<BR>"); }
         print("</TD>");
       }
       print("</TR>\n");

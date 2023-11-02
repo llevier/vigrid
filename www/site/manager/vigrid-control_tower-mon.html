@@ -110,7 +110,8 @@
       else
       { $nas_data=null; }
 
-      HTMLdisplay_common($nas_data);
+      $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_NAS_NET"));
+      HTMLdisplay_common($nas_data,$filters_net);
 
       if (!$nas_data['disk'])
       {	print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
@@ -250,7 +251,8 @@
       else
       { $host_data=null; }
 
-      HTMLdisplay_common($host_data);
+      $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_NET"));
+      HTMLdisplay_common($host_data,$filters_net);
 
       print("<TR>\n");
     }
@@ -291,7 +293,7 @@
 		}
 	}
   
-  function HTMLdisplay_common($stats_data)
+  function HTMLdisplay_common($stats_data,$filters_net)
   {
     if ((!$stats_data['cpuload']['1m']) || (!$stats_data['cpuload']['5m']) || (!$stats_data['cpuload']['15m']))
     { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
@@ -380,30 +382,42 @@
     {
       print("<TD VALIGN=TOP ALIGN=CENTER>");
       foreach ($stats_data['net'] as $net_name => $net_values)
-      { print("$net_name<BR>"); }
-      print("</TD>");
-
-      print("<TD VALIGN=TOP ALIGN=CENTER>");
-      foreach ($stats_data['net'] as $net_name => $net_values)
       {
-        $f=explode("/",$net_values);
-        print("$f[0]/$f[1]<BR>");
+        if (((!empty($filters_net)) && (preg_grep("/^$net_name$/",$filters_net))) || (empty($filters_net)))
+        { print("$net_name<BR>"); }
       }
       print("</TD>");
 
       print("<TD VALIGN=TOP ALIGN=CENTER>");
       foreach ($stats_data['net'] as $net_name => $net_values)
       {
-        $f=explode("/",$net_values);
-        print("$f[2]/$f[3]<BR>");
+        if (((!empty($filters_net)) && (preg_grep("/^$net_name$/",$filters_net))) || (empty($filters_net)))
+        {
+          $f=explode("/",$net_values);
+          print("$f[0]/$f[1]<BR>");
+        }
       }
       print("</TD>");
 
       print("<TD VALIGN=TOP ALIGN=CENTER>");
       foreach ($stats_data['net'] as $net_name => $net_values)
       {
-        $f=explode("/",$net_values);
-        print("$f[4]<BR>");
+        if (((!empty($filters_net)) && (preg_grep("/^$net_name$/",$filters_net))) || (empty($filters_net)))
+        {
+          $f=explode("/",$net_values);
+          print("$f[2]/$f[3]<BR>");
+        }
+      }
+      print("</TD>");
+
+      print("<TD VALIGN=TOP ALIGN=CENTER>");
+      foreach ($stats_data['net'] as $net_name => $net_values)
+      {
+        if (((!empty($filters_net)) && (preg_grep("/^$net_name$/",$filters_net))) || (empty($filters_net)))
+        {
+          $f=explode("/",$net_values);
+          print("$f[4]<BR>");
+        }
       }
       print("</TD>");
     }
@@ -419,7 +433,7 @@
 
       print("<TD VALIGN=TOP>");
       foreach ($stats_data['dir'] as $dir_name => $dir_values)
-      { print("$dir_values<BR>"); }
+      { print($dir_values['space']."<BR>"); }
       print("</TD>");
     }
 

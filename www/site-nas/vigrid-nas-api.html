@@ -69,14 +69,6 @@
     // Directories ?
     if (!empty($post['dir'])) { $filters_dir=explode(",",$post['dir']); }
 
-    if (empty($filters_net))
-    { $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_NAS_NET")); }
-    else { $filters_net=null; }
-
-    if (empty($filters_disk))
-    { $filters_disk=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_NAS_DISK")); }
-    else { $filters_disk=null; }
-    
     // Get associated DISK values
     $disks=VigridLOADgetdisk($load_array,$filters_disk);
 

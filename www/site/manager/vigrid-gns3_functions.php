@@ -237,13 +237,6 @@
 
     if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3,$vigrid_storage_root/NFS"; }
 
-    $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_NET"));
-    $filters_dir=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_DIR"));
-  
-    // $post_data="{ %%FILTERS_NET%% }";
-    // if (!empty($filters_net))
-    // { $post_data="\"dir\": \"$filters_net\""; }
-
     // curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dir\":\"$dirs\" }");
     $data=curl_exec($ch);
 		$stats_gns=json_decode($data,true);

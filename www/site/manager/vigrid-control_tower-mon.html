@@ -37,13 +37,6 @@
   // get controller configuration to extract GNS3 hosts...
 	$gns_controller=gns_getcontrollers();
   
-  // Get all data
-  // Data format:
-  // $_['STATS'][GNS_HOSTNAME][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data) ]
-  // $_['STATS'][NAS_HOSTNAME][ array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data) ]
-  // Projects:  $_['GNS3'][GNS_HOSTNAME]['PROJECTS'][]
-  // Nodes:     $_['GNS3'][GNS_HOSTNAME]['PROJECT_NODES'][GNS_PROJECT_UUID]['NODES'][]
-
   $data_vigrid=VIGRIDgetgnsdata($gns_controller);
 
   $new_url=getselfurl_controltower();
@@ -84,6 +77,7 @@
     <TABLE NUMCOL=4 BORDER=1>
     <TR><TD><B>NAS hostname</B></TD><TD><B>Status</B></TD><TD><B>SSH</B></TD><TD><B>IP address</B></TD>
     <TD ALIGN=CENTER><B>Load<BR>1m</B></TD><TD ALIGN=CENTER><B>Load<BR>5m</B></TD><TD ALIGN=CENTER><B>Load<BR>15m</B></TD><TD ALIGN=CENTER><B>CPU<BR>idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD>
+    <TD ALIGN=CENTER><B>NIC</TD><TD ALIGN=CENTER><B>BW in<BR>cur/max</B></TD><TD ALIGN=CENTER><B>BW out<BR>cur/max</B></TD><TD ALIGN=CENTER><B>Speed</B></TD>
     <TD ALIGN=CENTER><B>Directories</TD><TD ALIGN=CENTER><B>free/total</B></TD><TD ALIGN=CENTER><B>Devices</B></TD><TD ALIGN=CENTER><B>BW read<BR>cur/max</B></TD><TD ALIGN=CENTER><B>BW write<BR>cur/max</B></TD><TD ALIGN=CENTER><B>IOps read<BR>cur/max</B></TD><TD ALIGN=CENTER><B>IOps write<BR>cur/max</B></TD><TD ALIGN=CENTER><B>IO waits<BR>cur/max</B></TD><TR>
     <?php
     
@@ -116,101 +110,12 @@
       else
       { $nas_data=null; }
 
-      if ((!$nas_data['cpuload']['1m']) || (!$nas_data['cpuload']['5m']) || (!$nas_data['cpuload']['15m']))
-      { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+      HTMLdisplay_common($nas_data);
+
+      if (!$nas_data['disk'])
+      {	print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
       else
       {
-        list($load1_val,$load1_per)=explode("/",$nas_data['cpuload']['1m']);
-        $load1_per=preg_replace("/%/","",$load1_per);
-        if ($load1_per>75)       { $color="Red"; }
-        else if ($load1_per>50)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1_per."%</FONT></TD>");
-
-        list($load5_val,$load5_per)=explode("/",$nas_data['cpuload']['5m']);
-        $load5_per=preg_replace("/%/","",$load5_per);
-        if ($load5_per>75)       { $color="Red"; }
-        else if ($load5_per>50)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5_per."%</FONT></TD>");
-
-        list($load15_val,$load15_per)=explode("/",$nas_data['cpuload']['15m']);
-        $load15_per=preg_replace("/%/","",$load15_per);
-        if ($load15_per>75)       { $color="Red"; }
-        else if ($load15_per>50)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15_per."%</FONT></TD>");
-      }
-      
-      if (!$nas_data['cpuload']['avg'])
-      { print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        $cpu=preg_replace("/%/","",$nas_data['cpuload']['avg']);
-        $cpu=100-floatval($cpu);
-        if ($cpu<10)       { $color="Red"; }
-        else if ($cpu<30)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".sprintf("%.02f",$cpu)."%</FONT></TD>");
-      }
-
-      if (!$nas_data['nproc'])
-      { print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$nas_data['nproc']."</FONT></TD>"); }
-
-      if (!$nas_data['ram'])
-      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        list($ram_free,$ram_total)=explode("/",$nas_data['ram']);
-        $ratio=$ram_total/$ram_free*100;
-        if ($ratio<10)       { $color="Red"; }
-        else if ($ratio<30)  { $color="Orange"; }
-        else                 { $color="Green"; }
-        // Set RAM & swap (units in bytes) to MB or GB
-        if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
-        else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
-        if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
-        else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit."&nbsp;/&nbsp;".$ram_total.$ram_total_unit."</FONT></TD>");
-      }
-
-      if (!$nas_data['swap'])
-      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        // There might be no swap on server...
-        list($swap_free,$swap_total)=explode("/",$nas_data['swap']);
-        if (($swap_total>0) && ($swap_free>0))
-        { $ratio=$swap_total/$swap_free*100; }
-        else { $ratio=100; }
-
-        if ($ratio<30)       { $color="Red"; }
-        else if ($ratio<60)  { $color="Orange"; }
-        else                 { $color="Green"; }
-
-        if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
-        else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
-        if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
-        else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit."&nbsp;/&nbsp;".$swap_total.$swap_total_unit."</FONT></TD>");
-      }
-
-      if (!$nas_data['dir'])
-      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        print("<TD VALIGN=TOP>");
-        foreach ($nas_data['dir'] as $dir_name => $dir_values)
-        { print("$dir_name<BR>"); }
-        print("</TD>");
-
-        print("<TD VALIGN=TOP>");
-        foreach ($nas_data['dir'] as $dir_name => $dir_values)
-        { print("$dir_values<BR>"); }
-        print("</TD>");
-
         print("<TD VALIGN=TOP ALIGN=CENTER>");
         foreach ($nas_data['disk'] as $disk_name => $disk_values)
         { print("$disk_name<BR>"); }
@@ -255,14 +160,16 @@
     } 
     print("</TABLE>\n");
   }
-  
+
   ?><H3>GNS Host(s)</H3>
   <TABLE NUMCOL=4 BORDER=1>
   <TR><TD><B>Server name</B></TD><TD><B>Status</B></TD>
   <?php if (VIGRIDconfig("VIGRID_TYPE")!=1) { ?><TD><B>SSH</B></TD><?php } ?>
   <TD><B>Hostname/IP</B></TD><TD><B>TCP port</B></TD><TD><B>Version</B></TD>
   <?php if ($dispid==1) { print("<TD><B>Compute ID</B></TD>"); } ?>
-  <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD><TD ALIGN=CENTER><B>DISK free/total</B></TD><TR>
+  <TD ALIGN=CENTER><B>Load 1m</B></TD><TD ALIGN=CENTER><B>Load 5m</B></TD><TD ALIGN=CENTER><B>Load 15m</B></TD><TD ALIGN=CENTER><B>CPU idle</B></TD><TD ALIGN=CENTER><B>#cores</B></TD><TD ALIGN=CENTER><B>RAM free</B></TD><TD ALIGN=CENTER><B>SWAP free</B></TD>
+  <TD ALIGN=CENTER><B>NIC</TD><TD ALIGN=CENTER><B>BW in<BR>cur/max</B></TD><TD ALIGN=CENTER><B>BW out<BR>cur/max</B></TD><TD ALIGN=CENTER><B>Speed</B></TD>
+  <TD ALIGN=CENTER><B>Directories</TD><TD ALIGN=CENTER><B>free/total</B></TD>
   <?php
 
   $vigrid_hosts=VIGRIDgetgnshosts($gns_controller);
@@ -339,99 +246,12 @@
       }
 
       if (isset($data_vigrid_stats['STATS'][$host_ip]))
-      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data)=$data_vigrid_stats['STATS'][$host_ip]; }
+      { $host_data=$data_vigrid_stats['STATS'][$host_ip]; }
       else
-      { list($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_data)=array(-1,-1,-1,-1,-1,-1,-1,-1,-1,-1); }
+      { $host_data=null; }
 
-      if (($load1==-1) || ($load5==-1) || ($load15==-1))
-      { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        if ($load1>75)       { $color="Red"; }
-        else if ($load1>50)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1."%</FONT></TD>");
+      HTMLdisplay_common($host_data);
 
-        if ($load5>75)       { $color="Red"; }
-        else if ($load5>50)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5."%</FONT></TD>");
-
-        if ($load15>75)       { $color="Red"; }
-        else if ($load15>50)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15."%</FONT></TD>");
-      }
-      
-      if ($cpu==-1)
-      { print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        if ($cpu<10)       { $color="Red"; }
-        else if ($cpu<30)  { $color="Orange"; }
-        else               { $color="Green"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$cpu."%</FONT></TD>");
-      }
-
-      if ($cores==-1)
-      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
-      else
-      { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$cores."</FONT></TD>"); }
-
-      if ($ram_free==-1)
-      {	print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">N/A</FONT></TD>"); }
-      else
-      {
-        $ratio=$ram_total/$ram_free*100;
-        if ($ratio<10)       { $color="Red"; }
-        else if ($ratio<30)  { $color="Orange"; }
-        else                         { $color="Green"; }
-        // Set RAM & swap (units in bytes) to MB or GB
-        if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
-        else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
-        if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
-        else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit." / ".$ram_total.$ram_total_unit."</FONT></TD>");
-      }
-
-      if ($swap_free==-1)
-      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        if (($swap_total>0) && ($swap_free>0))
-        { $ratio=$swap_total/$swap_free*100; }
-        else { $ratio=100; }
-
-        if ($ratio<30)       { $color="Red"; }
-        else if ($ratio<60)  { $color="Orange"; }
-        else                         { $color="Green"; }
-
-        if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
-        else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
-        if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
-        else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit." / ".$swap_total.$swap_total_unit."</FONT></TD>");
-      }
-
-      if ($disk_data==-1)
-      {	print("<TD ALIGN=CENTER>N/A</TD>"); }
-      else
-      {
-        $f=preg_split("/\//",$disk_data);
-        $disk_free=$f[0];
-        $disk_total=$f[1];
-        
-        if ($disk_free<100000000)     { $color="Red"; } // Less than 100GB
-        elseif ($disk_free<150000000) { $color="Orange"; } // Less than 150GB
-        else { $color="Green"; }
-        
-        if ($disk_free/1000000000>1) { $disk_free=sprintf("%02.02f",$disk_free/1000000000); $disk_free_unit=" TB"; }
-        else { $disk_free=sprintf("%02.02f",$disk_free/1000000); $disk_free_unit=" GB"; }
-        if ($disk_total/1000000000>1) { $disk_total=sprintf("%02.02f",$disk_total/1000000000); $disk_total_unit=" TB"; }
-        else { $disk_total=sprintf("%02.02f",$disk_total/1000000); $disk_total_unit=" GB"; }
-        
-        print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$disk_free.$disk_free_unit." / ".$disk_total.$disk_total_unit."</FONT></TD>");
-      }
       print("<TR>\n");
     }
   }
@@ -470,5 +290,140 @@
 			}
 		}
 	}
+  
+  function HTMLdisplay_common($stats_data)
+  {
+    if ((!$stats_data['cpuload']['1m']) || (!$stats_data['cpuload']['5m']) || (!$stats_data['cpuload']['15m']))
+    { print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    {
+      list($load1_val,$load1_per)=explode("/",$stats_data['cpuload']['1m']);
+      $load1_per=preg_replace("/%/","",$load1_per);
+      if ($load1_per>75)       { $color="Red"; }
+      else if ($load1_per>50)  { $color="Orange"; }
+      else               { $color="Green"; }
+      print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load1_per."%</FONT></TD>");
+
+      list($load5_val,$load5_per)=explode("/",$stats_data['cpuload']['5m']);
+      $load5_per=preg_replace("/%/","",$load5_per);
+      if ($load5_per>75)       { $color="Red"; }
+      else if ($load5_per>50)  { $color="Orange"; }
+      else               { $color="Green"; }
+      print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load5_per."%</FONT></TD>");
+
+      list($load15_val,$load15_per)=explode("/",$stats_data['cpuload']['15m']);
+      $load15_per=preg_replace("/%/","",$load15_per);
+      if ($load15_per>75)       { $color="Red"; }
+      else if ($load15_per>50)  { $color="Orange"; }
+      else               { $color="Green"; }
+      print("<TD ALIGN=CENTER><FONT COLOR=\"".$color."\">".$load15_per."%</FONT></TD>");
+    }
+    
+    if (!$stats_data['cpuload']['avg'])
+    { print("<TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    {
+      $cpu=preg_replace("/%/","",$stats_data['cpuload']['avg']);
+      $cpu=100-floatval($cpu);
+      if ($cpu<10)       { $color="Red"; }
+      else if ($cpu<30)  { $color="Orange"; }
+      else               { $color="Green"; }
+      print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".sprintf("%.02f",$cpu)."%</FONT></TD>");
+    }
+
+    if (!$stats_data['nproc'])
+    { print("<TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    { print("<TD ALIGN=CENTER><FONT COLOR=\"Green\">".$stats_data['nproc']."</FONT></TD>"); }
+
+    if (!$stats_data['ram'])
+    {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    {
+      list($ram_free,$ram_total)=explode("/",$stats_data['ram']);
+      $ratio=$ram_total/$ram_free*100;
+      if ($ratio<10)       { $color="Red"; }
+      else if ($ratio<30)  { $color="Orange"; }
+      else                 { $color="Green"; }
+      // Set RAM & swap (units in bytes) to MB or GB
+      if ($ram_free/1048576>1) { $ram_free=sprintf("%02.02f",$ram_free/1048576); $ram_free_unit="GB"; }
+      else { $ram_free=sprintf("%02.02f",$ram_free/1024); $ram_free_unit="MB"; }
+      if ($ram_total/1048576>1) { $ram_total=sprintf("%02.02f",$ram_total/1048576); $ram_total_unit="GB"; }
+      else { $ram_total=sprintf("%02.02f",$ram_total/1024); $ram_total_unit="MB"; }
+      print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$ram_free.$ram_free_unit."&nbsp;/&nbsp;".$ram_total.$ram_total_unit."</FONT></TD>");
+    }
+
+    if (!$stats_data['swap'])
+    {	print("<TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    {
+      // There might be no swap on server...
+      list($swap_free,$swap_total)=explode("/",$stats_data['swap']);
+      if (($swap_total>0) && ($swap_free>0))
+      { $ratio=$swap_total/$swap_free*100; }
+      else { $ratio=100; }
+
+      if ($ratio<30)       { $color="Red"; }
+      else if ($ratio<60)  { $color="Orange"; }
+      else                 { $color="Green"; }
+
+      if ($swap_free/1048576>1) { $swap_free=sprintf("%02.02f",$swap_free/1048576); $swap_free_unit="GB"; }
+      else { $swap_free=sprintf("%02.02f",$swap_free/1024); $swap_free_unit="MB"; }
+      if ($swap_total/1048576>1) { $swap_total=sprintf("%02.02f",$swap_total/1048576); $swap_total_unit="GB"; }
+      else { $swap_total=sprintf("%02.02f",$swap_total/1024); $swap_total_unit="MB"; }
+      print("<TD ALIGN=RIGHT><FONT COLOR=\"".$color."\">".$swap_free.$swap_free_unit."&nbsp;/&nbsp;".$swap_total.$swap_total_unit."</FONT></TD>");
+    }
+
+    if (!$stats_data['net'])
+    {	print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    {
+      print("<TD VALIGN=TOP ALIGN=CENTER>");
+      foreach ($stats_data['net'] as $net_name => $net_values)
+      { print("$net_name<BR>"); }
+      print("</TD>");
+
+      print("<TD VALIGN=TOP ALIGN=CENTER>");
+      foreach ($stats_data['net'] as $net_name => $net_values)
+      {
+        $f=explode("/",$net_values);
+        print("$f[0]/$f[1]<BR>");
+      }
+      print("</TD>");
+
+      print("<TD VALIGN=TOP ALIGN=CENTER>");
+      foreach ($stats_data['net'] as $net_name => $net_values)
+      {
+        $f=explode("/",$net_values);
+        print("$f[2]/$f[3]<BR>");
+      }
+      print("</TD>");
+
+      print("<TD VALIGN=TOP ALIGN=CENTER>");
+      foreach ($stats_data['net'] as $net_name => $net_values)
+      {
+        $f=explode("/",$net_values);
+        print("$f[4]<BR>");
+      }
+      print("</TD>");
+    }
+    
+    if (!$stats_data['dir'])
+    {	print("<TD ALIGN=CENTER>N/A</TD><TD ALIGN=CENTER>N/A</TD>"); }
+    else
+    {
+      print("<TD VALIGN=TOP>");
+      foreach ($stats_data['dir'] as $dir_name => $dir_values)
+      { print("$dir_name<BR>"); }
+      print("</TD>");
+
+      print("<TD VALIGN=TOP>");
+      foreach ($stats_data['dir'] as $dir_name => $dir_values)
+      { print("$dir_values<BR>"); }
+      print("</TD>");
+    }
+
+  }
+
 ?>
 </html>

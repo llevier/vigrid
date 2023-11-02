@@ -141,6 +141,14 @@
   },
 
   {
+    "NAME": "VIGRID_MONITOR_GNS_DIR",
+    "DESCRIPTION": "Vigrid GNS Host (either Master or Slave) directories to monitor.",
+    "VALUE_TEXT": "Please provide a list of special files (without path - eg. /dev/ -), separated with a coma:<BR>",
+    "FORM": "FILE",
+    "PATTERN": "/[a-zA-Z0-9],]+"
+  },
+
+  {
     "NAME": "VIGRID_DHCP_SERVER",
     "DESCRIPTION": "Vigrid needs a DHCP server to get the IP addresses obtained for the virtual devices attached to a real cloud.",
     "VALUE_TEXT": "Please provide a pair at format 'hostname:IPaddress': ",

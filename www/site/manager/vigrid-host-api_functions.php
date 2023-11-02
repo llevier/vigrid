@@ -34,28 +34,25 @@ function API_load($json_array,$filters_net,$filters_dir)
     $max_in =HumanSize($net_cur['bytes_in_max']);
     $max_out=HumanSize($net_cur['bytes_out_max']);
     
-    { $json_array['net'][$names]="$rate_out/$max_out/$rate_in/$max_in/".$net_cur['speed']; }
+    $json_array['net'][$names]="$rate_out/$max_out/$rate_in/$max_in/".$net_cur['speed'];
   }
   
-  if (!empty($filters_dir))
+  foreach ($filters_dir as $dir)
   {
-    foreach ($filters_dir as $dir)
+    if (file_exists($dir) && is_dir($dir))
     {
-      if (file_exists($dir) && is_dir($dir))
-      {
-        $disk_free =HumanSize(disk_free_space($dir));
-        $disk_total=HumanSize(disk_total_space($dir));
-        
-        // to determine which device is below directory
-        // 1- get btrfs/ZFS dataset for this directory
-        // 2- extract top level pool for this dataset
-        // 3- get device for this pool
-        $disk_dev="";
+      $disk_free =HumanSize(disk_free_space($dir));
+      $disk_total=HumanSize(disk_total_space($dir));
+      
+      // to determine which device is below directory
+      // 1- get btrfs/ZFS dataset for this directory
+      // 2- extract top level pool for this dataset
+      // 3- get device for this pool
+      $disk_dev="";
 
-        $json_array['dir'][$dir]['space']="$disk_free/$disk_total";
-        $json_array['dir'][$dir]['mount']=$disk_dev;
-     }
-    }
+      $json_array['dir'][$dir]['space']="$disk_free/$disk_total";
+      $json_array['dir'][$dir]['mount']=$disk_dev;
+   }
   }
 
   if ($json_array) { echo json_encode($json_array); }

@@ -43,13 +43,6 @@
   $json=file_get_contents('php://input');
   $post=json_decode($json,true);
 
-  // Disk filter ?
-  if (!empty($post['disk'])) { $filters_disk=explode(",",$post['disk']); }
-  // Net filter ?
-  if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
-  // Directories ?
-  if (!empty($post['dir'])) { $filters_dir=explode(",",$post['dir']); }
-  
   // create fake sub order to ease later program code
   if ($order[1]=="") { $order[1]=generateRandomString(64); }
   
@@ -68,6 +61,21 @@
     
     // Get last lines from /var/log/vigrid-load.log
     $load_array=VigridLOADextract('/var/log/vigrid-load.log');    
+
+    // Disk filter ?
+    if (!empty($post['disk'])) { $filters_disk=explode(",",$post['disk']); }
+    // Net filter ?
+    if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
+    // Directories ?
+    if (!empty($post['dir'])) { $filters_dir=explode(",",$post['dir']); }
+
+    if (empty($filters_net))
+    { $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_NAS_NET")); }
+    else { $filters_net=null; }
+
+    if (empty($filters_disk))
+    { $filters_disk=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_NAS_DISK")); }
+    else { $filters_disk=null; }
     
     // Get associated DISK values
     $disks=VigridLOADgetdisk($load_array,$filters_disk);

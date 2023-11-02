@@ -216,24 +216,40 @@
   function get_sys_stats($gns_host)
   {
     if ($gns_host=="")
-    { $fd=popen("sudo -u gns3 /home/gns3/vigrid/bin/host-stats","r"); }
-    else
-    { $fd=popen("sudo -u gns3 /home/gns3/vigrid/bin/host-stats -H $gns_host","r"); }
+    { $gns_host=$_SERVER['SERVER_ADDR']; }
 
-    $load1=fgets($fd,4096);
-    $load5=fgets($fd,4096);
-    $load15=fgets($fd,4096);
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_URL, "https://$gns_host/vigrid-api/load");
+
+    // Get Vigrid credentials, first got will be fine
+    $vigrid_creds=file("/home/gns3/etc/vigrid-passwd");
+    $vigrid_creds=preg_replace("/#.*$/","",$vigrid_creds);
+    $vigrid_user=trim(preg_replace("/{[a-zA-Z0-9-]+}/","",$vigrid_creds[0]));
+    curl_setopt($ch, CURLOPT_USERPWD, $vigrid_user);
     
-    $cpu=fgets($fd,4096);
-    $ram_free=fgets($fd,4096);
-    $ram_total=fgets($fd,4096);
-    $swap_free=fgets($fd,4096);
-    $swap_total=fgets($fd,4096);
-    $cores=fgets($fd,4096);
-    $disk_df=fgets($fd,4096);
-      
-		pclose($fd);
-    return array($load1,$load5,$load15,$cpu,$ram_free,$ram_total,$swap_free,$swap_total,$cores,$disk_df);
+    curl_setopt($ch, CURLOPT_POSTFIELDS,"{ }");
+
+    if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3,$vigrid_storage_root/NFS"; }
+
+    $filters_net=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_NET"));
+    $filters_dir=preg_split("/[, ]/",VIGRIDconfig("VIGRID_MONITOR_GNS_DIR"));
+  
+    // $post_data="{ %%FILTERS_NET%% }";
+    // if (!empty($filters_net))
+    // { $post_data="\"dir\": \"$filters_net\""; }
+
+    // curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dir\":\"$dirs\" }");
+    $data=curl_exec($ch);
+		$stats_gns=json_decode($data,true);
+		curl_close($ch);
+    
+    return($stats_gns);
   }
 
   function get_nas_stats($nas_host)
@@ -261,7 +277,7 @@
     $dirs="";
     if ($vigrid_type==1) { $dirs="$vigrid_storage_root/home/gns3/GNS3"; }
     if ($vigrid_type==2) { $dirs="$vigrid_storage_root/NFS/$hostname/GNS3"; }
-    if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3,$vigrid_storage_root/NFS/$hostname/var-lib-docker"; }
+    if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3,$vigrid_storage_root/NFS"; }
 
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -276,22 +292,7 @@
 		$stats_nas=json_decode($data,true);
 		curl_close($ch);
     
-    return($stats_nas);
-   
-    // list($ram_free,$ram_total)=explode("/",$stats_nas['ram']);
-    // list($swap_free,$swap_total)=explode("/",$stats_nas['swap']);
-    
-    // Unknown list of directory outputs from here
-    // $dirs=array();
-		// while (!feof($fd))
-		// {
-			// $line=trim(fgets($fd,4096));
-      // array_push($dirs,$line);
-    // }
-    // $disk_data=implode("##",$dirs);
-
-    // return array($stats_nas['cpuload']['1m'],$stats_nas['cpuload']['5m'],$stats_nas['cpuload']['15m'],$stats_nas['cpuload']['avg'],
-     // $ram_free,$ram_total,$swap_free,$swap_total,$stats_nas['nproc'],$disk_data);     
+    return($stats_nas);   
   }  
 
 	// get DHCP leases : WARNING, totally dependant of DHCP server + implementation.

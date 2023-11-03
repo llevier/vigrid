@@ -57,19 +57,13 @@ if [ "x$LIST" = "x" ]
 then
   echo "No hosts list, using Vigrid configuration"
 
-  # hostname:IP:port
-  HOSTNAME=`hostname`
-  if [ $MYSELF -eq 1 ]
-  then
-    LIST="$HOSTNAME:127.0.0.1:3080"
-  fi
-
   for i in $VIGRID_GNS_SLAVE_HOSTS
   do
-    HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
     NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+    HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+    PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
     
-    CHK=`echo $HOSTNAME|grep -i "^$NAME$"|wc -l`
+    CHK=`echo $HOSTNAME|grep -i "^$NAME:"|wc -l`
     if [ $CHK -eq 0 ]
     then
       LIST="$LIST $NAME"
@@ -97,18 +91,21 @@ for i in $LIST
 do
   TARGET_IP=""
   TARGET_NAME=""
+  
   for host in $VIGRID_GNS_SLAVE_HOSTS
   do
-    HOST=`echo $host | awk 'BEGIN { FS=":"; } { print $2; }'`
     NAME=`echo $host | awk 'BEGIN { FS=":"; } { print $1; }'`
+    HOST=`echo $host | awk 'BEGIN { FS=":"; } { print $2; }'`
+    PORT=`echo $host | awk 'BEGIN { FS=":"; } { print $3; }'`
     
-    CHK=`echo "$i" | grep -i "^$NAME$"`
+    CHK=`echo "$i" | grep -i "^$NAME:"`
     if [ "x$CHK" != "x" ]
     then
       TARGET_IP=$HOST
       TARGET_NAME=$NAME
       break
     fi
+    echo "$TARGET_IP/$TARGET_NAME"
   done
 
   if [ "x$TARGET_NAME" = "x" -o "x$TARGET_IP" = "x" ]
@@ -117,7 +114,7 @@ do
     eval $ACTION $SEC
   else
     echo "$T vigrid-run: launched '$ACTION' on $TARGET_NAME ($TARGET_IP)..." | tee -a /var/log/gns3/vigrid.log
-    eval ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS $GNS_USER@$HOST \'$ACTION\' $SEC
+    eval ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS $GNS_USER@$TARGET_NAME \'$ACTION\' $SEC
   fi
   RC=$?
   if [ $RC -ne 0 ]

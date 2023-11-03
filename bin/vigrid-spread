@@ -52,10 +52,11 @@ do
    esac
 done
 
-[ "x$FILES" = "x" -o "x$TARGET" = "x"  ] && echo $USAGE && exit 1
+[ "x$FILES" = "x" ] && echo $USAGE && exit 1
 
 [ "x$USER" = "x" ] && USER='gns3'
 [ "x$VIGRID_SSHKEY" = "x" ] && VIGRID_SSHKEY=$VIGRID_SSHKEY_GNS
+[ "x$TARGET" = "x" ] && TARGET=$VIGRID_GNS_SLAVE_HOSTS
 
 if [ "x$LIST" = "x" ]
 then
@@ -67,6 +68,7 @@ then
   do
     NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
     HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+    PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
     
     CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
     if [ $CHK -eq 0 ]
@@ -80,13 +82,14 @@ fi
 
 [ "x$LIST" = "x" ] && echo "No host anywhere, exiting" && exit 1
 
-echo "Host(s) list: $LIST"
-echo "Objects(s) to transfer to '$TARGET' directory on host(s): $FILES"
+echo "Objects(s) to transfer: $FILES"
+echo "Target host(s) list   : $LIST"
 
 for i in $LIST
 do
   NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
   HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+  PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
 
   echo
  
@@ -95,7 +98,7 @@ do
 
   for f in $FILES
   do
-    rsync -avz --progress --inplace --delete-before --delete -e "ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS" $f $USER@$HOST:$TARGET/
+    rsync -avz --progress --inplace --delete-before --delete -e "ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS" $f $USER@$HOST:$i/
     if [ $? -ne 0 ]
     then
       echo "WARNING: rsync exited with an error !!"

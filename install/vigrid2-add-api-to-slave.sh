@@ -567,8 +567,7 @@ service nginx start
 # Adding Vigrid monitoring
 Display "Installing & enabling Vigrid-load monitoring..."
 cp /home/gns3/vigrid/etc/init.d/vigrid-load /etc/init.d/
-systemctl enable vigrid-load
-
+systemctl enable --now vigrid-load
 
 Display -h ""
 

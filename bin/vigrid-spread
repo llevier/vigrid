@@ -98,7 +98,8 @@ do
 
   for f in $FILES
   do
-    rsync -avz --progress --inplace --delete-before --delete -e "ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS" $f $USER@$HOST:$i/
+    echo "     $f"
+    rsync -avz --progress --inplace --delete-before --delete -e "ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS" $f $USER@$HOST:$f
     if [ $? -ne 0 ]
     then
       echo "WARNING: rsync exited with an error !!"

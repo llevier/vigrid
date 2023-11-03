@@ -130,6 +130,11 @@
     if ($json_array) { echo json_encode($json_array); }
     exit;
   }
+  else if ($order[0]=="vigrid_config_json")
+  {
+    echo file_get_contents("/home/gns3/vigrid/etc/vigrid_config.json");
+    exit;
+  }
   else
   { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
 

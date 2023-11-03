@@ -105,7 +105,6 @@ do
       TARGET_NAME=$NAME
       break
     fi
-    echo "$TARGET_IP/$TARGET_NAME"
   done
 
   if [ "x$TARGET_NAME" = "x" -o "x$TARGET_IP" = "x" ]

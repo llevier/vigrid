@@ -150,6 +150,72 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
     exit 1
   fi
   
+  # Adding Vigrid-NAS to NGinx
+  if [ "x$VIGRID_NAS_SERVER" != "x" ]
+  then
+    NAME=`echo $VIGRID_NAS_SERVER | awk 'BEGIN { FS=":"; } { print $1; }'`
+    HOST=`echo $VIGRID_NAS_SERVER | awk 'BEGIN { FS=":"; } { print $2; }'`
+    
+    Display -h "    Generating NGinx configuration for Vigrid-NAS ($HOST)"
+    echo "#
+# Vigrid HTTPS access for NAS
+#
+server {
+  listen 127.0.0.1:443 ssl;
+  server_name $NAME;
+
+  # Take fullchain here, not cert.pem
+  ssl_certificate      /etc/nginx/ssl/localhost.crt;
+  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
+
+  ssl_session_cache    builtin:1000 shared:SSL:1m;
+  ssl_session_timeout  5m;
+
+  ssl_protocols   TLSv1.2 TLSv1.3;
+  ssl_ciphers  HIGH:!aNULL:!MD5;
+  ssl_prefer_server_ciphers  on;
+
+  # hide version
+  server_tokens        off;
+
+  access_log /var/log/nginx/access.log;
+  error_log /var/log/nginx/error.log;
+
+  # Vigrid API
+  location /vigrid-api
+  {
+    rewrite ^/vigrid-nas-api/(.*)\$ /vigrid-nas-api.html?order=\$1 break;
+
+    proxy_pass https://$HOST;
+
+    proxy_pass_request_body on;
+
+    proxy_set_header Host \$host;
+    proxy_set_header Authorization \$auth_header;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \"Upgrade\";
+  }
+
+  location = /auth
+  {
+    internal;
+    
+    proxy_pass             http://localhost:8001;
+    proxy_pass_request_body off;
+    
+    proxy_set_header        Content-Length \"\";
+    proxy_set_header        X-Original-URI \$request_uri;
+    proxy_set_header        X-Original-Host \$host;
+    proxy_set_header        X-Real-IP \$remote_addr;
+    proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header        X-Forwarded-Host \$server_name;  
+  }
+}
+}" >/etc/nginx/conf.d/CyberRange-$NAME-443.conf
+  fi  
+  
   for i in $VIGRID_GNS_SLAVE_HOSTS
   do
     NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`

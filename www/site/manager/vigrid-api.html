@@ -87,12 +87,14 @@
       $param=$f[0];
       $value=preg_replace('/"/','',preg_replace("/^$param=/","",$line));
 
-      if (($order[1]=="") || ($order[1]==strtolower($param)) || ($order[1]=="vigrid_gns_slave_hosts_public")) // specific parameter value is requested
-      {
+      // if (($order[1]=="") || ($order[1]==strtolower($param)))
+       // Non existing params
+       // || ($order[1]=="vigrid_gns_slave_hosts_public")|| ($order[1]=="vigrid_nas_server_public"))
+      // {
         if ($param!="")
         {
           // Multiple values here
-          if (($param=="VIGRID_GNS_SLAVE_HOSTS") || ($param=="VIGRID_POWER_SLAVE_HOSTS"))
+          if (($param=="VIGRID_GNS_SLAVE_HOSTS") || ($param=="VIGRID_POWER_SLAVE_HOSTS") || ($param=="VIGRID_NAS_SERVER"))
           {
             array($json_array[$param]);
 
@@ -101,38 +103,66 @@
             // final value to display
             for ($k=0;$k<sizeof($v);$k++)
             {
-              // we keep VIGRID_GNS_SLAVE_HOSTS
-              if ($order[1]==strtolower($param)) { $json_array[$param][]=$v[$k]; }
+              // we keep original
+              $json_array[$param][]=$v[$k];
 
-              // we generate VIGRID_GNS_SLAVE_HOSTS_PUBLIC for direct external GNS3 API access
-              if (($param=="VIGRID_GNS_SLAVE_HOSTS") && ($vigrid_config_translation_table!=""))
+              // we generate VIGRID_NAS_SERVER_PUBLIC for direct external GNS3 API access
+              if ($vigrid_config_translation_table!="")
               {
-                $vigrid_host=preg_split("/:/",$v[$k]);
-                $public="$vigrid_host[1]:$vigrid_host[2]";
-                
-                foreach ($vigrid_config_translation_table as $translation_source => $translation_target)
+                if ($param=="VIGRID_NAS_SERVER")
                 {
-                  if (($translation_source!="") && (preg_match("/$translation_source/", "$vigrid_host[1]:$vigrid_host[2]")))
+                  $vigrid_host=preg_split("/:/",$v[$k]);
+
+                  foreach ($vigrid_config_translation_table as $translation_source => $translation_target)
                   {
-                    $public="$translation_target";
-                    break;
+                    if (($translation_source!="") && (preg_match("/^$translation_source/", "$vigrid_host[1]")))
+                    { $json_array['VIGRID_NAS_SERVER_PUBLIC'][]="$translation_target"; }
                   }
                 }
-                if ($order[1]=='vigrid_gns_slave_hosts_public') { $json_array['VIGRID_GNS_SLAVE_HOSTS_PUBLIC'][]=$public; }
+                // we generate VIGRID_GNS_SLAVE_HOSTS_PUBLIC for direct external GNS3 API access
+                else if ($param=="VIGRID_GNS_SLAVE_HOSTS")
+                {
+                  $vigrid_host=preg_split("/:/",$v[$k]);
+                  $public="";
+                  
+                  foreach ($vigrid_config_translation_table as $translation_source => $translation_target)
+                  {
+                    if (($translation_source!="") && (preg_match("/$translation_source/", "$vigrid_host[1]:$vigrid_host[2]")))
+                    {
+                      $public="$translation_target";
+                      break;
+                    }
+                  }
+                  if ($public!="") { $json_array['VIGRID_GNS_SLAVE_HOSTS_PUBLIC'][]=$public; }
+                }
               }
             }
           }
           else if ($order[1]==strtolower($param) || ($order[1]==""))
           { $json_array[$param]=$value; }
         }
-      }
+      // }
     }
-    if ($json_array) { echo json_encode($json_array); }
+    if ($json_array)
+    {
+      if ($order[1]!="")
+      {
+        if ($json_array[strtoupper($order[1])]!=null)
+        { echo json_encode($json_array[strtoupper($order[1])]); }
+      }
+      else { echo json_encode($json_array); }
+    }
+
     exit;
   }
   else if ($order[0]=="vigrid_config_json")
   {
     echo file_get_contents("/home/gns3/vigrid/etc/vigrid_config.json");
+    exit;
+  }
+  else if ($order[0]=="vigrid_translation_table")
+  {
+    echo file_get_contents("/home/gns3/vigrid/etc/vigrid-translation-table.conf");
     exit;
   }
   else

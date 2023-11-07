@@ -192,7 +192,8 @@
 			if ((preg_match($pattern_vnc,$websockify[$i])) || (preg_match($pattern_telnet,$websockify[$i])))
 			{
 				$t=preg_split("/ /",$websockify[$i]);
-				array_push($consoles,trim($t[(count($t)-1)]).":".$t[(count($t)-2)]);
+        $p=preg_split("/\//",trim($t[(count($t)-3)]));
+				array_push($consoles,trim($t[(count($t)-1)]).":".$p[(count($p)-2)].":".$t[(count($t)-2)]);
 			}
     }
     

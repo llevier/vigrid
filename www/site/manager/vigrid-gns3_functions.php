@@ -170,46 +170,67 @@
     // print("EXIT =$value\n\n");
     return($value);
   }
+
+  function websockify_getdata()
+	{
+    $websockify=array();
+    
+    $vigrid_websockify_options=VIGRIDconfig("VIGRID_WEBSOCKIFY_OPTIONS");
+
+    if ($vigrid_websockify_options!="")
+    { $pattern="/\/usr\/bin\/websockify -D $vigrid_websockify_options --web=\/home\/gns3\/vigrid\/www\/no(vnc|telnet)\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/"; }
+    else
+    { $pattern="/\/usr\/bin\/websockify -D --web=\/home\/gns3\/vigrid\/www\/no(vnc|telnet)\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/"; }
+			
+    $fd=popen("/bin/ps ax","r");
+		while (!feof($fd))
+		{
+			$line=fgets($fd,4096);
+			if (preg_match($pattern,$line)) { array_push($websockify,$line); }
+    }
+		pclose($fd);
+    
+    return($websockify);
+  }
 	
   function websockify_check($console_host,$console_port)
 	{
 		if (($console_host==0) || ($console_port==0))
 		{ return (-1); }
-	
+  
     $vigrid_websockify_options=VIGRIDconfig("VIGRID_WEBSOCKIFY_OPTIONS");
-			
-		// check if a redirection exists for this port. If so, return port number...
-    $fd=popen("/bin/ps ax","r");
-		while (!feof($fd))
-		{
-			$line=fgets($fd,4096);
-      // VIGRIDlogging($line);      
-      
-			// ps ax|egrep "/usr/bin/websockify -D $vigrid_websockify_options --web=/home/gns3/novnc/ [0-9]* ([0-9]{1,3}.){3}.([0-9]{1,3}):[0-9]*" | awk '{ print $1":"$9":"$10;}'
+
+    if ($vigrid_websockify_options!="")
+    {
       $pattern_vnc="/\/usr\/bin\/websockify -D $vigrid_websockify_options --web=\/home\/gns3\/vigrid\/www\/novnc\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
-			$pattern_telnet="/\/usr\/bin\/websockify -D $vigrid_websockify_options --web=\/home\/gns3\/vigrid\/www\/notelnet\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
-      // VIGRIDlogging($pattern_vnc);      
-      // VIGRIDlogging($pattern_telnet);      
-			if (preg_match($pattern_vnc,$line))
+      $pattern_telnet="/\/usr\/bin\/websockify -D $vigrid_websockify_options --web=\/home\/gns3\/vigrid\/www\/notelnet\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
+    }
+    else
+    {
+      $pattern_vnc="/\/usr\/bin\/websockify -D --web=\/home\/gns3\/vigrid\/www\/novnc\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
+      $pattern_telnet="/\/usr\/bin\/websockify -D --web=\/home\/gns3\/vigrid\/www\/notelnet\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
+    }
+  
+    $websockify=websockify_getdata();
+    for ($i=0;$i<sizeof($websockify);$i++)
+    {
+      // VIGRIDlogging($websockify[$i]);      
+      
+			if (preg_match($pattern_vnc,$websockify[$i]))
 			{
-				$t=preg_split("/ /",$line);
+				$t=preg_split("/ /",$websockify[$i]);
 				// returns http console port
 				if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
 				{ pclose($fd); return($t[(count($t)-2)]); }
 			}
-			else if (preg_match($pattern_telnet,$line))
+			else if (preg_match($pattern_telnet,$websockify[$i]))
 			{
-				$t=preg_split("/ /",$line);
+				$t=preg_split("/ /",$websockify[$i]);
 				// returns http console port
 				if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
 				{ pclose($fd); return($t[(count($t)-2)]); }
-        
-				// $t=preg_split("/ /",$line);
-				// if ((preg_match("/--target_host=$console_host/",$t[(count($t)-2)])) && (preg_match("/--target_port=$console_port/",$t[(count($t)-1)])))
-				// { return($t[(count($t)-4)]); }
 			}
 		}
-		pclose($fd);
 	  return(0);
 	}
 	

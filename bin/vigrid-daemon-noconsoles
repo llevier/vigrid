@@ -33,7 +33,11 @@ include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
 $vigrid_websockify_options=VIGRIDconfig("VIGRID_WEBSOCKIFY_OPTIONS");
 
 // NOconsoles managers
-$CMD_WEBSOCKIFY="/usr/bin/websockify -D $vigrid_websockify_options --web=/home/gns3/vigrid/www/";
+if ($vigrid_websockify_options!="")
+{ $CMD_WEBSOCKIFY="/usr/bin/websockify -D $vigrid_websockify_options --web=/home/gns3/vigrid/www/"; }
+else
+{ $CMD_WEBSOCKIFY="/usr/bin/websockify -D --web=/home/gns3/vigrid/www/"; }
+
 $CMD_WEBSOCKIFY_VNC_SUFFIX="novnc";
 $CMD_WEBSOCKIFY_TELNET_SUFFIX="notelnet";
 $CMD_WEBSOCKIFY_VNC="$CMD_WEBSOCKIFY$CMD_WEBSOCKIFY_VNC_SUFFIX/";

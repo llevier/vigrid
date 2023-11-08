@@ -72,13 +72,12 @@ $headers=getallheaders();
 if (isset($headers['X-Forwarded-Scheme'])) { $to_validate_scheme=$headers['X-Forwarded-Scheme']; }
 else { $to_validate_scheme=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http"); }
 
-$to_validate_host=$headers['X-Forwarded-Host'];
 $to_validate_url=$headers['X-Original-Uri'];
 
 if (isset($headers['X-Forwarded-Method'])) { $to_validate_method=$headers['X-Forwarded-Method']; }
 else { $to_validate_method=$_SERVER['REQUEST_METHOD']; }
 
-Debug($debug,"\n*** Called URL: $to_validate_method $to_validate_scheme://$to_validate_host$to_validate_url\n");
+Debug($debug,"\n*** Called URL: $to_validate_method $to_validate_scheme://$to_validate_url\n");
 
 $http_user="";
 $http_pass="";

@@ -2315,7 +2315,6 @@ server {
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Host \$server_name;  
   }
 
   # noVNC: host:port/path should also become host/console/port/path
@@ -2345,7 +2344,6 @@ server {
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Host \$server_name;  
   }
 
   location = /auth
@@ -2360,7 +2358,6 @@ server {
     proxy_set_header        X-Original-Host \$host;
     proxy_set_header        X-Real-IP \$remote_addr;
     proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header        X-Forwarded-Host \$server_name;  
   }
 
   location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {

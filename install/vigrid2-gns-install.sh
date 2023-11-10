@@ -2091,7 +2091,7 @@ request_terminate_timeout = 300
   Display -h "  Configuring NGinx..."
   rm -f /etc/nginx/conf.d/*
 
-  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
+  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
   then
     echo "#
 # Vigrid Authentication/authorization for HTTP + GNS3 clients
@@ -2147,7 +2147,10 @@ server {
     try_files \$uri \$uri/ /vigrid-auth.php?\$args;
   }
 }" >/etc/nginx/conf.d/CyberRange-vigrid-auth-8001.conf
-
+  fi
+  
+  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
+  then
     echo "#
 # Vigrid HTTPS access for Extensions + GNS3 Heavy client
 #
@@ -2202,15 +2205,29 @@ server {
   # Vigrid API
   location /vigrid-api
   {
-    rewrite ^/vigrid-api/(.*)$ /vigrid-api.html?order=$1 break;
-    proxy_pass https://localhost;
-    proxy_pass_request_body on;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection \"upgrade\";
+    # Basic authentication
+    auth_basic \"Vigrid's access, who are you ?\";
+    auth_basic_user_file $VIGRID_PASSWD;
+
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+
+    location ~* \.(htm|html|php)$
+    {
+      try_files \$uri =404;
+      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
+      fastcgi_index                 index.html;
+      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+      # Minimum output buffering
+      fastcgi_buffers               2 4k;
+      fastcgi_busy_buffers_size     4k;
+      fastcgi_buffering             off;
+      # fastcgi_buffer_size           8k; 
+      include                       /etc/nginx/fastcgi_params;
+      fastcgi_read_timeout          300;
+      fastcgi_param PATH_INFO       \$fastcgi_path_info;
+      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
   }
 
   # Vigrid management pages
@@ -2434,9 +2451,33 @@ server {
     return 404;
   }
 
-  # Vigrid API, load only
+  # Vigrid API
   location /vigrid-api
-  { rewrite ^/vigrid-api/(.*)$ /vigrid-host-api.html?order=\$1 permanent; }
+  {
+    # Basic authentication
+    auth_basic \"Vigrid's access, who are you ?\";
+    auth_basic_user_file $VIGRID_PASSWD;
+
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+
+    location ~* \.(htm|html|php)$
+    {
+      try_files \$uri =404;
+      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
+      fastcgi_index                 index.html;
+      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+      # Minimum output buffering
+      fastcgi_buffers               2 4k;
+      fastcgi_busy_buffers_size     4k;
+      fastcgi_buffering             off;
+      # fastcgi_buffer_size           8k; 
+      include                       /etc/nginx/fastcgi_params;
+      fastcgi_read_timeout          300;
+      fastcgi_param PATH_INFO       \$fastcgi_path_info;
+      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
+  }
 
   location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {
     expires 7d;

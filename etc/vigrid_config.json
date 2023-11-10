@@ -65,6 +65,14 @@
   },
 
   {
+    "NAME": "VIGRID_CORS_ALLOW_ORIGIN",
+    "DESCRIPTION": "Using API requires to be CORS compliant. In CORS, GET+OPTIONS HTTP requests are performed to tell browser which hosts it can query from the current page. Without this, Vigrid-API will fail due to CORS policy.",
+    "VALUE_TEXT": "Please provide a '*' if you wish to open widely (not secure), a list as 'vigrid-*.mydomain', or even a full domain '*.mydomain'.<BR>Nota: this must match all VIGRID_*_PUBLIC host named.<BR>",
+    "FORM": "HOST",
+    "PATTERN": ""
+  },
+
+  {
     "NAME": "VIGRID_SSHKEY_GNS",
     "DESCRIPTION": "As a server relying on a NAS, Vigrid must be able to launch scripts on it. It then also needs a SSH key that must be authorized on the 'root' account.",
     "VALUE_TEXT": "Please provide a SSH key (public) key full path file: ",

@@ -184,8 +184,6 @@ server {
   # Vigrid API
   location /vigrid-api
   {
-    rewrite ^/vigrid-nas-api/(.*)\$ /vigrid-nas-api.html?order=\$1 break;
-
     proxy_pass https://$HOST;
 
     proxy_pass_request_body on;
@@ -250,8 +248,6 @@ server {
   # Vigrid API
   location /vigrid-api
   {
-    rewrite ^/vigrid-api/(.*)\$ /vigrid-host-api.html?order=\$1 break;
-
     proxy_pass https://$HOST;
 
     proxy_pass_request_body on;
@@ -267,9 +263,9 @@ server {
   # GNS Heavy client
   location /v2
   {
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
+    # auth_request     /auth;
+    # auth_request_set \$auth_status \$upstream_status;
+    # auth_request_set \$auth_header \$upstream_http_authorization;
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
@@ -290,9 +286,9 @@ server {
   # GNS Heavy client
   location /v3
   {
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
+    # auth_request     /auth;
+    # auth_request_set \$auth_status \$upstream_status;
+    # auth_request_set \$auth_header \$upstream_http_authorization;
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
@@ -561,7 +557,24 @@ server {
 
   # Vigrid API, load only
   location /vigrid-api
-  { rewrite ^/vigrid-api/(.*)$ /vigrid-host-api.html?order=\$1 permanent; }
+  {
+    location ~* \.(htm|html|php)\$
+    {
+      try_files                     \$uri =404;
+      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
+      #fastcgi_index                 index.html;
+      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+      # Minimum output buffering
+      fastcgi_buffers               2 4k;
+      fastcgi_busy_buffers_size     4k;
+      fastcgi_buffering             off;
+      # fastcgi_buffer_size           8k; 
+      include                       /etc/nginx/fastcgi_params;
+      fastcgi_read_timeout          300;
+      fastcgi_param PATH_INFO       \$fastcgi_path_info;
+      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
+  }
 
   location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {
     expires 7d;

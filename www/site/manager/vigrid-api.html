@@ -18,20 +18,38 @@
   
   // API functions
   include "/home/gns3/vigrid/www/site/manager/vigrid-host-api_functions.php";
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
 
   // Associated Vigrid NGinx config:
   // location /vigrid-api
   // { rewrite ^/vigrid-api/(.*)$ /manager/vigrid-api.html?order=$1 permanent; }
 
+  // CORS
+  $cors=VIGRIDconfig("VIGRID_CORS_ALLOW_ORIGIN");
+  if ($cors != "") { header('Access-Control-Allow-Origin: '.$cors); }
+  
+  header('Access-Control-Allow-Methods: GET,POST,OPTIONS');
+  header('Access-Control-Allow-Headers: *');
+  header('Access-Control-Allow-Credentials:true');
+
+  // Tell client that this pre-flight info is valid for 20 days
+  // header('Access-Control-Max-Age: 1728000');
+  if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS')
+  {
+    header('Content-Length: 0');
+    return 204;
+  }  
+
+  // First of all, Vigrid-API only answers JSON
+  header('Content-Type: application/json');
+
+  // Now let's start dealing with request
 	if ($_GET["order"]=="") { exit; }
   
   $order=preg_split("/\//",strtolower($_GET["order"]));
 
   if ($order[0]=="load")
   {
-    // GNS3 functions
-    include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
-
     // GNS3 nas-load functions
     include "/home/gns3/vigrid/bin-nas/nas-load_functions.php";
 
@@ -201,7 +219,7 @@
     { echo json_encode($consoles); }
   }
   else
-  { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
+  { print("[ 'UNKNOWN CALL API' '".$_GET['order']."' ]"); exit; }
 
   exit;
 ?>

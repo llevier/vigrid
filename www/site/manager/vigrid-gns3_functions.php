@@ -163,9 +163,9 @@
     
     // Start sanitization
     $value=strip_tags($value,FILTER_SANITIZE_STRING);
-    $value=filter_var($value,FILTER_SANITIZE_STRING|FILTER_SANITIZE_EMAIL);
+    $value=filter_var($value,FILTER_SANITIZE_STRING);
 
-    $value=preg_replace('/[^[A-Z][a-z][0-9]_-#@=+.,]+/','',$value);
+    $value=preg_replace('/[^[A-Z][a-z][0-9]!#$%&\'*+-=?\^_`{|}~@.\[\]. ]+/','',$value);
     
     // print("EXIT =$value\n\n");
     return($value);

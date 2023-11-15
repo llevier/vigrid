@@ -24,30 +24,47 @@
   // location /vigrid-api
   // { rewrite ^/vigrid-api/(.*)$ /manager/vigrid-api.html?order=$1 permanent; }
 
-  // CORS
-  $cors=VIGRIDconfig("VIGRID_CORS_ALLOW_ORIGIN");
-  if ($cors != "") { header('Access-Control-Allow-Origin: '.$cors); }
-  
-  header('Access-Control-Allow-Methods: GET,POST,OPTIONS');
-  header('Access-Control-Allow-Headers: *');
-  header('Access-Control-Allow-Credentials:true');
-
-  // Tell client that this pre-flight info is valid for 20 days
-  // header('Access-Control-Max-Age: 1728000');
-  if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS')
+	if ($_GET["order"]!='') // Either there is a GET order, either REQUEST_URI called a /vigrid-api/parameter
+  { $order=preg_split("/\//",strtolower($_GET["order"])); }
+  else if (!preg_match('/\.html/',strtolower($_SERVER['REQUEST_URI'])))
   {
+    $f=preg_split('/\//',$_SERVER['REQUEST_URI']);
+    array_splice($f, 0, 2);; // '/' to vigrid-api '/'
+    $order=$f;
+  }
+  else { exit; }
+
+  // CORS
+  $http_origin=preg_replace("/^".$_SERVER['REQUEST_SCHEME'].':\/\//','',strtolower($_SERVER['HTTP_ORIGIN']));
+
+  $cors_origin=preg_split("/,/",strtolower(VIGRIDconfig('VIGRID_CORS_ALLOW_ORIGIN')));
+  foreach ($cors_origin as $host_pattern)
+  {
+    if (preg_match("/".$host_pattern."/",$http_origin) || ($host_pattern=='*'))
+    { header("Access-Control-Allow-Origin: *"); break; }
+  }
+
+  header('Access-Control-Allow-Credentials: true');
+  header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
+  header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
+  // required to be able to read Authorization header in frontend
+  //header('Access-Control-Expose-Headers: Authorization');
+
+  if ($_SERVER['REQUEST_METHOD']=='OPTIONS') 
+  {
+    // Tell client that this pre-flight info is valid for 20 days
+    // header(''Access-Control-Max-Age' 1728000;
     header('Content-Length: 0');
     return 204;
-  }  
-
-  // First of all, Vigrid-API only answers JSON
-  header('Content-Type: application/json');
-
-  // Now let's start dealing with request
-	if ($_GET["order"]=="") { exit; }
+  }
   
-  $order=preg_split("/\//",strtolower($_GET["order"]));
-
+  // Ok, that is not a OPTIONS request, auth is required then
+  // $http_auth_user=$_SERVER['PHP_AUTH_USER'];
+  // $http_auth_pass=$_SERVER['PHP_AUTH_PW'];
+  // if (!VIGRIDauth($http_auth_user,$http_auth_pass)) { http_response_code(403); return 403; }
+ 
+  header('Content-Type: application/json');
+  
   if ($order[0]=="load")
   {
     // GNS3 nas-load functions
@@ -81,7 +98,7 @@
     for ($l=0;$l<sizeof($vigrid_config_translation_table_file);$l++)
     {
       // remove comments & useless characters
-      $line=trim(preg_replace("/#.*$/","",$vigrid_config_translation_table_file[$l]));
+      $line=trm(preg_replace("/#.*$/","",$vigrid_config_translation_table_file[$l]));
       if ($line!="")
       {
         $f=preg_split("/=/",$line);
@@ -183,43 +200,8 @@
     echo file_get_contents("/home/gns3/vigrid/etc/vigrid-translation-table.conf");
     exit;
   }
-  else if ($order[0]=="noconsoles")
-  {
-    $consoles=array();
-
-    // GNS3 functions
-    include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
-
-    $vigrid_websockify_options=VIGRIDconfig("VIGRID_WEBSOCKIFY_OPTIONS");
-
-    if ($vigrid_websockify_options!="")
-    {
-      $pattern_vnc="/\/usr\/bin\/websockify -D $vigrid_websockify_options --web=\/home\/gns3\/vigrid\/www\/novnc\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
-      $pattern_telnet="/\/usr\/bin\/websockify -D $vigrid_websockify_options --web=\/home\/gns3\/vigrid\/www\/notelnet\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
-    }
-    else
-    {
-      $pattern_vnc="/\/usr\/bin\/websockify -D --web=\/home\/gns3\/vigrid\/www\/novnc\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
-      $pattern_telnet="/\/usr\/bin\/websockify -D --web=\/home\/gns3\/vigrid\/www\/notelnet\/ [0-9]* ([0-9]{1,3}\.){3}([0-9]{1,3}):[0-9]*/";
-    }
-    
-    $websockify=websockify_getdata();
-
-    for ($i=0;$i<sizeof($websockify);$i++)
-    {
-			if ((preg_match($pattern_vnc,$websockify[$i])) || (preg_match($pattern_telnet,$websockify[$i])))
-			{
-				$t=preg_split("/ /",$websockify[$i]);
-        $p=preg_split("/\//",trim($t[(count($t)-3)]));
-				array_push($consoles,trim($t[(count($t)-1)]).":".$p[(count($p)-2)].":".$t[(count($t)-2)]);
-			}
-    }
-    
-    if ($consoles)
-    { echo json_encode($consoles); }
-  }
   else
-  { print("[ 'UNKNOWN CALL API' '".$_GET['order']."' ]"); exit; }
+  { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
 
   exit;
 ?>

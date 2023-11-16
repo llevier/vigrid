@@ -11,32 +11,6 @@
 
 $debug=0;
 
-// Get GNS3 IP/login/pass
-if (!$fd_gns=fopen("/home/gns3/.config/GNS3/gns3_server.conf","r"))
-{ print("Cant open server config file"); exit; }
-
-$gns_user="";
-$gns_pass="";
-while (!feof($fd_gns))
-{
-  $line=fgets($fd_gns,4096);
-
-  $line=trim($line);
-  $line=preg_replace("/;.*$/","",$line);
-
-  if ((preg_match("/^user/",$line)) || (preg_match("/^password/",$line)))
-  {
-    $line=preg_replace("/[\s ]+/"," ",$line);
-    $f=array_map('trim',preg_split("/=/",$line));
-
-    if ($f[0]=="user") { $gns_user=$f[1]; }
-    elseif ($f[0]=="password") { $gns_pass=$f[1]; }
-  }
-}
-fclose($fd_gns);
-
-// according to the reference database
-
 $url_host=(isset($_SERVER['HTTPS']) ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
 $url_method=$_SERVER['REQUEST_METHOD'];
 $url_path=$_SERVER['REQUEST_URI'];
@@ -49,19 +23,22 @@ $url_called="$url_host"."$url_path";
 
 if (!function_exists('getallheaders'))
 {
-	// Debug($debug,"    WARNING: getallheaders() does not exist !!\n");
-	
-	function getallheaders()
-	{
-		$headers = [];
-		
-		foreach ($_SERVER as $name => $value)
-		{
-			if ((substr($name, 0, 5) == 'HTTP_') || (substr($name, 0, 6) == 'HTTPS_'))
-			{ $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value; }
-		}
-		return $headers;
-	}
+        // Debug($debug,"    WARNING: getallheaders() does not exist !!\n");
+
+        function getallheaders()
+        {
+                $headers = [];
+
+                foreach ($_SERVER as $name => $value)
+                {
+                        if ((substr($name, 0, 5) == 'HTTP_') || (substr($name, 0, 6) == 'HTTPS_'))
+                        { $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value; }
+                      else
+                      { $headers[$name]=$value; }
+                }
+                foreach ($headers as  $name => $value) { Debug($debug,"N=$name, V=$value\n"); }
+                return $headers;
+        }
 }
 
 // Who calls ? GNS3 client (/GNS3 QT Client v/) or anything else ?
@@ -69,9 +46,18 @@ if (!function_exists('getallheaders'))
 $headers=[];
 $headers=getallheaders();
 
+Debug($debug,"\n    \$_SERVER:\n");
+foreach ($_SERVER as $key => $value) { Debug($debug,"      $key => $value\n"); }
+Debug($debug,"\n");
+
+Debug($debug,"\n    Received headers:\n");
+foreach ($headers as $key => $value) { Debug($debug,"      $key => $value\n"); }
+Debug($debug,"\n");
+
 if (isset($headers['X-Forwarded-Scheme'])) { $to_validate_scheme=$headers['X-Forwarded-Scheme']; }
 else { $to_validate_scheme=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http"); }
 
+#$to_validate_host=$headers['X-Forwarded-Host'];
 $to_validate_url=$headers['X-Original-Uri'];
 
 if (isset($headers['X-Forwarded-Method'])) { $to_validate_method=$headers['X-Forwarded-Method']; }
@@ -79,6 +65,40 @@ else { $to_validate_method=$_SERVER['REQUEST_METHOD']; }
 
 Debug($debug,"\n*** Called URL: $to_validate_method $to_validate_scheme://$to_validate_url\n");
 
+if  (($to_validate_method=="OPTIONS")
+ || (($headers['Access-Control-Request-Method']=='GET') && ($headers['Access-Control-Request-Headers']=='authorization'))
+ || ($headers['Sec-Fetch-Mode']=='cors'))
+{
+  // CORS request
+  $http_origin=$headers['Origin'];
+  Debug($debug,"\n*** CORS request call from $http_origin !\n");
+
+  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
+
+  $cors_allow_origin=preg_split("/,/",trim(strtolower(VIGRIDconfig('VIGRID_CORS_ALLOW_ORIGIN'))));
+  Debug($debug,"    CORS allow origin=".implode("-",$cors_allow_origin)."\n");
+
+  $cors_allow="";
+  
+  if ($http_origin!="")
+  {
+    foreach ($cors_allow_origin as $host_pattern)
+    {
+      Debug($debug,"    CORS Origin=$http_origin, pattern=$host_pattern\n");
+      if (preg_match("/".$host_pattern."/",$http_origin) || ($host_pattern=='*'))
+      { Debug($debug,"    CORS match, allowing $http_origin\n"); $cors_allow=$http_origin; break; }
+    }
+  }
+
+  header('Access-Control-Allow-Origin: *'); // .$cors_allow);
+  header('Access-Control-Allow-Credentials: true');
+  header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
+  header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
+
+  return 204;
+}
+
+// Lets extract credentials now
 $http_user="";
 $http_pass="";
 
@@ -96,17 +116,6 @@ if ($http_user!="")
 { Debug($debug,"$http_user ($http_pass)\n"); }
 else
 { Debug($debug,"UNKNOWN\n"); }
-
-Debug($debug,"\n    \$_SERVER:\n");
-foreach ($_SERVER as $key => $value) { Debug($debug,"      $key => $value\n"); }
-#print_r($headers, true);
-Debug($debug,"\n");
-
-
-Debug($debug,"\n    Received headers:\n");
-foreach ($headers as $key => $value) { Debug($debug,"      $key => $value\n"); }
-#print_r($headers, true);
-Debug($debug,"\n");
 
 ####### Extract associated data ######
 if ($to_validate_method=='GET')
@@ -137,6 +146,30 @@ if (preg_match("/\/noVNC\/[0-9]*\//",$to_validate_url) || (preg_match("/\/noTELN
 ##################################################### ACCESS CONTROL ####################################################
 if (!isAcceptable(true)) // permitted to pass ?
 { Reject(); }
+
+// Get GNS3 IP/login/pass
+if (!$fd_gns=fopen("/home/gns3/.config/GNS3/gns3_server.conf","r"))
+{ print("Cant open server config file"); exit; }
+
+$gns_user="";
+$gns_pass="";
+while (!feof($fd_gns))
+{
+  $line=fgets($fd_gns,4096);
+
+  $line=trim($line);
+  $line=preg_replace("/;.*$/","",$line);
+
+  if ((preg_match("/^user/",$line)) || (preg_match("/^password/",$line)))
+  {
+    $line=preg_replace("/[\s ]+/"," ",$line);
+    $f=array_map('trim',preg_split("/=/",$line));
+
+    if ($f[0]=="user") { $gns_user=$f[1]; }
+    elseif ($f[0]=="password") { $gns_pass=$f[1]; }
+  }
+}
+fclose($fd_gns);
 
 ### GNS3client auth change hack to add basic access control
 # [User-Agent] => GNS3 QT Client v2.2.21
@@ -191,15 +224,15 @@ function Reject()
 
 function Debug($level,$text)
 {
-	// return;
+        // return;
 
-  if ($level==0) { return; }	
+  if ($level==0) { return; }
   
-	if (!$fd_log=fopen("/tmp/vigrid-auth.log","a+"))
-	{ print("Cant open/create /tmp/vigrid-auth.log file"); }
+        if (!$fd_log=fopen("/tmp/vigrid-auth.log","a+"))
+        { print("Cant open/create /tmp/vigrid-auth.log file"); }
 
-	fwrite($fd_log,$text);
-	fclose($fd_log);
+        fwrite($fd_log,$text);
+        fclose($fd_log);
 }
 
 function isAcceptable($value)
@@ -227,6 +260,6 @@ function isAcceptable($value)
   
   fclose($fd);
   
-	return(0); # bad value
+        return(0); # bad value
 }
 ?>

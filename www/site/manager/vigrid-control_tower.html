@@ -579,8 +579,8 @@
             // Get current URL
 						$url_start=getselfurl_controltower();
             if (preg_match("/\?/",$url_start)) { $split_char="&"; } else { $split_char="?"; }
-            $url_start=$url_start.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=stopped";
-            $url_stop =$url_start.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=started";
+            $url_start=$url_start.$split_char."gnshost=".$host_name."&project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=stopped";
+            $url_stop =$url_start.$split_char."gnshost=".$host_name."&project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=started";
 						?>
             <div class="tooltip"><A HREF="<?php print $url_start; ?>"><IMG SRC="/images/start.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Start project</span></A></div>
             &nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_stop; ?>"><IMG SRC="/images/stop.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Stop project</span></A></div>
@@ -588,19 +588,19 @@
 
 						$url_open=getselfurl_controltower();
             if (preg_match("/\?/",$url_open)) { $split_char="&"; } else { $split_char="?"; }
-            $url_open =$url_open.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=closed";
-            $url_close=$url_open.$split_char."gnshost=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=opened";
+            $url_open =$url_open.$split_char."gnshost=".$host_name."&project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=closed";
+            $url_close=$url_open.$split_char."gnshost=".$host_name."&project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&status=opened";
 						?>
             &nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_open; ?>"><IMG SRC="/images/Popen.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Open project</span></A></div>
             &nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_close; ?>"><IMG SRC="/images/Pclose.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Close project</span></A></div>
             <?php
 
             // Project snapshots
-            $url_snapshot="/manager/vigrid-snapshot.html?gns_host=".$host_name."&project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
+            $url_snapshot="/manager/vigrid-snapshot.html?gns_host=".$host_name."&project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
 						?><BR><div class="tooltip"><A HREF="<?php print $url_snapshot; ?>" TARGET="_snapshot"><IMG SRC="/images/photo.png" WIDTH=40 HEIGHT=32><span class="tooltiptext_below">Snapshot Manager</span></A></div><?php
 
             // If project is a clone source, display cloning page
-            $url_clone="/manager/vigrid-clone_short.html?selected_gns_host=".$host_name."&selected_project_name=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name']."&selected_project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
+            $url_clone="/manager/vigrid-clone_short.html?selected_gns_host=".$host_name."&selected_project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&selected_project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];
 						?>&nbsp;&nbsp;<div class="tooltip"><A HREF="<?php print $url_clone; ?>" TARGET="_clone"><IMG SRC="/images/vigrid-clone.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_below">Ondemand clone Manager</span></A></div><?php
 
             $url_clones="/manager/vigrid-clones_industrial.html?selected_gns_host=".$host_name."&selected_project_name=".htmlspecialchars($data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['name'])."&selected_project_uuid=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id'];

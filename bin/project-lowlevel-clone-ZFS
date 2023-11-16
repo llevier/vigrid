@@ -456,8 +456,8 @@ else
 
 if ($www==1) { $command.=" -i P -W"; }
 $command.=" -G $gns_home -P $gns_home_projects";
-$command.=" -s $from_project_uuid -S $from_project_name";
-$command.=" -t $to_project_uuid -T $to_project_name";
+$command.=" -s $from_project_uuid -S \"$from_project_name\"";
+$command.=" -t $to_project_uuid -T \"$to_project_name\"";
 $command.=" -c $console_port_start -e $console_port_end";
 
 if ($report_file!="") { $command="$command -r $report_file"; }

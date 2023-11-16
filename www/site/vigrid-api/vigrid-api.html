@@ -98,7 +98,7 @@
     for ($l=0;$l<sizeof($vigrid_config_translation_table_file);$l++)
     {
       // remove comments & useless characters
-      $line=trm(preg_replace("/#.*$/","",$vigrid_config_translation_table_file[$l]));
+      $line=trim(preg_replace("/#.*$/","",$vigrid_config_translation_table_file[$l]));
       if ($line!="")
       {
         $f=preg_split("/=/",$line);

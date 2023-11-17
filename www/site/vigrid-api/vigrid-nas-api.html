@@ -69,22 +69,56 @@
  
   header('Content-Type: application/json');
 
+  $json=file_get_contents('php://input');
+  $post=json_decode($json,true);
+
   if ($order[0]=="nas-load")
   {
-    // GNS3 nas-load functions
-    include "/Vstorage/GNS3/vigrid/bin-nas/nas-load_functions.php";
-
     array($json_array);
 
+    exec("ps ax|grep nfsd|grep -v grep|wc -l",$t);
+    $nfsd_threads=trim($t[0]);
+
+    $t=array_values(preg_grep("/^RPCNFSDCOUNT=/",file('/etc/default/nfs-kernel-server')));
+    $f=explode("=",trim($t[0]));
+    $nfsd_config=$f[1];
+
+    $json_array['nfsd']="$nfsd_threads/$nfsd_config";
+    
+    // Get last lines from /var/log/vigrid-load.log
+    $load_array=VigridLOADextract('/var/log/vigrid-load.log');    
+
+    // Disk filter ?
+    if (!empty($post['disk'])) { $filters_disk=explode(",",$post['disk']); }
     // Net filter ?
     if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
-    else { $filters_net=null; }
     // Directories ?
-    if (!empty($post['dirs'])) { $filters_dir=explode(",",$post['dirs']); }
-    else { $filters_dir=null; }
+    if (!empty($post['dir'])) { $filters_dir=explode(",",$post['dir']); }
 
-    // VigridLOADgetdisk($load_array,$filters_disk);
-    
+
+    $filters_disk=array();
+    foreach($filters_dir as $dir)
+    {
+      $t=VigridGETdev($dir);
+      if (isset($t)) { array_push($filters_disk,$t); }
+    }
+
+    // Get associated DISK values
+    $disks=VigridLOADgetdisk($load_array,$filters_disk);
+
+    foreach($disks as $names => $disk_cur)
+    {
+      $rate_in=HumanSize($disk_cur['rsect']);
+      $rate_out=HumanSize($disk_cur['wsect']);
+      
+      $max_in =HumanSize($disk_cur['rsect_max']);
+      $max_out=HumanSize($disk_cur['wsect_max']);
+      
+      $json_array['disk'][$names]['rates']="$rate_in/$max_in/$rate_out/$max_out";
+      $json_array['disk'][$names]['iops']=$disk_cur['rs']."/".$disk_cur['rs_max']."/".$disk_cur['ws']."/".$disk_cur['ws_max'];
+      $json_array['disk'][$names]['waits']=$disk_cur['io_pending']."/".$disk_cur['io_pending_max'];
+    }
+
     API_load($json_array,$filters_net,$filters_dir);
 
     exit;

@@ -233,8 +233,6 @@ then
     done
   fi
   
-exit
-  
   # 5
   # rsync -az --inplace $DIR_PROJECT.old/* $DIR_PROJECT/
   # rclone is *much* faster

@@ -1,0 +1,96 @@
+<?php
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+  // hide notices
+  ini_set('error_reporting', E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED);
+  error_reporting(E_ERROR | E_PARSE);
+  
+  // turn off output buffering
+  ob_implicit_flush();
+  
+  // API functions
+  include "/Vstorage/GNS3/vigrid/www/site/manager/vigrid-host-api_functions.php";
+
+  // Associated Vigrid NAS NGinx config:
+  // # Vigrid API, load only
+  // location ~ ^/vigrid-api/.*$
+  // {
+    // try_files $uri /vigrid-api/vigrid-nas-api.html?order=$is_args$args;
+    // fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)$;
+    // fastcgi_pass                  unix:/run/php/php8.1-fpm.sock;
+    // # Minimum output buffering
+    // fastcgi_buffers               2 4k;
+    // fastcgi_busy_buffers_size     4k;
+    // fastcgi_buffering             off;
+    // # fastcgi_buffer_size           8k; 
+    // include                       /etc/nginx/fastcgi_params;
+    // fastcgi_read_timeout          300;
+    // fastcgi_param PATH_INFO       $fastcgi_path_info;
+    // fastcgi_param  HTTP_AUTHORIZATION $http_authorization;
+    // fastcgi_param SCRIPT_FILENAME $document_root/vigrid-api/vigrid-nas-api.html?order=$1;
+  // }
+  
+	if ($_GET["order"]!='') // Either there is a GET order, either REQUEST_URI called a /vigrid-api/parameter
+  { $order=preg_split("/\//",strtolower($_GET["order"])); }
+  else if (!preg_match('/\.html/',strtolower($_SERVER['REQUEST_URI'])))
+  {
+    $f=preg_split('/\//',$_SERVER['REQUEST_URI']);
+    array_splice($f, 0, 2);; // '/' to vigrid-api '/'
+    $order=$f;
+  }
+  else { exit; }
+
+  // CORS
+  header("Access-Control-Allow-Origin: *");
+  header('Access-Control-Allow-Credentials: true');
+  header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
+  header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
+
+  if ($_SERVER['REQUEST_METHOD']=='OPTIONS') 
+  {
+    // Tell client that this pre-flight info is valid for 1 day
+    // header(''Access-Control-Max-Age' 86400;
+    header('Content-Length: 0');
+    return 204;
+  }
+  
+  // Ok, that is not a OPTIONS request, auth is required then
+  // $http_auth_user=$_SERVER['PHP_AUTH_USER'];
+  // $http_auth_pass=$_SERVER['PHP_AUTH_PW'];
+  // if (!VIGRIDauth($http_auth_user,$http_auth_pass)) { http_response_code(403); return 403; }
+ 
+  header('Content-Type: application/json');
+
+  if ($order[0]=="nas-load")
+  {
+    // GNS3 nas-load functions
+    include "/Vstorage/GNS3/vigrid/bin-nas/nas-load_functions.php";
+
+    array($json_array);
+
+    // Net filter ?
+    if (!empty($post['net']))  { $filters_net=explode(",",$post['net']); }
+    else { $filters_net=null; }
+    // Directories ?
+    if (!empty($post['dirs'])) { $filters_dir=explode(",",$post['dirs']); }
+    else { $filters_dir=null; }
+
+    // VigridLOADgetdisk($load_array,$filters_disk);
+    
+    API_load($json_array,$filters_net,$filters_dir);
+
+    exit;
+  }
+  else
+  { print("UNKNOWN CALL API: ".$_GET['order']); exit; }
+
+  exit;
+?>

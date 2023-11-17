@@ -258,7 +258,7 @@
 
     if (($vigrid_type>=3) && ($vigrid_type<=5)) { $dirs="$vigrid_storage_root/GNS3/GNS3farm/GNS3,$vigrid_storage_root/NFS"; }
 
-    // curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dir\":\"$dirs\" }");
+    // curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dirs\":\"$dirs\" }");
     $data=curl_exec($ch);
 		$stats_gns=json_decode($data,true);
 		curl_close($ch);
@@ -301,7 +301,7 @@
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		curl_setopt($ch, CURLOPT_POST, true);
 		curl_setopt($ch, CURLOPT_URL, "https://$nas_host/vigrid-api/nas-load");
-    curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dir\":\"$dirs\" }");
+    curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dirs\":\"$dirs\" }");
     $data=curl_exec($ch);
 		$stats_nas=json_decode($data,true);
 		curl_close($ch);

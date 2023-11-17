@@ -340,8 +340,8 @@
 						// snapshot by project ?
 						// print("<TD><A HREF=\"/manager/vigrid-snapshot.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gns_host=".$gns_controller['computes'][$i]['name']."&project_uuid=".$projects[$j]['project_id']."\" TARGET=_snapshot><IMG SRC=\"/images/photo.png\" WIDTH=20 HEIGHT=16></A>&nbsp;".$projects[$j]['name']."</TD>");
 						print("<TD>".$projects[$j]['name']."<BR><BR>");
-						$url_start="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".$projects[$j]['name']."&project_id=".$projects[$j]['project_id']."&status=stopped";
-						$url_stop="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".$projects[$j]['name']."&project_id=".$projects[$j]['project_id']."&status=started";
+						$url_start="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".urlencode($projects[$j]['name'])."&project_id=".$projects[$j]['project_id']."&status=stopped";
+						$url_stop="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".urlencode($projects[$j]['name'])."&project_id=".$projects[$j]['project_id']."&status=started";
 
 						print("<A HREF=\"".$url_start."\"><IMG SRC=\"/images/start.png\" WIDTH=40 HEIGHT=40></A>&nbsp;&nbsp;<A HREF=\"".$url_stop."\"><IMG SRC=\"/images/stop.png\" WIDTH=40 HEIGHT=40></A></TD>\n");
 						
@@ -451,7 +451,7 @@
 								}
 								
 								// start/stop
-								$node_control_url="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".$projects[$j]['name']."&project_id=".$projects[$j]['project_id']."&node_name=".$nodes[$k]['name']."&node_id=".$nodes[$k]['node_id']."&status=".$nodes[$k]['status'];
+								$node_control_url="/manager/vigrid-control_tower.html?clone_owner=".$Powner."&clone_owner_pass=".$Powner_pass."&gnshost=".$gns_controller['computes'][$i]['name']."&project_name=".urlencode($projects[$j]['name'])."&project_id=".$projects[$j]['project_id']."&node_name=".urlencode($nodes[$k]['name'])."&node_id=".$nodes[$k]['node_id']."&status=".$nodes[$k]['status'];
 								if (($nodes[$k]['status']=="started") || ($nodes[$k]['status']=="stopped"))
 								{
 									// if (gns_node_on_host($gns_controller['computes'][$i],$nodes[$k]))

@@ -2156,7 +2156,7 @@ server {
 #
 server {
   listen 127.0.0.1:443 ssl default;
-  server_name localhost;
+  #server_name localhost;
 
   # Take fullchain here, not cert.pem
   ssl_certificate      /etc/nginx/ssl/localhost.crt;
@@ -2190,41 +2190,13 @@ server {
     location ~ \.eot  { add_header Content-Type application/vnd.ms-fontobject; }
     location ~ \.woff { add_header Content-Type font/woff; }
 
-    location ~* \.(htm|html|php)$
+    location ~* \.(htm|html|php)\$
     {
       try_files \$uri =404;
       fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
       fastcgi_index                 index.html;
       fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
       include                       /etc/nginx/fastcgi_params;
-      fastcgi_param PATH_INFO       \$fastcgi_path_info;
-      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-    }
-  }
-
-  # Vigrid API
-  location /vigrid-api
-  {
-    # Basic authentication
-    auth_basic \"Vigrid's access, who are you ?\";
-    auth_basic_user_file $VIGRID_PASSWD;
-
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-
-    location ~* \.(htm|html|php)$
-    {
-      try_files \$uri =404;
-      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
-      fastcgi_index                 index.html;
-      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-      # Minimum output buffering
-      fastcgi_buffers               2 4k;
-      fastcgi_busy_buffers_size     4k;
-      fastcgi_buffering             off;
-      # fastcgi_buffer_size           8k; 
-      include                       /etc/nginx/fastcgi_params;
-      fastcgi_read_timeout          300;
       fastcgi_param PATH_INFO       \$fastcgi_path_info;
       fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
     }
@@ -2234,8 +2206,8 @@ server {
   location /manager
   {
     # Basic authentication
-    auth_basic \"Vigrid's access, who are you ?\";
-    auth_basic_user_file $VIGRID_PASSWD;
+    auth_basic 'Vigrid's access, who are you ?';
+    auth_basic_user_file /home/gns3/etc/vigrid-passwd;
 
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
@@ -2245,7 +2217,7 @@ server {
     location ~ \.eot  { add_header Content-Type application/vnd.ms-fontobject; }
     location ~ \.woff { add_header Content-Type font/woff; }
 
-    location ~* \.(htm|html|php)$
+    location ~* \.(htm|html|php)\$
     {
       try_files \$uri =404;
       fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
@@ -2263,12 +2235,52 @@ server {
     }
   }
 
+  # Vigrid API, load only
+  location ~ ^/vigrid-api/.*\$
+  {
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
+
+    try_files \$uri /vigrid-api/vigrid-api.html?order=\$is_args\$args;
+    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
+    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+    # Minimum output buffering
+    fastcgi_buffers               2 4k;
+    fastcgi_busy_buffers_size     4k;
+    fastcgi_buffering             off;
+    # fastcgi_buffer_size           8k; 
+    include                       /etc/nginx/fastcgi_params;
+    fastcgi_read_timeout          300;
+    fastcgi_param PATH_INFO       \$fastcgi_path_info;
+    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
+  }
+
   # GNS Heavy client
   location /v2
   {
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
     auth_request_set \$auth_header \$upstream_http_authorization;
+
+    add_header 'Access-Control-Allow-Origin' '*';
+    add_header 'Access-Control-Allow-Credentials' 'true';
+    add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+    add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+
+    if (\$request_method = 'OPTIONS') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+      add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+
+      # add_header 'Access-Control-Max-Age' 86400;
+      # add_header 'Content-Type' 'text/plain charset=UTF-8';
+
+      add_header 'Content-Length' 0;
+      return 204;
+    }
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
@@ -2281,7 +2293,7 @@ server {
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
 
     proxy_pass http://127.0.0.1:3080;
   }
@@ -2293,6 +2305,24 @@ server {
     auth_request_set \$auth_status \$upstream_status;
     auth_request_set \$auth_header \$upstream_http_authorization;
 
+    add_header 'Access-Control-Allow-Origin' '*';
+    add_header 'Access-Control-Allow-Credentials' 'true';
+    add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+    add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+
+    if (\$request_method = 'OPTIONS') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+      add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+
+      # add_header 'Access-Control-Max-Age' 86400;
+      # add_header 'Content-Type' 'text/plain charset=UTF-8';
+
+      add_header 'Content-Length' 0;
+      return 204;
+    }
+
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
 
@@ -2304,7 +2334,7 @@ server {
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
 
     proxy_pass http://127.0.0.1:3080;
   }
@@ -2313,8 +2343,8 @@ server {
   location /noTELNET
   {
     # Basic authentication
-    auth_basic \"Vigrid's access, who are you ?\";
-    auth_basic_user_file $VIGRID_PASSWD;
+    auth_basic 'Vigrid's access, who are you ?';
+    auth_basic_user_file /home/gns3/etc/vigrid-passwd;
 
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
@@ -2327,11 +2357,12 @@ server {
     # websocket
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
     #
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    # proxy_set_header X-Forwarded-Host \$server_name;  
   }
 
   # noVNC: host:port/path should also become host/console/port/path
@@ -2339,8 +2370,8 @@ server {
   location /noVNC
   {
     # Basic authentication
-    auth_basic \"Vigrid's access, who are you ?\";
-    auth_basic_user_file $VIGRID_PASSWD;
+    auth_basic 'Vigrid's access, who are you ?';
+    auth_basic_user_file /home/gns3/etc/vigrid-passwd;
 
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
@@ -2356,11 +2387,12 @@ server {
     # websocket
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
     #
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    #proxy_set_header X-Forwarded-Host \$server_name;  
   }
 
   location = /auth
@@ -2370,11 +2402,12 @@ server {
     proxy_pass             http://localhost:8001;
     proxy_pass_request_body off;
     
-    proxy_set_header        Content-Length \"\";
+    proxy_set_header        Content-Length '';
     proxy_set_header        X-Original-URI \$request_uri;
     proxy_set_header        X-Original-Host \$host;
     proxy_set_header        X-Real-IP \$remote_addr;
     proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header        X-Forwarded-Host \$server_name;  
   }
 
   location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {
@@ -2386,10 +2419,12 @@ server {
   }
 
   try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
-}" >>/etc/nginx/conf.d/CyberRange-443.conf
+}
+" >>/etc/nginx/conf.d/CyberRange-443.conf
   else
     # For Vigrid slave, Vigrid-API for loads
-    echo "#
+    echo "
+#
 # Vigrid HTTPS access for Vigrid-API
 #
 server {
@@ -2404,7 +2439,6 @@ server {
   ssl_session_timeout  5m;
 
   ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_ciphers  HIGH:!aNULL:!MD5;
   ssl_prefer_server_ciphers  on;
 
   # hide version
@@ -2451,32 +2485,22 @@ server {
     return 404;
   }
 
-  # Vigrid API
-  location /vigrid-api
+  # Vigrid API, load only
+  location ~ ^/vigrid-api/.*\$
   {
-    # Basic authentication
-    auth_basic \"Vigrid's access, who are you ?\";
-    auth_basic_user_file $VIGRID_PASSWD;
-
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-
-    location ~* \.(htm|html|php)$
-    {
-      try_files \$uri =404;
-      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
-      fastcgi_index                 index.html;
-      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-      # Minimum output buffering
-      fastcgi_buffers               2 4k;
-      fastcgi_busy_buffers_size     4k;
-      fastcgi_buffering             off;
-      # fastcgi_buffer_size           8k; 
-      include                       /etc/nginx/fastcgi_params;
-      fastcgi_read_timeout          300;
-      fastcgi_param PATH_INFO       \$fastcgi_path_info;
-      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-    }
+    try_files \$uri /vigrid-api/vigrid-api.html?order=\$is_args\$args;
+    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
+    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+    # Minimum output buffering
+    fastcgi_buffers               2 4k;
+    fastcgi_busy_buffers_size     4k;
+    fastcgi_buffering             off;
+    # fastcgi_buffer_size           8k; 
+    include                       /etc/nginx/fastcgi_params;
+    fastcgi_read_timeout          300;
+    fastcgi_param PATH_INFO       \$fastcgi_path_info;
+    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
   }
 
   location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {

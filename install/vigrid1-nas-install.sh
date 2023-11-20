@@ -960,7 +960,6 @@ server {
   ssl_session_timeout  5m;
 
   ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_ciphers  HIGH:!aNULL:!MD5;
   ssl_prefer_server_ciphers  on;
 
   # hide version
@@ -969,7 +968,7 @@ server {
   access_log /var/log/nginx/access.log;
   error_log /var/log/nginx/error.log;
 
-  root   /Vstorage/GNS3/vigrid/www/site-nas;
+  root   $FS_ROOT/GNS3/vigrid/www/site;
 
   # Vigrid home page
   location /
@@ -990,18 +989,22 @@ server {
     }
   }
 
-  # Vigrid API
-  location /vigrid-api
+  # Vigrid API, load only
+  location ~ ^/vigrid-nas-api/.*\$
   {
-    rewrite ^/vigrid-api/(.*)\$ /vigrid-nas-api.html?order=\$1 break;
-    proxy_pass https://localhost;
-    proxy_pass_request_body on;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"upgrade\";
+    try_files \$uri /vigrid-api/vigrid-nas-api.html?order=\$is_args\$args;
+    fastcgi_split_path_info       ^/(.+\/vigrid-nas-api)(/.+)\$;
+    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+    # Minimum output buffering
+    fastcgi_buffers               2 4k;
+    fastcgi_busy_buffers_size     4k;
+    fastcgi_buffering             off;
+    # fastcgi_buffer_size           8k; 
+    include                       /etc/nginx/fastcgi_params;
+    fastcgi_read_timeout          300;
+    fastcgi_param PATH_INFO       \$fastcgi_path_info;
+    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-nas-api.html?order=\$1;
   }
 }
 " >>/etc/nginx/conf.d/CyberRange-443.conf
@@ -1016,32 +1019,32 @@ include /etc/nginx/modules-enabled/*.conf;
 user www-data;
 
 events {
-        worker_connections 2048;
+  worker_connections 2048;
 }
 
 http {
+  sendfile on;
+  tcp_nopush on;
+  tcp_nodelay on;
+  keepalive_timeout 65;
+  types_hash_max_size 2048;
 
-        sendfile on;
-        tcp_nopush on;
-        tcp_nodelay on;
-        keepalive_timeout 65;
-        types_hash_max_size 2048;
+  server_tokens off;
 
-        server_tokens off;
+  include /etc/nginx/mime.types;
+  default_type application/octet-stream;
 
-        include /etc/nginx/mime.types;
-        default_type application/octet-stream;
-  
-        # Logging Settings
-        access_log /var/log/nginx/access.log;
-        error_log /var/log/nginx/error.log;
+  # Logging Settings
+  access_log /var/log/nginx/access.log;
+  error_log /var/log/nginx/error.log;
 
-        # Gzip Settings
-        gzip on;
+  # Gzip Settings
+  gzip on;
 
-        # Virtual Host Configs
-        include /etc/nginx/conf.d/*.conf;
-}" >/etc/nginx/nginx.conf
+  # Virtual Host Configs
+  include /etc/nginx/conf.d/*.conf;
+}
+" >/etc/nginx/nginx.conf
 
 Display -h "Adding www-data user to gns3 group..."
 usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'

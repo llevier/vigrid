@@ -248,24 +248,47 @@ server {
   # Vigrid API
   location /vigrid-api
   {
-    proxy_pass https://$HOST;
+    auth_request     /auth;
 
-    proxy_pass_request_body on;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
 
+    proxy_pass_request_body on;
+
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
+
+    proxy_pass https://$HOST;
   }
 
   # GNS Heavy client
   location /v2
   {
-    # auth_request     /auth;
-    # auth_request_set \$auth_status \$upstream_status;
-    # auth_request_set \$auth_header \$upstream_http_authorization;
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
+
+    add_header 'Access-Control-Allow-Origin' '*';
+    add_header 'Access-Control-Allow-Credentials' 'true';
+    add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+    add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+
+    if (\$request_method = 'OPTIONS') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
+      add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
+
+      # add_header 'Access-Control-Max-Age' 86400;
+      # add_header 'Content-Type' 'text/plain charset=UTF-8';
+
+      add_header 'Content-Length' 0;
+      return 204;
+    }
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
@@ -278,17 +301,17 @@ server {
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
 
-    proxy_pass http://$HOST:$PORT;
+    proxy_pass https://$HOST:$PORT;
   }
 
   # GNS Heavy client
   location /v3
   {
-    # auth_request     /auth;
-    # auth_request_set \$auth_status \$upstream_status;
-    # auth_request_set \$auth_header \$upstream_http_authorization;
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
 
     proxy_set_header Host \$host;
     proxy_set_header Authorization \$auth_header;
@@ -301,9 +324,9 @@ server {
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
 
-    proxy_pass http://$HOST:$PORT;
+    proxy_pass https://$HOST:$PORT;
   }
 
   location = /auth
@@ -312,15 +335,16 @@ server {
     
     proxy_pass             http://localhost:8001;
     proxy_pass_request_body off;
-    
-    proxy_set_header        Content-Length \"\";
+
+    proxy_set_header        Content-Length '';
     proxy_set_header        X-Original-URI \$request_uri;
     proxy_set_header        X-Original-Host \$host;
     proxy_set_header        X-Real-IP \$remote_addr;
     proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_set_header        X-Forwarded-Host \$server_name;  
   }
-}" >/etc/nginx/conf.d/CyberRange-$NAME-443.conf
+}
+" >/etc/nginx/conf.d/CyberRange-$NAME-443.conf
   done
   
   Display -h "    Restarting NGinx on Master"
@@ -493,7 +517,8 @@ fi
 Display -h "  Configuring NGinx..."
 rm -f /etc/nginx/conf.d/*
 
-echo "#
+echo "
+#
 # Vigrid HTTPS access for Vigrid-API
 #
 server {
@@ -508,7 +533,6 @@ server {
   ssl_session_timeout  5m;
 
   ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_ciphers  HIGH:!aNULL:!MD5;
   ssl_prefer_server_ciphers  on;
 
   # hide version
@@ -556,24 +580,21 @@ server {
   }
 
   # Vigrid API, load only
-  location /vigrid-api
+  location ~ ^/vigrid-api/.*\$
   {
-    location ~* \.(htm|html|php)\$
-    {
-      try_files                     \$uri =404;
-      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
-      #fastcgi_index                 index.html;
-      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-      # Minimum output buffering
-      fastcgi_buffers               2 4k;
-      fastcgi_busy_buffers_size     4k;
-      fastcgi_buffering             off;
-      # fastcgi_buffer_size           8k; 
-      include                       /etc/nginx/fastcgi_params;
-      fastcgi_read_timeout          300;
-      fastcgi_param PATH_INFO       \$fastcgi_path_info;
-      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-    }
+    try_files \$uri /vigrid-api/vigrid-api.html?order=\$is_args\$args;
+    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
+    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+    # Minimum output buffering
+    fastcgi_buffers               2 4k;
+    fastcgi_busy_buffers_size     4k;
+    fastcgi_buffering             off;
+    # fastcgi_buffer_size           8k; 
+    include                       /etc/nginx/fastcgi_params;
+    fastcgi_read_timeout          300;
+    fastcgi_param PATH_INFO       \$fastcgi_path_info;
+    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
   }
 
   location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {

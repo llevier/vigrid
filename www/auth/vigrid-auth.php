@@ -9,7 +9,7 @@
 //  /nodes/uuid/
 //  /links/uuid/
 
-$debug=1;
+$debug=0;
 
 $url_host=(isset($_SERVER['HTTPS']) ? "https" : "http") . "://$_SERVER[HTTP_HOST]";
 $url_method=$_SERVER['REQUEST_METHOD'];
@@ -23,22 +23,22 @@ $url_called="$url_host"."$url_path";
 
 if (!function_exists('getallheaders'))
 {
-        // Debug($debug,"    WARNING: getallheaders() does not exist !!\n");
+  // Debug($debug,"    WARNING: getallheaders() does not exist !!\n");
 
-        function getallheaders()
-        {
-                $headers = [];
+  function getallheaders()
+  {
+    $headers = [];
 
-                foreach ($_SERVER as $name => $value)
-                {
-                        if ((substr($name, 0, 5) == 'HTTP_') || (substr($name, 0, 6) == 'HTTPS_'))
-                        { $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value; }
-                      else
-                      { $headers[$name]=$value; }
-                }
-                foreach ($headers as  $name => $value) { Debug($debug,"N=$name, V=$value\n"); }
-                return $headers;
-        }
+    foreach ($_SERVER as $name => $value)
+    {
+      if ((substr($name, 0, 5) == 'HTTP_') || (substr($name, 0, 6) == 'HTTPS_'))
+      { $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value; }
+      else
+      { $headers[$name]=$value; }
+    }
+    foreach ($headers as  $name => $value) { Debug($debug,"N=$name, V=$value\n"); }
+    return $headers;
+  }
 }
 
 // Who calls ? GNS3 client (/GNS3 QT Client v/) or anything else ?
@@ -66,8 +66,9 @@ else { $to_validate_method=$_SERVER['REQUEST_METHOD']; }
 Debug($debug,"\n*** Called URL: $to_validate_method $to_validate_scheme://$to_validate_host$to_validate_url\n");
 
 if  (($to_validate_method=="OPTIONS")
- || (($headers['Access-Control-Request-Method']=='GET') && ($headers['Access-Control-Request-Headers']=='authorization'))
- || ($headers['Sec-Fetch-Mode']=='cors'))
+ || (isset($headers['Access-Control-Request-Method']) && ($headers['Access-Control-Request-Method']=='GET') 
+ && (isset($headers['Access-Control-Request-Headers']) && ($headers['Access-Control-Request-Headers']=='authorization')))
+ || (isset($headers['Sec-Fetch-Mode']) && ($headers['Sec-Fetch-Mode']=='cors')))
 {
   // CORS request
   $http_origin=$headers['Origin'];
@@ -86,16 +87,17 @@ if  (($to_validate_method=="OPTIONS")
     {
       Debug($debug,"    CORS Origin=$http_origin, pattern=$host_pattern\n");
       if (preg_match("/".$host_pattern."/",$http_origin) || ($host_pattern=='*'))
-      { Debug($debug,"    CORS match, allowing $http_origin\n"); $cors_allow=$http_origin; break; }
+      // { $cors_allow=$http_origin; Debug($debug,"    CORS match, allowing $cors_allow\n"); ; break; }
+      { $cors_allow="*"; Debug($debug,"    CORS match, allowing $cors_allow\n"); ; break; }
     }
   }
 
-  header('Access-Control-Allow-Origin: *'); // .$cors_allow);
+  header('Access-Control-Allow-Origin: '.$cors_allow); // .$cors_allow);
   header('Access-Control-Allow-Credentials: true');
   header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
   header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
 
-  if (($headers['Access-Control-Request-Method']=='GET') && ($headers['Access-Control-Request-Headers']=='authorization'))
+  if (($headers['Access-Control-Request-Method']=='GET') && (preg_match("/authorization/",$headers['Access-Control-Request-Headers'])))
   { return 204; }
 }
 
@@ -178,10 +180,13 @@ fclose($fd_gns);
 ### GNS3client auth change hack to add basic access control
 # [User-Agent] => GNS3 QT Client v2.2.21
 # Also for /manager/vigrid-env.html page (troubleshoot)
-if ((isset($headers['User-Agent']) && (preg_match("/GNS3 QT Client/",$headers['User-Agent'])))
- || (preg_match("/\/manager\/vigrid-env.html$/",$to_validate_url))
+Debug($debug,"    Checking User-Agent ".$headers['User-Agent']."\n");
+if (((isset($headers['User-Agent']) && (preg_match("/GNS3 QT Client/",$headers['User-Agent'])))
+ ||  (isset($headers['X-Requested-With'])  && ($headers['X-Requested-With']=='Vigrid-JS')))
+  && (preg_match("/^\/v[23]\//",$to_validate_url)))
+// || (preg_match("/\/manager\/vigrid-env.html$/",$to_validate_url))
 # Hack because sometimes User-Agent vanishes with Heavy client.
- || (preg_match("/^\/v[23]\//",$to_validate_url) && (isset($headers['Sec-Websocket-Version']) || isset($headers['Sec-Websocket-Key']))))
+// if (preg_match("/^\/v[23]\//",$to_validate_url)) // && (isset($headers['Sec-Websocket-Version']) || isset($headers['Sec-Websocket-Key'])))
 {
   Debug($debug,"    GNS3 Client detected, changing Authorization header\n");
 
@@ -189,6 +194,12 @@ if ((isset($headers['User-Agent']) && (preg_match("/GNS3 QT Client/",$headers['U
   Debug($debug,"      GNS3 Auth ($gns_user / $gns_pass) = $hash\n\n");
   $headers['Authorization']="Basic $hash";
   header("Authorization: Basic $hash",1);
+
+  // Adding CORS too
+  header('Access-Control-Allow-Origin: *');
+  header('Access-Control-Allow-Credentials: true');
+  header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
+  header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With'); 
 }
 
 Debug($debug,"    -> Access granted, sending 200\n");

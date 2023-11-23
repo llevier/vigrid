@@ -59,7 +59,7 @@ then
     CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
     if [ $CHK -eq 0 ]
     then
-      LIST="$LIST $HOST"
+      LIST="$LIST $NAME"
     else
       echo "Skipping myself..."
     fi

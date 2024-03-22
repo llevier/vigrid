@@ -1,0 +1,232 @@
+#!/bin/bash
+#################################################################################################################################
+#
+# This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+#
+# (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+# LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+#
+# Each dependancies (c) to their respective owners
+#
+#################################################################################################################################
+
+# To have script execution traced...
+SCRIPT_NAME=`basename $0`
+LOG_FILE="/tmp/$SCRIPT_NAME-log.out"
+
+#
+# Functions
+#
+
+# Error display & management
+Error()
+{
+  TXT=$*
+  
+  until false
+  do
+    echo
+    echo -n "$TXT do you wish to (F)orce continue, (C)ontinue/(R)un a sub shell/(E)xit script [F/C/R/E) ? "
+    read ANS
+    
+    case "$ANS" in
+      f|F)
+        return 2
+        ;;
+      c|C)
+        return 1
+        ;;
+      r|R)
+        echo "Launching /bin/sh via script command. Output will be added to the log file"
+        echo "Once you finished, end with the 'exit' command."
+        echo
+        # script /bin/sh /tmp/shell-$$.log
+        /bin/sh -xi
+        
+        # echo "Concatening shell output to log file..."
+        # cat /tmp/shell-$$.log >>$LOG_FILE
+        # rm /tmp/shell-$$.log
+        TXT="Shell ended,"
+        ;;
+      e|E)
+        echo "Ok. bye bye then..."
+        exit 1
+        ;;
+    esac
+  done
+}
+
+Display()
+{
+  NO_CR=0
+  NO_HEAD=0
+  
+  until false
+  do
+    case "$1" in
+      "-n")
+        NO_CR=1
+        shift
+        ;;
+      "-h")
+        NO_HEAD=1
+        shift
+        ;;
+      *)
+        TXT=$*
+        break
+        ;;
+    esac
+  done
+
+  [ $NO_HEAD -eq 0 ] && echo && echo "############# VIGRID DISPLAY ################################################################"
+
+  [ $NO_HEAD -eq 1 ] && echo -n "# "
+  
+  [ $NO_CR -eq 0 ] && echo "$TXT"
+  [ $NO_CR -eq 1 ] && echo -n "$TXT"
+  
+  return 0
+}
+
+#
+# Script starts
+#
+rm -f $LOG_FILE 2>/dev/null
+(
+Display ""
+Display -h -n "
+Vigrid extension: Scrutiny install script
+
+This script should only be used on a ready Vigrid NAS.
+
+Press [RETURN] to start..."
+read ANS
+
+Display -n -h "
+First, do you wish to change [BACKSPACE], sometimes there are some issues with terminals... [y/N] ? "
+read ANS
+
+if [ "x$ANS" = "xy" -o "x$ANS" = "xY" ]
+then
+  Display -h -n "Ok, now just press [BACKSPACE] then [RETURN] "
+  read ANS
+  stty erase $ANS 2>/dev/null
+  Display -h "[BACKSPACE] set now."
+fi
+
+Display "Updating Vigrid NAS..."
+apt update -y || Error "Command exited with an error,"
+apt full-upgrade -y || Error "Command exited with an error,"
+apt autoclean -y || Error "Command exited with an error,"
+apt autoremove -y || Error "Command exited with an error,"
+
+Display "Detecting docker install"
+which docker >/dev/null 2>/dev/null
+if [ $? -ne 0 ]
+then
+  Display "  Docker undetected, installing it"
+  # Add Docker's official GPG key:
+  apt install -y ca-certificates curl
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+
+  # Add the repository to Apt sources:
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  apt update -y
+
+  apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+else
+  Display "  Ok, docker is here, does it run ?"
+  docker info >/dev/null 2>/dev/null
+  if [ $? -ne 0 ]
+  then
+    Display "    Apparently docker does not run, launching services"
+    service docker start || Error "Command exited with an error,"
+  else
+    Display "    Ok, it runs"
+  fi
+fi
+
+# At this stage, docker is installed & runs properly
+Display "Pulling scrutiny docker image..."
+docker pull ghcr.io/analogj/scrutiny:master-omnibus || Error "Command exited with an error,"
+
+# Detect if port 8080/TCP is free, else increment...
+IP_PORT=8080
+
+until false
+do
+  CHK=`ss -lnt|awk '{print $4;}' | grep ":$IP_PORT"`
+  [ "x$CHK" = "x" ] && break
+  
+  Display -h "$IP_PORT is busy, incrementing..."
+  IP_PORT=$((IP_PORT+1))
+done
+
+# Now run Scrutiny docker and ask user to check what's displayed to determine of a collector must be built
+Display "Starting Scrutiny container on port $IP_PORT..."
+docker run -d --restart always -p 8080:$IP_PORT -p 8086:8086 \
+ -v `pwd`/scrutiny:/opt/scrutiny/config   -v `pwd`/influxdb2:/opt/scrutiny/influxdb \
+ -v /run/udev:/run/udev:ro   --cap-add SYS_RAWIO  --name Scrutiny --privileged \
+ ghcr.io/analogj/scrutiny:master-omnibus
+
+
+Display "
+Please connect to Vigrid NAS HTTP port $IP_PORT and advise if Scrutiny detects all drives.
+
+"
+
+until false
+do
+  Display -h "Are all physical drives properly detected [Y/n] ?"
+  read ANS
+  if [ "x$ANS" = "xy" -o "x$ANS" = "xY" ]
+  then
+    Display "Perfect then, exiting"
+    exit 0
+  elif [ "x$ANS" = "xn" -o "x$ANS" = "xN" ]
+  then
+    break
+  fi
+done
+
+Display "Ok, let's build a collector file. Identifying physical drives on Vigrid NAS..."
+DRIVES=(`smartctl -j --scan | egrep '"(name|type)"'`)
+
+Display "Generating Scrutiny collector YAML file..."
+DRIVES_COLLECTOR=""
+for i in ${!DRIVES[@]}
+do
+  if [ "x${DRIVES[$i]}" = 'x"name":' ]
+  then
+    FIELD_NAME=`echo ${DRIVES[$((i+1))]} | sed 's/"//g' | sed 's/,$//'`
+    echo "Name = $FIELD_NAME"
+  elif [ "x${DRIVES[$i]}" = 'x"type":' ]
+  then
+    FIELD_TYPE=`echo ${DRIVES[$((i+1))]} | sed 's/"//g' | sed 's/,$//'`
+    echo "Type = $FIELD_TYPE"
+
+    DRIVES_COLLECTOR="
+$DRIVES_COLLECTOR
+
+- device: $FIELD_NAME
+  type: '$FIELD_TYPE'"
+  fi
+done
+echo "$DRIVES_COLLECTOR" >/tmp/collector.yaml
+
+Display "Copying Scrutiny collector file to /opt/scrutiny/config/collector.yaml"
+docker cp /tmp/collector.yaml Scrutiny:/opt/scrutiny/config/collector.yaml
+
+Display "Restarting Scrutiny container..."
+docker container stop Scrutiny
+docker container rm Scrutiny
+docker run -d --restart always -p 8080:8080 -p 8086:8086 \
+ -v `pwd`/scrutiny:/opt/scrutiny/config   -v `pwd`/influxdb2:/opt/scrutiny/influxdb \
+ -v /run/udev:/run/udev:ro   --cap-add SYS_RAWIO  --name Scrutiny --privileged \
+ ghcr.io/analogj/scrutiny:master-omnibus
+
+) 2>&1 | tee -a $LOG_FILE

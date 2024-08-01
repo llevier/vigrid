@@ -2206,7 +2206,7 @@ server {
   location /manager
   {
     # Basic authentication
-    auth_basic 'Vigrid's access, who are you ?';
+    auth_basic \"Vigrid's access, who are you ?\";
     auth_basic_user_file /home/gns3/etc/vigrid-passwd;
 
     auth_request     /auth;
@@ -2343,7 +2343,7 @@ server {
   location /noTELNET
   {
     # Basic authentication
-    auth_basic 'Vigrid's access, who are you ?';
+    auth_basic \"Vigrid's access, who are you ?\";
     auth_basic_user_file /home/gns3/etc/vigrid-passwd;
 
     auth_request     /auth;
@@ -2370,7 +2370,7 @@ server {
   location /noVNC
   {
     # Basic authentication
-    auth_basic 'Vigrid's access, who are you ?';
+    auth_basic \"Vigrid's access, who are you ?\";
     auth_basic_user_file /home/gns3/etc/vigrid-passwd;
 
     auth_request     /auth;

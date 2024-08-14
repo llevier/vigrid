@@ -495,12 +495,11 @@ Display -h "Installing NGinx server..."
 Display -h "  Installing required packages..." && apt install -y curl bc gnupg2 ca-certificates lsb-release || Error 'Install failed,'
 
 Display -h "  Updating apt sources for NGinx..."
-echo "deb http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
-#echo "deb http://nginx.org/packages/mainline/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
+echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
 
 Display -h "  Adding NGinx key..."
-curl -fsSL https://nginx.org/keys/nginx_signing.key | apt-key add - || Error 'Add failed,'
-apt-key fingerprint ABF5BD827BD9BF62 || Error 'Fingerprint add failed,'
+curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+[ $? -ne 0 ] && Error 'Add failed,'
 
 Display -h "  Updating system..." && apt update -y  || Error 'Update failed,'
 Display -h "  Installing NGinx & extras..." && apt install -y nginx || Error 'Install failed,'

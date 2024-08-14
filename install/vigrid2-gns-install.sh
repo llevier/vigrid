@@ -2588,7 +2588,7 @@ http {
   then
     Display -h "  Configuring SSLh (with current IP=$HOST_IP)..."
     echo "
-DAEMON_OPTS=\"--user sslh --listen $HOST_IP:443 -ssh localhost:22 --openvpn 127.0.0.1:1194 --ssl 127.0.0.1:443 --pidfile /var/run/sslh/sslh.pid\"" >>/etc/default/sslh
+DAEMON_OPTS=\"--user sslh --listen $HOST_IP:443 --ssh localhost:22 --openvpn 127.0.0.1:1194 --ssl 127.0.0.1:443 --pidfile /var/run/sslh/sslh.pid\"" >>/etc/default/sslh
 
     Display "Adding OpenVPN/EasyRSA for full network access..." && apt install -y openvpn easy-rsa || Error 'Install failed,'
     Display "Creating OpenVPN server configuration..."

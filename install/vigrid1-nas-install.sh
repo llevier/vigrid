@@ -126,7 +126,7 @@ fi
 # Sanity checks
 Display "Ok, let's start..."
 OS_RELEASE=`cat /etc/os-release|grep "^PRETTY_NAME" | awk 'BEGIN { FS="="; } { print $2;}' | sed 's/\"//g'`
-OS_CHK=`echo "$OS_RELEASE" | egrep -i "Ubuntu.*(20|22)"|wc -l`
+OS_CHK=`echo "$OS_RELEASE" | egrep -i "Ubuntu.*(20|22|24)"|wc -l`
 Display -h -n "I see I am launched on a $OS_RELEASE, "
 [ $OS_CHK -ge 1 ] && Display -h "perfect to me !"
 [ $OS_CHK -ge 1 ] || Display -h "not the one I expected, not sure I will work fine over it."

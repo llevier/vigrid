@@ -920,30 +920,25 @@ request_terminate_timeout = 300
 
 Display -h "Enabling & starting PHP-FPM..."
 systemctl enable php$PHP_VER-fpm
+service php$PHP_VER-fpm stop
 service php$PHP_VER-fpm start
 
-Display -h -n "Adding NGinx for Vigrid-load API..."
-Display -h "  Updating apt sources for NGinx..."
-echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
-
-Display -h "  Adding NGinx key..."
-curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+Display -h -n "Adding OpenResty for Vigrid-load API..."
+Display -h "  Adding OpenResty key..."
+curl https://openresty.org/package/pubkey.gpg | gpg --dearmor -o /usr/share/keyrings/openresty.gpg
 [ $? -ne 0 ] && Error 'Add failed,'
 
+Display -h "  Updating apt sources for OpenResty..."
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/openresty.list > /dev/null
+ [ $? -ne 0 ] && Error 'Update failed,'
+
 Display -h "  Updating system..." && apt update -y  || Error 'Update failed,'
-Display -h "  Installing NGinx & extras..." && apt install -y nginx || Error 'Install failed,'
+Display -h "  Installing OpenResty..." && apt install -y openresty || Error 'Install failed,'
 
-Display -h -n "  Checking NGinx version >=1.19..."
-VER=`nginx -V 2>&1|head -1|sed 's/^.*nginx\///'| awk 'BEGIN { FS="."; } { print $1"."$2; }'`
-if [ 1 -eq "$(echo "$VER >= 1.19" | bc)" ]
-then
-  Display -h "OK"
-else
-  Error "NGinx version ($VER) must be >=1.19."
-fi
-
-Display -h "  Configuring NGinx..."
-rm -f /etc/nginx/conf.d/*
+Display -h "  Configuring OpenResty..."
+rm -rf /etc/nginx 2>/dev/null
+ln -s /usr/local/openresty/nginx/conf /etc/nginx
+mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
 
   echo "#
 # Vigrid Vigrid-load API
@@ -968,7 +963,7 @@ server {
   access_log /var/log/nginx/access.log;
   error_log /var/log/nginx/error.log;
 
-  root   $FS_ROOT/GNS3/vigrid/www/site;
+  root  /$FS_ROOT/GNS3/vigrid/www/site;
 
   # Vigrid home page
   location /
@@ -1007,14 +1002,13 @@ server {
     fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-nas-api.html?order=\$1;
   }
 }
-" >>/etc/nginx/conf.d/CyberRange-443.conf
+" >>/etc/nginx/sites/CyberRange-443.conf
 
   echo "#
-# Vigrid NGinx configuration file
+# Vigrid OpenResty/NGinx configuration file
 #
 worker_processes auto;
-pid /run/nginx.pid;
-include /etc/nginx/modules-enabled/*.conf;
+pid logs/nginx.pid;
 
 user www-data;
 
@@ -1042,7 +1036,7 @@ http {
   gzip on;
 
   # Virtual Host Configs
-  include /etc/nginx/conf.d/*.conf;
+  include /etc/nginx/sites/*.conf;
 }
 " >/etc/nginx/nginx.conf
 
@@ -1053,9 +1047,9 @@ Display -h "Generating SSL certificate for localhost..."
 mkdir -p /etc/nginx/ssl >/dev/null 2>/dev/null
 ( printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth") | openssl req -x509 -out /etc/nginx/ssl/localhost.crt -keyout /etc/nginx/ssl/localhost.key -newkey rsa:2048 -nodes -sha256 -subj '/CN=localhost' || Error 'Certificate generation failed,'
 
-Display -h "Enabling & starting NGinx..."
-systemctl enable nginx
-service nginx start
+Display -h "Enabling & starting OpenResty..."
+systemctl enable openresty
+service openresty start
 
 Display "Installing & enabling Vigrid-load monitoring..."
 cp /Vstorage/GNS3/vigrid/etc/init.d/vigrid-load /etc/init.d/

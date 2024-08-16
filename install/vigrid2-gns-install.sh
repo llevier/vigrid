@@ -184,7 +184,7 @@ then
   KVM=`egrep '^flags.*(vmx|svm)' /proc/cpuinfo 2>/dev/null`
   if [ "x$KVM" = "x" ]
   then
-    Display -n "ALERT !! KVM extension is not detected in your CPU. It means you will *NOT* be able to emulate any VM on this server
+    Display -n "ATTENTION !! KVM extension is not detected in your CPU. It means you will *NOT* be able to emulate any VM on this server
   Knowing this, do you with to continue [y/N] ? "
     read ANS
     
@@ -2064,30 +2064,23 @@ request_terminate_timeout = 300
   systemctl enable php$PHP_VER-fpm
   service php$PHP_VER-fpm start
 
-  # NGinx for Vigrid extensions
-  Display -h "Installing NGinx server..."
-  Display -h "  Installing required packages..." && apt install -y curl bc gnupg2 ca-certificates lsb-release || Error 'Install failed,'
-
-  Display -h "  Updating apt sources for NGinx..."
-  echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
-
-  Display -h "  Adding NGinx key..."
-  curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+  # OpenResty for Vigrid extensions
+  Display -h "  Adding OpenResty key..."
+  curl https://openresty.org/package/pubkey.gpg | gpg --dearmor -o /usr/share/keyrings/openresty.gpg
   [ $? -ne 0 ] && Error 'Add failed,'
-    
+
+  Display -h "  Updating apt sources for OpenResty..."
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/openresty.list > /dev/null
+   [ $? -ne 0 ] && Error 'Update failed,'
+
   Display -h "  Updating system..." && apt update -y  || Error 'Update failed,'
-  Display -h "  Installing NGinx & extras..." && apt install -y nginx || Error 'Install failed,'
+  Display -h "  Installing OpenResty..." && apt install -y openresty || Error 'Install failed,'
 
-  Display -h -n "  Checking NGinx version >=1.19..."
-  VER=`nginx -V 2>&1|head -1|sed 's/^.*nginx\///'| awk 'BEGIN { FS="."; } { print $1"."$2; }'`
-  if [ 1 -eq "$(echo "$VER >= 1.19" | bc)" ]
-  then
-    Display -h "OK"
-  else
-    Error "NGinx version ($VER) must be >=1.19."
-  fi
+  Display -h "  Configuring OpenResty..."
+  mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
+  ln -s /usr/local/openresty/nginx/conf /etc/nginx
 
-  Display -h "  Configuring NGinx..."
+  Display -h "  Configuring OpenResty..."
   rm -f /etc/nginx/conf.d/*
 
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
@@ -2258,47 +2251,6 @@ server {
 
   # GNS Heavy client
   location /v2
-  {
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
-
-    add_header 'Access-Control-Allow-Origin' '*';
-    add_header 'Access-Control-Allow-Credentials' 'true';
-    add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-    add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-
-    if (\$request_method = 'OPTIONS') {
-      add_header 'Access-Control-Allow-Origin' '*';
-      add_header 'Access-Control-Allow-Credentials' 'true';
-      add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-      add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-
-      # add_header 'Access-Control-Max-Age' 86400;
-      # add_header 'Content-Type' 'text/plain charset=UTF-8';
-
-      add_header 'Content-Length' 0;
-      return 204;
-    }
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    # GNS3 maximum timeout = 1h
-    proxy_connect_timeout       3600;
-    proxy_send_timeout          3600;
-    proxy_read_timeout          3600;
-    send_timeout                3600;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection 'Upgrade';
-
-    proxy_pass http://127.0.0.1:3080;
-  }
-
-  # GNS Heavy client
-  location /v3
   {
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
@@ -2519,8 +2471,7 @@ server {
 # Vigrid NGinx configuration file
 #
 worker_processes auto;
-pid /run/nginx.pid;
-include /etc/nginx/modules-enabled/*.conf;
+pid logs/nginx.pid;
 
 user www-data;
 
@@ -2552,7 +2503,7 @@ http {
         client_max_body_size 8192M; # 8GB
 
         # Virtual Host Configs
-        include /etc/nginx/conf.d/*.conf;
+        include /etc/nginx/sites/*.conf;
 }
 " >/etc/nginx/nginx.conf
 
@@ -2564,8 +2515,8 @@ http {
   ( printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth") | openssl req -x509 -out /etc/nginx/ssl/localhost.crt -keyout /etc/nginx/ssl/localhost.key -newkey rsa:2048 -nodes -sha256 -subj '/CN=localhost' || Error 'Certificate generation failed,'
 
   Display -h "Enabling & starting NGinx..."
-  systemctl enable nginx
-  service nginx start
+  systemctl enable openresty
+  service nginx openresty
 
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
   then

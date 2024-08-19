@@ -172,7 +172,7 @@ SCRIPT_CWD=`/usr/bin/pwd`
 # Sanity checks
 Display "Ok, let's start..."
 OS_RELEASE=`cat /etc/os-release|grep "^PRETTY_NAME" | awk 'BEGIN { FS="="; } { print $2;}' | sed 's/\"//g'`
-OS_CHK=`echo "$OS_RELEASE" | egrep -i "Ubuntu.*(20|22)"|wc -l`
+OS_CHK=`echo "$OS_RELEASE" | egrep -i "Ubuntu.*(20|22|24)"|wc -l`
 Display -n -h "I see I am launched on a $OS_RELEASE, "
 [ $OS_CHK -ge 1 ] && Display -h "perfect to me !"
 [ $OS_CHK -ge 1 ] || Display -h "not the one I expected, not sure I will work fine over it."
@@ -543,6 +543,8 @@ Are you ok I setup the additional disks for Vigrid's storage [Y/n] ? "
   zpool import -a -f >/dev/null 2>/dev/null
   zfs list Vstorage >/dev/null 2>/dev/null || Error 'ZFS pool Vstorage does not exists,'
 
+  VIGRID_STORAGE_MODE="ZFS"
+
   Display -h "Now creating Vigrid NASless server datasets:"
   LIST="home/gns3/GNS3/projects home/gns3/GNS3/images var-lib-docker"
   for i in $LIST
@@ -641,7 +643,7 @@ then
 
   TEXT_DESIGN="$TEXT_DESIGN
     Please select:
-      1- No network configuration change, you will manage
+      1- No network configuration change, you will manage everything
       2- TINY Cyber Range network configuration (requires 4 network interfaces: WAN, Admin, Blue, Red)
       3- FULL Cyber Range network configuration (requires 6 network interfaces: WAN, SuperAdmin, BlueAdmin, RedAdmin, Blue, Red)"
 
@@ -649,8 +651,11 @@ then
   do
     Display -h "
     Vigrid standard Network designs.
+
+    NOTA: Vigrid Cyber Range designs removes netplan.io to revert to ifup (/etc/network/interfaces).
+
   $TEXT_DESIGN
-    NOTA: Vigrid Cyber Range designs remove netplan.io to revert to ifup (/etc/network/interfaces).
+
       
     Available detected network interfaces: $VIGRID_NICS
 
@@ -1159,8 +1164,13 @@ done
 
 Display "Cleaning possible docker presence..." && apt remove -y docker docker-engine docker.io
 Display "Adding required packages for Docker..." && apt install -y apt-transport-https ca-certificates curl software-properties-common || Error "Failed,"
-Display "Adding Docker repo key..." &&	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - || Error "Failed,"
-Display "Adding Docker repo..." && add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" || Error "Failed,"
+install -m 0755 -d /etc/apt/keyrings
+Display "Adding Docker repo key..." && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc || Error "Failed,"
+chmod a+r /etc/apt/keyrings/docker.asc
+Display "Adding Docker repo..." && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+[ $? -ne 0 ] && Error 'Add failed,'
+  
 Display "Updating system..." && apt update -y
 Display "Installing Docker..." && apt install -y docker-ce || Error "Failed,"
 Display "Stopping Docker service..." && service docker stop
@@ -1194,8 +1204,8 @@ usermod -a docker -G docker >/dev/null 2>/dev/null
 Display -h "Adding docker overlay configuration file..."
 if [ $VIGRID_TYPE -eq 1 ]
 then
-  [ $VIGRID_STORAGE_MODE = "ZFS" ] && DRIVER="zfs"
-  [ $VIGRID_STORAGE_MODE = "BTRfs" ] && DRIVER="btrfs"
+  [ "x$VIGRID_STORAGE_MODE" = "xZFS" ] && DRIVER="zfs"
+  [ "x$VIGRID_STORAGE_MODE" = "xBTRfs" ] && DRIVER="btrfs"
 else
   DRIVER="overlay2"
 fi
@@ -1250,6 +1260,7 @@ if [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ] # Network design to Vigrid
 then
   Display "Installing Vigrid network configuration..."
 
+  # netplan is not able to have 2 bridges over the same bond
   Display -h "Removing netplan.io for old ifup..."
   apt install -y ifenslave vlan ifupdown bridge-utils || Error "Failed to add ifenslave vlan ifupdown bridge-utils packages,"
   apt remove -y netplan.io && apt autoremove -y
@@ -1282,6 +1293,14 @@ then
       [ $VIGRID_NETWORK_BOND -ge 0 -a $VIGRID_NETWORK_BOND -le 6 ] && break
     fi
   done
+
+  # [ $VIGRID_NETWORK_BOND -ge 0 ] && VIGRID_NETWORK_BOND="balance-rr"
+  # [ $VIGRID_NETWORK_BOND -ge 1 ] && VIGRID_NETWORK_BOND="active-backup"
+  # [ $VIGRID_NETWORK_BOND -ge 2 ] && VIGRID_NETWORK_BOND="balance-xor"
+  # [ $VIGRID_NETWORK_BOND -ge 3 ] && VIGRID_NETWORK_BOND="broadcast"
+  # [ $VIGRID_NETWORK_BOND -ge 4 ] && VIGRID_NETWORK_BOND="802.3ad"
+  # [ $VIGRID_NETWORK_BOND -ge 5 ] && VIGRID_NETWORK_BOND="balance-tlb"
+  # [ $VIGRID_NETWORK_BOND -ge 6 ] && VIGRID_NETWORK_BOND="balance-alb"
 
   Display "Creating /etc/network/interfaces..."
 
@@ -1325,7 +1344,7 @@ auto Ninternet0" >/etc/network/interfaces
     fi
   fi
   
-  echo "bridge_ports Binternet0
+  echo "        bridge_ports Binternet0
         bridge_stp off
         bridge_fd 0
 
@@ -2077,11 +2096,9 @@ request_terminate_timeout = 300
   Display -h "  Installing OpenResty..." && apt install -y openresty || Error 'Install failed,'
 
   Display -h "  Configuring OpenResty..."
-  mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
+  rm -rf /etc/nginx 2>/dev/null
   ln -s /usr/local/openresty/nginx/conf /etc/nginx
-
-  Display -h "  Configuring OpenResty..."
-  rm -f /etc/nginx/conf.d/*
+  mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
 
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
   then
@@ -2138,7 +2155,7 @@ server {
 
     try_files \$uri \$uri/ /vigrid-auth.php?\$args;
   }
-}" >/etc/nginx/conf.d/CyberRange-vigrid-auth-8001.conf
+}" >/etc/nginx/sites/CyberRange-vigrid-auth-8001.conf
   fi
   
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
@@ -2371,7 +2388,7 @@ server {
 
   try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
 }
-" >>/etc/nginx/conf.d/CyberRange-443.conf
+" >>/etc/nginx/sites/CyberRange-443.conf
   else
     # For Vigrid slave, Vigrid-API for loads
     echo "
@@ -2464,7 +2481,7 @@ server {
 
   try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
 }
-" >>/etc/nginx/conf.d/CyberRange-443-api.conf
+" >>/etc/nginx/sites/CyberRange-443-api.conf
   fi
 
   echo "#
@@ -2537,8 +2554,9 @@ http {
   if [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ]
   then
     Display -h "  Configuring SSLh (with current IP=$HOST_IP)..."
+    chown -R sslh /var/run/sslh
     echo "
-DAEMON_OPTS=\"--user sslh --listen $HOST_IP:443 --ssh localhost:22 --openvpn 127.0.0.1:1194 --ssl 127.0.0.1:443 --pidfile /var/run/sslh/sslh.pid\"" >>/etc/default/sslh
+DAEMON_OPTS=\"--user=sslh --listen=$HOST_IP:443 --ssh=localhost:22 --openvpn=127.0.0.1:1194 --tls=127.0.0.1:443 --pidfile=/var/run/sslh/sslh.pid\"" >>/etc/default/sslh
 
     Display "Adding OpenVPN/EasyRSA for full network access..." && apt install -y openvpn easy-rsa || Error 'Install failed,'
     Display "Creating OpenVPN server configuration..."
@@ -2552,8 +2570,8 @@ DAEMON_OPTS=\"--user sslh --listen $HOST_IP:443 --ssh localhost:22 --openvpn 127
     Display -h "  Initializing PKI" && /usr/share/easy-rsa/easyrsa init-pki || Error 'action failed,'
     Display -h "  Generating DH params..." && /usr/share/easy-rsa/easyrsa gen-dh || Error 'action failed,'
     
-    Display "  Building CA (Certificate Authority): " && /usr/share/easy-rsa/easyrsa build-ca nopass || Error 'action failed,'
-    Display "  Building 'CyberRange' Server certificates:" && /usr/share/easy-rsa/easyrsa build-server-full CyberRange nopass || Error 'action failed,'
+    Display "  Building CA (Certificate Authority): " && /usr/share/easy-rsa/easyrsa --batch build-ca nopass || Error 'action failed,'
+    Display "  Building 'CyberRange' Server certificates:" && /usr/share/easy-rsa/easyrsa --batch build-server-full CyberRange nopass || Error 'action failed,'
 
     Display "  Building VIGRIDteleport & OpenVPN clients:"
     VIGRID_OPENVPN_CLIENTS="VIGRIDclient"
@@ -2567,8 +2585,8 @@ DAEMON_OPTS=\"--user sslh --listen $HOST_IP:443 --ssh localhost:22 --openvpn 127
 
     for i in $VIGRID_OPENVPN_CLIENTS
     do
-      Display "    Building '$i' Client certificates:" && /usr/share/easy-rsa/easyrsa build-client-full $i nopass || Error 'action failed,'
-      Display "    Generating '$i' OpenVPN TLS-Auth key..." && openvpn --genkey --secret pki/$i-ta.key || Error 'action failed,'
+      Display "    Building '$i' Client certificates:" && /usr/share/easy-rsa/easyrsa --batch build-client-full $i nopass || Error 'action failed,'
+      Display "    Generating '$i' OpenVPN TLS-Auth key..." && openvpn --genkey secret pki/$i-ta.key || Error 'action failed,'
     done
     Display "  Creating OpenVPN CyberRange.conf server file"
 
@@ -2888,8 +2906,9 @@ push \"setenv-safe VIGRID_DHCP_IP $VIGRID_DHCP_IP\"
     Display -h "  Finally enabling OpenVPN server" && systemctl enable openvpn || Error 'Enabling failed,'
   else
     Display -h "  Configuring SSLh (with current IP=$HOST_IP)..."
+    chown -R sslh /var/run/sslh
     echo "
-DAEMON_OPTS=\"--user sslh --listen $HOST_IP:443 -ssh localhost:22 --ssl 127.0.0.1:443 --pidfile /var/run/sslh/sslh.pid\"" >>/etc/default/sslh
+DAEMON_OPTS=\"--user=sslh --listen=$HOST_IP:443 --ssh=localhost:22 --openvpn=127.0.0.1:1194 --tls=127.0.0.1:443 --pidfile=/var/run/sslh/sslh.pid\"" >>/etc/default/sslh
   fi
 
   Display -h "Enabling & starting SSLh..."
@@ -3494,7 +3513,7 @@ LIST="$LIST ssh vigrid-load docker gns3"
 if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
 then
   T=`service --status-all|grep "php.*-fpm" | awk '{print $NF;}'`
-  LIST="$LIST $T nginx mariadb postfix sslh vigrid-noconsoles vigrid-cloning"
+  LIST="$LIST $T openresty mariadb postfix sslh vigrid-noconsoles vigrid-cloning"
 fi
 
 # Cyber Range network design AND master

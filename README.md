@@ -23,17 +23,17 @@ Vigrid extension is copyrighted to Laurent LEVIER, licensed under Creative Commo
 ### Last updates ###
 Major topics of Vigrid 1.2:
 <ul><li>Ubuntu 24 LTS ready</li>
-<ul><li>Multiple bugs corrected, due from packages & GNS3 updates.</li>
-<ul><li>SSLh arguments are modified to reflect SSLh changes + corrected systemd config.</li>
-<ul><li>OpenResty replaces NGinx.</li>
-<ul><li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li>
+<li>Multiple bugs corrected, due from packages & GNS3 updates.</li>
+<li>SSLh arguments are modified to reflect SSLh changes + corrected systemd config.</li>
+<li>OpenResty replaces NGinx.</li>
+<li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li>
 
 <BR><STRONG>IMPORTANT</STRONG>
 GNS3 v3.0.0rc1 now provides RBAC. It has been tested RBAC works fine. With this, Vigrid can now also be a training environnment.
 Soon to come:
 <ul><li>OpenResty configured to relay JWT new GNS3 authentication.</li>
-<ul><li>Vigrid will then directly use GNS3 authentication, no longer its own.</li>
-<ul><li>To come soon: new Vigrid feature so a user can automatically clone a project + create ACL to make each clone of this project usable to other users, classical training operation.</li>
+<li>Vigrid will then directly use GNS3 authentication, no longer its own.</li>
+<li>To come soon: new Vigrid feature so a user can automatically clone a project + create ACL to make each clone of this project usable to other users, classical training operation.</li>
 
 ### QUICK INSTALL ###
 

@@ -2582,6 +2582,10 @@ http {
     apt install -y novnc websockify || Error 'Cant install packages,'
 
     Display -h "Installing SSLh..." && apt install -y sslh || Error 'Install failed,'
+    Display -h "  Updating SSLh starting script (bug in permission in /var/run/sslh) ..."
+    systemctl disable --now sslh
+    sed -ie 's/^\[Service\].*$/&\nRuntimeDirectory=sslh/g' /usr/lib/systemd/system/sslh.service
+    systemctl enable --now sslh
   fi
 
   # Cyber range network design on master server = network I/O gateway
@@ -2590,11 +2594,6 @@ http {
     Display -h "  Configuring SSLh (with current IP=$HOST_IP)..."
     echo "
 DAEMON_OPTS=\"--user=sslh --listen=$HOST_IP:443 --ssh=localhost:22 --openvpn=127.0.0.1:1194 --tls=127.0.0.1:443 --pidfile=/var/run/sslh/sslh.pid\"" >>/etc/default/sslh
-
-    Display -h "  Updating SSLh starting script (bug in permission in /var/run/sslh) ..."
-    sed -ie 's/^\[Service\].*$/&\nRuntimeDirectory=sslh/g' /usr/lib/systemd/system/sslh.service
-    rm /etc/systemd/system/multi-user.target.wants/sslh.service
-    systemctl enable sslh
 
     Display "Adding OpenVPN/EasyRSA for full network access..." && apt install -y openvpn easy-rsa || Error 'Install failed,'
     Display "Creating OpenVPN server configuration..."

@@ -26,19 +26,19 @@ Major topics of Vigrid 1.2:
 <li>Multiple bugs corrected, due from packages & GNS3 updates.</li>
 <li>SSLh arguments are modified to reflect SSLh changes + corrected systemd config.</li>
 <li>OpenResty replaces NGinx.</li>
-<li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li>
+<li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li></ul>
 
 <BR><STRONG>IMPORTANT</STRONG>
 GNS3 v3.0.0rc1 now provides RBAC. It has been tested RBAC works fine. With this, Vigrid can now also be a training environnment.
 Soon to come:
 <ul><li>OpenResty configured to relay JWT new GNS3 authentication.</li>
 <li>Vigrid will then directly use GNS3 authentication, no longer its own.</li>
-<li>To come soon: new Vigrid feature so a user can automatically clone a project + create ACL to make each clone of this project usable to other users, classical training operation.</li>
+<li>To come soon: new Vigrid feature so a user can automatically clone a project + create ACL to make each clone of this project usable to other users, classical training operation.</li></ul>
 
 ### QUICK INSTALL ###
 
 First, install the last Ubuntu server LTS version on your hosts(s).
-<BR><STRONG>Nota: install now validated until Ubuntu 24 LTS.</STRONG>
+<BR><STRONG>Nota: install now validated for Ubuntu 24 LTS.</STRONG>
 
 Recommendations:
 <ul><li>Ubuntu:</li>

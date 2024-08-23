@@ -2307,7 +2307,7 @@ server {
         end
 
         -- Yes ? Extract user/pass from gns3_server.conf
-        local p = io.popen(\"egrep '^(user|password)\\\\s*=' /home/gns3/.config/GNS3/gns3_server.conf\")
+        local p = io.popen(\"egrep '^(user|password)\\\\\\s*=' /home/gns3/.config/GNS3/gns3_server.conf\")
         local res_user = p:read('*l')
         local res_pass = p:read('*l')
         p:close()

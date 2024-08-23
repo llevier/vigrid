@@ -98,7 +98,9 @@ Feel free to contact me.
   <TR><TD><B>Topic</B></TD>
   <TD><B>Status</B></TD></TR>
   <TR><TD>First GNS3v3 tests</TD>
-  <TD>Postponed to new RBAC model on GNS3v3</TD></TR>
+  <TD>Basic RBAC functions behaved properly. Vigrid under changes to work with GNS3v3 (JWT token + RBAC)</TD></TR>
+  <TR><TD>Netplan tests to avoid forcing ifupdown</TD>
+  <TD>DONE. Netplan does not support multiple bridges over the same bond.</TD></TR>
   <TR><TD>Error handling by command in install scripts (failing command can be rerun endlessly)</TD>
   <TD>Queued</TD></TR>
   <TR><TD>Change Control Tower display (project first column, then host) so start button automatically select best available host</TD>
@@ -113,7 +115,7 @@ Feel free to contact me.
   <TD>Queued</TD></TR>
   <TR><TD>Concurrent/conflicting action detector</TD>
   <TD>Queued</TD></TR>
-  <TR><TD>Add BTRFS management on servers (tested/validated but not implemented in Vigrid)</TD>
+  <TR><TD>Add BTRFS management on servers (strongly encouraging to use BTRfs with SSD only)</TD>
   <TD>DONE, extensive tests to perform</TD></TR>
   <TR><TD>Finish snaping/cloning at nodes level</TD>
   <TD>Validated with both FS, queued</TD></TR>

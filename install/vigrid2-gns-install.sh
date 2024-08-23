@@ -969,7 +969,10 @@ fi
 
 CHK=`which git`
 [ "x$CHK" = "x" ] && apt install -y git
-if [ -d /home/gns3/vigrid ]
+if [ -d /Vstorage/home/GNS3/vigrid ]
+then
+  cd /home/gns3/vigrid && git config --global --add safe.directory /Vstorage/home/GNS3/vigrid && git pull || echo Vigrid update failed
+elif [ -d /Vstorage/GNS3/vigrid ]
 then
   cd /home/gns3/vigrid && git config --global --add safe.directory /Vstorage/GNS3/vigrid && git pull || echo Vigrid update failed
 else

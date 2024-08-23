@@ -10,8 +10,6 @@
 #
 #################################################################################################################################
 
-PWD=`pwd`
-
 echo "### Qemu installation/update script..."
 
 if [ "x$1" != "x" ]
@@ -85,6 +83,10 @@ do
 done
 
 echo
+echo "### Moving to /tmp..."
+cd /tmp
+[ $? -ne 0 ] && echo "Cant to there, exiting." && exit 1
+
 echo "### Downloading Qemu source..."
 wget -c https://download.qemu.org/qemu-$QEMU_VER.tar.xz
 [ $? -ne 0 ] && echo "Download failed, exiting." && exit 1
@@ -155,7 +157,7 @@ echo "### You can run Qemu with '-device virtio-vga-gl -display egl-headless' fl
 
 echo
 echo "### Deleting source tree, keeping tarball."
-cd $PWD
+cd /tmp
 rm -rf qemu-$QEMU_VER
 
 echo

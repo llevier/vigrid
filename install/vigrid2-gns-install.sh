@@ -172,7 +172,7 @@ SCRIPT_CWD=`/usr/bin/pwd`
 # Sanity checks
 Display "Ok, let's start..."
 OS_RELEASE=`cat /etc/os-release|grep "^PRETTY_NAME" | awk 'BEGIN { FS="="; } { print $2;}' | sed 's/\"//g'`
-OS_CHK=`echo "$OS_RELEASE" | egrep -i "Ubuntu.*(20|22|24)"|wc -l`
+OS_CHK=`echo "$OS_RELEASE" | egrep -i "Ubuntu\s+24"|wc -l`
 Display -n -h "I see I am launched on a $OS_RELEASE, "
 [ $OS_CHK -ge 1 ] && Display -h "perfect to me !"
 [ $OS_CHK -ge 1 ] || Display -h "not the one I expected, not sure I will work fine over it."
@@ -560,7 +560,7 @@ Are you ok I setup the additional disks for Vigrid's storage [Y/n] ? "
   done
 else
   Display -h "Creating a fake /Vstorage tree to concentrate all Vigrid data..."
-  mkdir -p /Vstorage /Vstorage/var-lib-docker /Vstorage/GNS3-automounts 2>/dev/null || Error 'mkdir failed,'
+  mkdir -p /Vstorage /Vstorage/var-lib-docker /Vstorage/GNS3-automounts /Vstorage/tmp 2>/dev/null || Error 'mkdir failed,'
   
   # NAS(es) IP address/names ?
   Display "Adding Vigrid autoFS configuration to /etc/auto.master..."
@@ -2266,43 +2266,65 @@ server {
     fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
   }
 
-  # GNS Heavy client
   location /v2
   {
-    auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
     auth_request_set \$auth_header \$upstream_http_authorization;
 
-    add_header 'Access-Control-Allow-Origin' '*';
-    add_header 'Access-Control-Allow-Credentials' 'true';
-    add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-    add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-
-    if (\$request_method = 'OPTIONS') {
-      add_header 'Access-Control-Allow-Origin' '*';
-      add_header 'Access-Control-Allow-Credentials' 'true';
-      add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-      add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-
-      # add_header 'Access-Control-Max-Age' 86400;
-      # add_header 'Content-Type' 'text/plain charset=UTF-8';
-
-      add_header 'Content-Length' 0;
-      return 204;
-    }
-
     proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    # GNS3 maximum timeout = 1h
-    proxy_connect_timeout       3600;
-    proxy_send_timeout          3600;
-    proxy_read_timeout          3600;
-    send_timeout                3600;
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection 'Upgrade';
+
+    access_by_lua_block
+    {
+      if ngx.var.http_authorization ~= nil and ngx.var.http_authorization:sub(0, 6) == 'Basic ' then
+
+        -- Extract Basic auth
+        auth_creds=string.gsub(ngx.var.http_authorization,'^Basic ','',1)
+        local vigrid_creds = ngx.decode_base64(auth_creds)
+
+        -- Splitting credentials
+        local vigrid_user=string.gsub(vigrid_creds,':.*\$','',1)
+        local vigrid_pass=string.gsub(vigrid_creds,'^.*:','',1)
+        if vigrid_user == '' or vigrid_pass == '' then
+          ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
+          ngx.exit(401)
+          return
+        end
+
+        -- Check user is granted to pass
+        local grep_str=string.format(\"egrep '^%s:{PLAIN}%s\$' /home/gns3/etc/vigrid-passwd\",vigrid_user,vigrid_pass)
+        local p = io.popen(grep_str)
+        local vigrid_check = p:read('*l')
+        p:close()
+        
+        if vigrid_check == nil then
+          ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
+          ngx.exit(401)
+          return
+        end
+
+        -- Yes ? Extract user/pass from gns3_server.conf
+        local p = io.popen(\"egrep '^(user|password)\\\\s*=' /home/gns3/.config/GNS3/gns3_server.conf\")
+        local res_user = p:read('*l')
+        local res_pass = p:read('*l')
+        p:close()
+        gns_user=string.gsub(res_user,'^user[ ]+=[ ]+','',1)
+        gns_pass=string.gsub(res_pass,'^password[ ]+=[ ]+','',1)
+
+        -- Build base64 header
+        local basic = string.format('%s:%s',gns_user,gns_pass)
+        local basicb64 = ngx.encode_base64(basic,false)
+
+        -- Replace authorization
+        authorization = string.format('Basic %s',basicb64)
+        ngx.req.set_header('Authorization', authorization)
+
+        return
+      end
+    }
 
     proxy_pass http://127.0.0.1:3080;
   }
@@ -2388,7 +2410,7 @@ server {
 
   try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
 }
-" >>/etc/nginx/sites/CyberRange-443.conf
+" >/etc/nginx/sites/CyberRange-443.conf
   else
     # For Vigrid slave, Vigrid-API for loads
     echo "
@@ -2481,7 +2503,7 @@ server {
 
   try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
 }
-" >>/etc/nginx/sites/CyberRange-443-api.conf
+" >/etc/nginx/sites/CyberRange-443-api.conf
   fi
 
   echo "#
@@ -2519,6 +2541,18 @@ http {
         # Appliance or whatever upload, applies to all
         client_max_body_size 8192M; # 8GB
 
+        # enable capturing error logs
+        lua_capture_error_log 32m;
+
+        init_by_lua_block {
+            local errlog = require 'ngx.errlog'
+            local status, err = errlog.set_filter_level(ngx.WARN)
+            if not status then
+                ngx.log(ngx.ERR, err)
+                return
+            end
+        }
+
         # Virtual Host Configs
         include /etc/nginx/sites/*.conf;
 }
@@ -2554,9 +2588,13 @@ http {
   if [ $VIGRID_NETWORK -eq 2 -o $VIGRID_NETWORK -eq 3 ]
   then
     Display -h "  Configuring SSLh (with current IP=$HOST_IP)..."
-    chown -R sslh /var/run/sslh
     echo "
 DAEMON_OPTS=\"--user=sslh --listen=$HOST_IP:443 --ssh=localhost:22 --openvpn=127.0.0.1:1194 --tls=127.0.0.1:443 --pidfile=/var/run/sslh/sslh.pid\"" >>/etc/default/sslh
+
+    Display -h "  Updating SSLh starting script (bug in permission in /var/run/sslh) ..."
+    sed -ie 's/^\[Service\].*$/&\nRuntimeDirectory=sslh/g' /usr/lib/systemd/system/sslh.service
+    rm /etc/systemd/system/multi-user.target.wants/sslh.service
+    systemctl enable sslh
 
     Display "Adding OpenVPN/EasyRSA for full network access..." && apt install -y openvpn easy-rsa || Error 'Install failed,'
     Display "Creating OpenVPN server configuration..."

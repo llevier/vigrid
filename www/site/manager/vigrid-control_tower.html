@@ -746,20 +746,23 @@
                   for ($pp=0;$pp<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports']);$pp++)
                   {
                     // must match adapter_number & port_number, per end of link (2 ends)
-                    for ($dl=0;$dl<sizeof($links);$dl++)
+                    if (isset($links))
                     {
-                      // display links ?
-                      if ($displinks==1)
+                      for ($dl=0;$dl<sizeof($links);$dl++)
                       {
-                        for ($le=0;$le<2;$le++)
+                        // display links ?
+                        if ($displinks==1)
                         {
-                          if ($displinks==1)
+                          for ($le=0;$le<2;$le++)
                           {
-                           if (($links[$dl]['nodes'][$le]['node_id']==$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id'])
-                            && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['adapter_number']==$links[$dl]['nodes'][$le]['adapter_number'])
-                            && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']==$links[$dl]['nodes'][$le]['port_number']))
+                            if ($displinks==1)
                             {
-                              print("<TR><TD><A HREF=\"/manager/vigrid-link_control.html?gnshost=".$host_name."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&link_id=".$links[$dl]['link_id']."\" TARGET=\"link_".$links[$dl]['link_id']."\">".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']."/".$links[$dl]['nodes'][$le]['adapter_number']."</A></TD>");
+                             if (($links[$dl]['nodes'][$le]['node_id']==$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_id'])
+                              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['adapter_number']==$links[$dl]['nodes'][$le]['adapter_number'])
+                              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']==$links[$dl]['nodes'][$le]['port_number']))
+                              {
+                                print("<TR><TD><A HREF=\"/manager/vigrid-link_control.html?gnshost=".$host_name."&project_id=".$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']."&link_id=".$links[$dl]['link_id']."\" TARGET=\"link_".$links[$dl]['link_id']."\">".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$pp]['port_number']."/".$links[$dl]['nodes'][$le]['adapter_number']."</A></TD>");
+                              }
                             }
                           }
                         }

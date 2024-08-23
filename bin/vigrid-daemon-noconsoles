@@ -266,23 +266,26 @@ function CONSOLESlist($gns_controller)
 		{
       for ($j=0;$j<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$j++)
       {
-        for ($k=0;$k<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
+        if (isset($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']))
         {
-          if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started")
-            && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_type']!="cloud"))
+          for ($k=0;$k<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
           {
-            if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console']!="")
+            if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']=="started")
+              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['node_type']!="cloud"))
             {
-              $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k].":";
-
-              if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="vnc")
-              || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="telnet"))
+              if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console']!="")
               {
-                if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=='0.0.0.0')
-                { $data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=$host_ip; }
-                
-                $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'];
-                array_push($consoles,$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']);
+                $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k].":";
+
+                if (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="vnc")
+                || ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type']=="telnet"))
+                {
+                  if ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=='0.0.0.0')
+                  { $data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host']=$host_ip; }
+                  
+                  $uri=$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'];
+                  array_push($consoles,$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_type'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console_host'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['console'].":".$data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$j]['project_id']]['NODES'][$k]['status']);
+                }
               }
             }
           }

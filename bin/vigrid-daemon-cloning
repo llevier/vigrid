@@ -30,6 +30,7 @@ include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
 ob_implicit_flush();
 
 $verbose=0;
+$daemon=0;
 // ini_set("register_argc_argv=On");
 $opt=getopt("vdl:");
 if (isset($opt['v'])) { $verbose=1; }
@@ -105,6 +106,9 @@ if ($daemon)
 
   report("   Daemon now running on ".posix_getpid()."\n");
 }
+
+// To avoid program to stop upon some failures...
+mysqli_report(MYSQLI_REPORT_OFF);
 
 if ($verbose)
 { report("  Connecting to MySQL DSN $mysql_host as $mysql_user ($mysql_pass)..."); }

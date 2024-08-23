@@ -221,14 +221,14 @@
 				$t=preg_split("/ /",$websockify[$i]);
 				// returns http console port
 				if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
-				{ pclose($fd); return($t[(count($t)-2)]); }
+				{ return($t[(count($t)-2)]); }
 			}
 			else if (preg_match($pattern_telnet,$websockify[$i]))
 			{
 				$t=preg_split("/ /",$websockify[$i]);
 				// returns http console port
 				if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
-				{ pclose($fd); return($t[(count($t)-2)]); }
+				{ return($t[(count($t)-2)]); }
 			}
 		}
 	  return(0);

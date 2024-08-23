@@ -1,6 +1,6 @@
 # Vigrid
 
-<STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.1">v1.1, validated for Ubuntu 22LTS</A></STRONG>.
+<STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.2">v1.2, validated for Ubuntu 24LTS</A></STRONG>.
 
 Vigrid is an extension to the GNS3 Hypervisor to turn it to a Cyber Range or a industrial training platform.
 
@@ -21,25 +21,24 @@ You may also think it as 'V grid' (Virtualization Grid).
 Vigrid extension is copyrighted to Laurent LEVIER, licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
 ### Last updates ###
-Vigrid (main) is now API ready:
-<BR>- New NGinx+PHP installations to provide device load details are now part of install scripts.
-<BR>- Requests performed over HTTPS will provide cpu/network/disk details in JSON format.
-<BR>- Added to vigrid-addslave the actions to add Slave to Master NGinx configuration and then address them via Vigrid Master.
+Major topics of Vigrid 1.2:
+<ul><li>Ubuntu 24 LTS ready</li>
+<ul><li>Multiple bugs corrected, due from packages & GNS3 updates.</li>
+<ul><li>SSLh arguments are modified to reflect SSLh changes + corrected systemd config.</li>
+<ul><li>OpenResty replaces NGinx.</li>
+<ul><li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li>
 
-<BR>- Still to update Vigrid Web pages to move to API and no longer use the dirty SSH scripts.
-<BR>- Ongoing developpement of a JS interface, expected much faster response than current synchronous PHP.
-
-New service : Vigrid deployer. Its mission is to massively install operating systems on baremetal or virtual machines.
-To install it, runs on your Vigrid NAS:
-<BR><code>sudo /Vstorage/GNS3/bin/vigrid-update</code>
-<BR><code>sudo /Vstorage/GNS3/install/vigrid1-deployer-install.sh</code>
-
-Nota : Vigrid-deployer will install a DHCP server on the Vigrid NAS, it might conflict with your own one.
+<BR><STRONG>IMPORTANT</STRONG>
+GNS3 v3.0.0rc1 now provides RBAC. It has been tested RBAC works fine. With this, Vigrid can now also be a training environnment.
+Soon to come:
+<ul><li>OpenResty configured to relay JWT new GNS3 authentication.</li>
+<ul><li>Vigrid will then directly use GNS3 authentication, no longer its own.</li>
+<ul><li>To come soon: new Vigrid feature so a user can automatically clone a project + create ACL to make each clone of this project usable to other users, classical training operation.</li>
 
 ### QUICK INSTALL ###
 
 First, install the last Ubuntu server LTS version on your hosts(s).
-<BR><STRONG>Nota: install now validated until Ubuntu 22 LTS.</STRONG>
+<BR><STRONG>Nota: install now validated until Ubuntu 24 LTS.</STRONG>
 
 Recommendations:
 <ul><li>Ubuntu:</li>

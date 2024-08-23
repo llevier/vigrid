@@ -279,7 +279,7 @@ do
   SLAVE_PORT=`echo $i|awk 'BEGIN {FS=":";} { print $3;}'`
   SLAVE_FQDN=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT="| awk -F '=' '{print $NF;}'`
 
-  NGINX_SLAVE_CONFIG="/etc/nginx/conf.d/CyberRange-$SLAVE_FQDN-443.conf"
+  NGINX_SLAVE_CONFIG="/etc/nginx/sites/CyberRange-$SLAVE_FQDN-443.conf"
 
   if [ ! -f $NGINX_SLAVE_CONFIG ]
   then

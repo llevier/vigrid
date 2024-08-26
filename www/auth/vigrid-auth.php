@@ -180,7 +180,8 @@ fclose($fd_gns);
 ### GNS3client auth change hack to add basic access control
 # [User-Agent] => GNS3 QT Client v2.2.21
 # Also for /manager/vigrid-env.html page (troubleshoot)
-Debug($debug,"    Checking User-Agent ".$headers['User-Agent']."\n");
+if (isset($headers['User-Agent'])) { Debug($debug,"    Checking User-Agent ".$headers['User-Agent']."\n"); }
+
 if (((isset($headers['User-Agent']) && (preg_match("/GNS3 QT Client/",$headers['User-Agent'])))
  ||  (isset($headers['X-Requested-With'])  && ($headers['X-Requested-With']=='Vigrid-JS')))
   && (preg_match("/^\/v[23]\//",$to_validate_url)))

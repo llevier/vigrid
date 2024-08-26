@@ -1333,20 +1333,23 @@
             $data_vigrid['GNS3'][$ip_address]['COMPUTES']=gns_getcomputes($gns_controller,$ip_address);
             
             $data_vigrid['GNS3'][$ip_address]['PROJECTS']=gns_getprojects($gns_controller,$ip_address);
-            usort($data_vigrid['GNS3'][$ip_address]['PROJECTS'], 'compare_name');
-
-            for ($j=0;$j<sizeof($data_vigrid['GNS3'][$ip_address]['PROJECTS']);$j++)
+            if (isset($data_vigrid['GNS3'][$ip_address]['PROJECTS']))
             {
-              // gns_project_command($gns_controller,$ip_address,$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id'],"open");
+              usort($data_vigrid['GNS3'][$ip_address]['PROJECTS'], 'compare_name');
 
-              // Get nodes only if project is opened
-              if ($data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['status']=="opened")
+              for ($j=0;$j<sizeof($data_vigrid['GNS3'][$ip_address]['PROJECTS']);$j++)
               {
-                $data_vigrid['GNS3'][$ip_address]['PROJECT_NODES'][$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']]['NODES']
-                  =gns_getnodes($gns_controller,$ip_address,$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']);
-             
-                // alpha sort nodes...
-                usort($data_vigrid['GNS3'][$ip_address]['PROJECT_NODES'][$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']]['NODES'], 'compare_name');
+                // gns_project_command($gns_controller,$ip_address,$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id'],"open");
+
+                // Get nodes only if project is opened
+                if ($data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['status']=="opened")
+                {
+                  $data_vigrid['GNS3'][$ip_address]['PROJECT_NODES'][$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']]['NODES']
+                    =gns_getnodes($gns_controller,$ip_address,$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']);
+               
+                  // alpha sort nodes...
+                  usort($data_vigrid['GNS3'][$ip_address]['PROJECT_NODES'][$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']]['NODES'], 'compare_name');
+                }
               }
             }
 

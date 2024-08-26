@@ -262,7 +262,7 @@ function CONSOLESlist($gns_controller)
     $host_port=$f[2];
     $host_compute=$f[3];
     
-    if (isset($data_vigrid['GNS3'][$host_ip]))
+    if (isset($data_vigrid['GNS3'][$host_ip]['PROJECTS']))
 		{
       for ($j=0;$j<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$j++)
       {

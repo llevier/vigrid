@@ -987,9 +987,6 @@ server {
   # Vigrid API, load only
   location ~ ^/vigrid-nas-api/.*\$
   {
-    # change API URL to classical one...
-    rewrite ^\/vigrid-api\/(.*)\$ \/vigrid-api\/vigrid-nas-api.html?order=\$1 permanent;
-    
     fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
     fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
     # Minimum output buffering
@@ -1001,7 +998,7 @@ server {
     fastcgi_read_timeout          300;
     fastcgi_param PATH_INFO       \$fastcgi_path_info;
     fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
-    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-nas-api.html?order=\$1;
+    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-nas-api.html;
   }
 }
 " >>/etc/nginx/sites/CyberRange-443.conf

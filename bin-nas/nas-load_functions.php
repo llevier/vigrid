@@ -90,33 +90,36 @@ function VigridLOADgetdisk($load_array,$filters_disk)
   if ($load_array==NULL) return;
 
   $disk=array();
-  
-  for ($i=0;$i<sizeof($load_array);$i++)
-  {
-    $f=preg_split("/\s+/",$load_array[$i]);
 
-    if ($f[1]=="D")
+  if (!empty($filters_disk))
+  {  
+    for ($i=0;$i<sizeof($load_array);$i++)
     {
-      if (((!empty($filters_disk)) && (preg_grep("/^$f[2]$/",$filters_disk))) || (empty($filters_disk)))
+      $f=preg_split("/\s+/",$load_array[$i]);
+
+      if ($f[1]=="D")
       {
-        $name=$f[2];
+        if (preg_grep("/^$f[2]$/",$filters_disk))
+        {
+          $name                          =$f[2];
 
-        $disk[$name]['time']=$f[0];
-        $disk[$name]['out']=sprintf("%d",$f[2]);
-        $disk[$name]['in']=sprintf("%d",$f[3]);
+          $disk[$name]['time']           =$f[0];
+          $disk[$name]['out']            =sprintf("%d",$f[2]);
+          $disk[$name]['in']             =sprintf("%d",$f[3]);
 
-        $disk[$name]['rs']             =sprintf("%d",$f[3]);
-        $disk[$name]['rs_max']         =sprintf("%d",$f[4]);
-        $disk[$name]['rsect']          =sprintf("%d",$f[5]);
-        $disk[$name]['rsect_max']      =sprintf("%d",$f[6]);
+          $disk[$name]['rs']             =sprintf("%d",$f[3]);
+          $disk[$name]['rs_max']         =sprintf("%d",$f[4]);
+          $disk[$name]['rsect']          =sprintf("%d",$f[5]);
+          $disk[$name]['rsect_max']      =sprintf("%d",$f[6]);
 
-        $disk[$name]['ws']             =sprintf("%d",$f[7]);
-        $disk[$name]['ws_max']         =sprintf("%d",$f[8]);
-        $disk[$name]['wsect']          =sprintf("%d",$f[9]);
-        $disk[$name]['wsect_max']      =sprintf("%d",$f[10]);
+          $disk[$name]['ws']             =sprintf("%d",$f[7]);
+          $disk[$name]['ws_max']         =sprintf("%d",$f[8]);
+          $disk[$name]['wsect']          =sprintf("%d",$f[9]);
+          $disk[$name]['wsect_max']      =sprintf("%d",$f[10]);
 
-        $disk[$name]['io_pending']     =sprintf("%d",$f[11]);
-        $disk[$name]['io_pending_max'] =sprintf("%d",$f[12]);
+          $disk[$name]['io_pending']     =sprintf("%d",$f[11]);
+          $disk[$name]['io_pending_max'] =sprintf("%d",$f[12]);
+        }
       }
     }
   }

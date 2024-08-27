@@ -24,7 +24,6 @@
   // # Vigrid API, load only
   // location ~ ^/vigrid-api/.*$
   // {
-    // try_files $uri /vigrid-api/vigrid-nas-api.html?order=$is_args$args;
     // fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)$;
     // fastcgi_pass                  unix:/run/php/php8.1-fpm.sock;
     // # Minimum output buffering
@@ -36,7 +35,7 @@
     // fastcgi_read_timeout          300;
     // fastcgi_param PATH_INFO       $fastcgi_path_info;
     // fastcgi_param  HTTP_AUTHORIZATION $http_authorization;
-    // fastcgi_param SCRIPT_FILENAME $document_root/vigrid-api/vigrid-nas-api.html?order=$1;
+    // fastcgi_param SCRIPT_FILENAME $document_root/vigrid-api/vigrid-nas-api.html;
   // }
   
 	if ($_GET["order"]!='') // Either there is a GET order, either REQUEST_URI called a /vigrid-api/parameter
@@ -73,6 +72,8 @@
   $json=file_get_contents('php://input');
   $post=json_decode($json,true);
 
+  error_log(var_export($post, true));
+
   if ($order[0]=="nas-load")
   {
     array($json_array);
@@ -96,12 +97,16 @@
     // Directories ?
     if (!empty($post['dir'])) { $filters_dir=explode(",",$post['dir']); }
 
-
     $filters_disk=array();
     foreach($filters_dir as $dir)
     {
       $t=VigridGETdev($dir);
-      if (isset($t)) { array_push($filters_disk,$t); }
+      if (isset($t))
+      {
+        $t=array_values($t);
+        if (is_array($t)) { $filters_disk=array_merge($filters_disk,$t); }
+        else { array_push($filters_disk,$t); }
+      }
     }
 
     // Get associated DISK values

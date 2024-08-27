@@ -987,8 +987,10 @@ server {
   # Vigrid API, load only
   location ~ ^/vigrid-nas-api/.*\$
   {
-    try_files \$uri /vigrid-api/vigrid-nas-api.html?order=\$is_args\$args;
-    fastcgi_split_path_info       ^/(.+\/vigrid-nas-api)(/.+)\$;
+    # change API URL to classical one...
+    rewrite ^\/vigrid-api\/(.*)\$ \/vigrid-api\/vigrid-nas-api.html?order=\$1 permanent;
+    
+    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
     fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
     # Minimum output buffering
     fastcgi_buffers               2 4k;

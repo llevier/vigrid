@@ -61,7 +61,7 @@ then
     echo "I am sorry, I cant find the password of gns3 user, you will have to find it yourself."
   fi
   
-  cat $SSHKEY.pub | ssh $USER@$HOST 'mkdir -p ~/.ssh 2>/dev/null;cat >>~/.ssh/authorized_keys'
+  cat $SSHKEY.pub | ssh $USER@$HOST 'mkdir -p ~/.ssh;chmod 755 ~/.ssh;cat >>~/.ssh/authorized_keys;chmod 600 ~/.ssh/authorized_keys;'
 fi
 
 ssh -i $SSHKEY $VIGRID_SSHKEY_OPTIONS $USER@$HOST true

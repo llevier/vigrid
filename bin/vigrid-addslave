@@ -123,6 +123,13 @@ Do you confirm this [y/N] ? "
   [ "x$ANS" = "xy" -o "x$ANS" = "xY" ] && break
 done
 
+echo "Please:
+  - Ensure traffic from this host to GNS3 & SSH ports of host $SLAVE_HOST are open and working fine.
+  - Find the password of the 'gns3' user of host $SLAVE_HOST, it will be required later.
+
+Press [RETURN] when ready."
+read ANS
+
 echo "  Adding host to /etc/hosts..."
 CHK_IP=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_IP"`
 CHK_HOST=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_HOST"`

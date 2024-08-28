@@ -123,26 +123,6 @@ Do you confirm this [y/N] ? "
   [ "x$ANS" = "xy" -o "x$ANS" = "xY" ] && break
 done
 
-echo "Updating vigrid.conf..."
-
-T=`date +'+%Y-%m-%d_%H:%M:%S'`
-echo "  Sanity saving it to vigrid.conf.$T"
-cp $VIGRID_CONF $VIGRID_CONF.$T
-
-echo "  Updating file..."
-cat $VIGRID_CONF | grep -v "^VIGRID_GNS_SLAVE_HOSTS" >/tmp/temp$T
-
-if [ "x$VIGRID_GNS_SLAVE_HOSTS" != "x" ]
-then
-  VIGRID_GNS_SLAVE_HOSTS="$VIGRID_GNS_SLAVE_HOSTS $SLAVE_HOST:$SLAVE_IP:$SLAVE_PORT"
-else
-  VIGRID_GNS_SLAVE_HOSTS="$SLAVE_HOST:$SLAVE_IP:$SLAVE_PORT"
-fi
-echo "VIGRID_GNS_SLAVE_HOSTS=\"$VIGRID_GNS_SLAVE_HOSTS\"" >>/tmp/temp$T
-
-mv /tmp/temp$T $VIGRID_CONF
-[ $? -ne 0 ] && echo "Replacement of $VIGRID_CONF failed, no Slave added"
-
 echo "  Adding host to /etc/hosts..."
 CHK_IP=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_IP"`
 CHK_HOST=`cat /etc/hosts|sed 's/#.*$//' | grep "$SLAVE_HOST"`
@@ -156,11 +136,13 @@ else
 fi
 
 echo "  Updating Vigrid API translation table $VIGRID_TRANSLATION_TABLE..."
+[ -f $VIGRID_TRANSLATION_TABLE ] && touch $VIGRID_TRANSLATION_TABLE
+
 CHK=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT=https://$SLAVE_FQDN"`
 if [ "x$CHK" = "x" ]
 then
   CHK=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT="`
-  if [ "x$CHK" = "x" ]
+  if [ "x$CHK" != "x" ]
   then
     echo "    WARNING !! There is already a translation for $SLAVE_IP:$SLAVE_PORT:"
     cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT=" | sed 's/^/    /g'
@@ -171,7 +153,7 @@ else
   echo "    Warning, $SLAVE_IP:$SLAVE_PORT=https://$SLAVE_FQDN already exists"
 fi
 
-echo "  Checking & updating NGinx virtual hosts..."
+echo "  Checking & updating OpenResty virtual hosts..."
 NGINX_CONFIG="
 #
 # Vigrid HTTPS access for Slave %%SLAVE_HOST%% (%%SLAVE_FQDN%%), %%SLAVE_IP%%:%%SLAVE_PORT%%
@@ -197,69 +179,92 @@ server {
   access_log /var/log/nginx/access.log;
   error_log /var/log/nginx/error.log;
 
-  # Vigrid API
-  location /vigrid-api
+  # Vigrid API, load only
+  location ~ ^/vigrid-api/.*\$
   {
-    rewrite ^/vigrid-api/(.*)\$ /vigrid-host-api.html?order=\$1 break;
+    auth_request     /auth;
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
 
-    proxy_pass https://%%SLAVE_IP%%;
-
-    proxy_pass_request_body on;
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    try_files \$uri /vigrid-api/vigrid-api.html?order=\$is_args\$args;
+    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
+    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
+    # Minimum output buffering
+    fastcgi_buffers               2 4k;
+    fastcgi_busy_buffers_size     4k;
+    fastcgi_buffering             off;
+    # fastcgi_buffer_size           8k; 
+    include                       /etc/nginx/fastcgi_params;
+    fastcgi_read_timeout          300;
+    fastcgi_param PATH_INFO       \$fastcgi_path_info;
+    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
+    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
   }
-
+  
   # GNS Heavy client
   location /v2
   {
-    auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
     auth_request_set \$auth_header \$upstream_http_authorization;
 
     proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    # GNS3 maximum timeout = 1h
-    proxy_connect_timeout       3600;
-    proxy_send_timeout          3600;
-    proxy_read_timeout          3600;
-    send_timeout                3600;
 
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
+    proxy_set_header Connection 'Upgrade';
 
-    proxy_pass http://%%SLAVE_IP%%:%%SLAVE_PORT%%;
+    access_by_lua_block
+    {
+      if ngx.var.http_authorization ~= nil and ngx.var.http_authorization:sub(0, 6) == 'Basic ' then
+
+        -- Extract Basic auth
+        auth_creds=string.gsub(ngx.var.http_authorization,'^Basic ','',1)
+        local vigrid_creds = ngx.decode_base64(auth_creds)
+
+        -- Splitting credentials
+        local vigrid_user=string.gsub(vigrid_creds,':.*\$','',1)
+        local vigrid_pass=string.gsub(vigrid_creds,'^.*:','',1)
+        if vigrid_user == '' or vigrid_pass == '' then
+          ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
+          ngx.exit(401)
+          return
+        end
+
+        -- Check user is granted to pass
+        local grep_str=string.format(\"egrep '^%s:{PLAIN}%s\$' /home/gns3/etc/vigrid-passwd\",vigrid_user,vigrid_pass)
+        local p = io.popen(grep_str)
+        local vigrid_check = p:read('*l')
+        p:close()
+        
+        if vigrid_check == nil then
+          ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
+          ngx.exit(401)
+          return
+        end
+
+        -- Yes ? Extract user/pass from gns3_server.conf
+        local p = io.popen(\"egrep '^(user|password)\\\\\\s*=' /home/gns3/.config/GNS3/gns3_server.conf\")
+        local res_user = p:read('*l')
+        local res_pass = p:read('*l')
+        p:close()
+        gns_user=string.gsub(res_user,'^user[ ]+=[ ]+','',1)
+        gns_pass=string.gsub(res_pass,'^password[ ]+=[ ]+','',1)
+
+        -- Build base64 header
+        local basic = string.format('%s:%s',gns_user,gns_pass)
+        local basicb64 = ngx.encode_base64(basic,false)
+
+        -- Replace authorization
+        authorization = string.format('Basic %s',basicb64)
+        ngx.req.set_header('Authorization', authorization)
+
+        return
+      end
+    }
+
+    proxy_pass http://127.0.0.1:3080;
   }
-
-  # GNS Heavy client
-  location /v3
-  {
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    # GNS3 maximum timeout = 1h
-    proxy_connect_timeout       3600;
-    proxy_send_timeout          3600;
-    proxy_read_timeout          3600;
-    send_timeout                3600;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
-
-    proxy_pass http://%%SLAVE_IP%%:%%SLAVE_PORT%%;
-  }
-
+  
   location = /auth
   {
     internal;
@@ -284,7 +289,7 @@ do
   SLAVE_PORT=`echo $i|awk 'BEGIN {FS=":";} { print $3;}'`
   SLAVE_FQDN=`cat $VIGRID_TRANSLATION_TABLE 2>/dev/null | egrep "^$SLAVE_IP:$SLAVE_PORT="| awk -F '=' '{print $NF;}'`
 
-  NGINX_SLAVE_CONFIG="/etc/nginx/sites/CyberRange-$SLAVE_FQDN-443.conf"
+  NGINX_SLAVE_CONFIG="/etc/nginx/sites/CyberRange-$SLAVE_HOST-443.conf"
 
   if [ ! -f $NGINX_SLAVE_CONFIG ]
   then
@@ -295,8 +300,8 @@ do
   fi
 done
 
-echo -n "  Restarting NGinx..."
-service nginx restart
+echo -n "  Restarting OpenResty..."
+service openresty restart
 if [ $? -ne 0 ]
 then
   echo "    Apparently NGinx has some issues and cant restart, please check and correct. Once done, press [RETURN]"
@@ -345,3 +350,23 @@ ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'exportfs -
 
 echo -n "New "
 showmount -e $VIGRID_NAS_IP
+
+echo "Finally updating vigrid.conf..."
+
+T=`date +'+%Y-%m-%d_%H:%M:%S'`
+echo "  Sanity saving it to vigrid.conf.$T"
+cp $VIGRID_CONF $VIGRID_CONF.$T
+
+echo "  Updating file..."
+cat $VIGRID_CONF | grep -v "^VIGRID_GNS_SLAVE_HOSTS" >/tmp/temp$T
+
+if [ "x$VIGRID_GNS_SLAVE_HOSTS" != "x" ]
+then
+  VIGRID_GNS_SLAVE_HOSTS="$VIGRID_GNS_SLAVE_HOSTS $SLAVE_HOST:$SLAVE_IP:$SLAVE_PORT"
+else
+  VIGRID_GNS_SLAVE_HOSTS="$SLAVE_HOST:$SLAVE_IP:$SLAVE_PORT"
+fi
+echo "VIGRID_GNS_SLAVE_HOSTS=\"$VIGRID_GNS_SLAVE_HOSTS\"" >>/tmp/temp$T
+
+mv /tmp/temp$T $VIGRID_CONF
+[ $? -ne 0 ] && echo "Replacement of $VIGRID_CONF failed, no Slave added"

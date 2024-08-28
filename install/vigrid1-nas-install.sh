@@ -985,7 +985,7 @@ server {
   }
 
   # Vigrid API, load only
-  location ~ ^/vigrid-nas-api/.*\$
+  location ~ ^/vigrid-api/.*\$
   {
     fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
     fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;

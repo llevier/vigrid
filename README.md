@@ -116,7 +116,7 @@ Feel free to contact me.
   <TR><TD>Concurrent/conflicting action detector</TD>
   <TD>Queued</TD></TR>
   <TR><TD>Add BTRFS management on servers (strongly encouraging to use BTRfs with SSD only)</TD>
-  <TD>DONE, extensive tests to perform</TD></TR>
+  <TD>DONE, extensive tests to perform, realtime monitoring to add to Vigrid.</TD></TR>
   <TR><TD>Finish snaping/cloning at nodes level</TD>
   <TD>Validated with both FS, queued</TD></TR>
   <TR><TD>Add IPMI support for power control commands (only HP iLO for now)</TD>

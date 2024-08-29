@@ -704,6 +704,9 @@
       if ((!in_array("$str:",$vigrid_hosts)) && (!in_array("$str:local",$vigrid_hosts)))
       { array_push($vigrid_hosts,$gns_controller['computes'][$c]['name'].":".$gns_controller['computes'][$c]['host'].":".$gns_controller['computes'][$c]['port'].":".$gns_controller['computes'][$c]['compute_id']); }
     }
+    
+    // Clean possible mistakes
+    $vigrid_hosts=preg_grep('/::/',$vigrid_hosts,PREG_GREP_INVERT);
 
     // Sort hosts
     natcasesort($vigrid_hosts);

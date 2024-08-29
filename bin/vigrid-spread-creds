@@ -1,0 +1,77 @@
+#!/bin/bash
+#################################################################################################################################
+##
+## This material is part of VIGRID extensions to GNS3 for Trainings & CyberRange designs
+##
+## (c) Laurent LEVIER for script, designs and technical actions, https://github.com/llevier/
+## LICENCE: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA)
+##
+## Each dependancies (c) to their respective owners
+##
+##################################################################################################################################
+
+VIGRID_CONF="/home/gns3/etc/vigrid.conf"
+
+if [ ! -r $VIGRID_CONF ]
+then
+  echo "$VIGRID_CONF file is missing, exiting"
+  exit 1
+fi
+
+. $VIGRID_CONF
+if [ $? -ne 0 ]
+then
+  echo "$VIGRID_CONF load failed, exiting"
+  exit 1
+fi
+
+CHK=`which rsync`
+if [ "x$CHK" = "x" ]
+then
+  echo "I cant find rsync, installing it..."
+  sudo apt install -y rsync
+  [ $? -ne 0 ] && echo "Install failed, exiting..." && exit 1
+fi
+
+VIGRID_SSHKEY=$VIGRID_SSHKEY_GNS
+TARGET=$VIGRID_GNS_SLAVE_HOSTS
+
+HOSTNAME=`hostname`
+
+for i in $VIGRID_GNS_SLAVE_HOSTS
+do
+  NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+  HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+  PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
+  
+  CHK=`echo $HOSTNAME|grep -i "^$NAME"|wc -l`
+  if [ $CHK -eq 0 ]
+  then
+    LIST="$LIST $HOST:$NAME"
+  else
+    echo "Skipping myself..."
+  fi
+done
+
+[ "x$LIST" = "x" ] && echo "Cant determine Vigrid Slaves, exiting" && exit 1
+
+for i in $LIST
+do
+  NAME=`echo $i | awk 'BEGIN { FS=":"; } { print $1; }'`
+  HOST=`echo $i | awk 'BEGIN { FS=":"; } { print $2; }'`
+  PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
+
+  echo
+ 
+  echo "### Spreading Vigrid credentials on $NAME ($HOST):"
+  echo
+
+  rsync -avz --progress --inplace --delete-before --delete -e "ssh -i $VIGRID_SSHKEY $VIGRID_SSHKEY_OPTIONS" /home/gns3/etc/vigrid-passwd gns3@$HOST:/home/gns3/etc/vigrid-passwd
+  if [ $? -ne 0 ]
+  then
+    echo "WARNING: rsync exited with an error !!"
+  fi
+done
+
+echo "### OK ALL DONE"
+

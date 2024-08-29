@@ -502,13 +502,16 @@
         $a_node_is_started=0;
 				for ($pi=0;$pi<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECTS']);$pi++)
         {
-          for ($ni=0;$ni<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES']);$ni++)
+          if (isset($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES']))
           {
-            if  (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['status']=="started")
-              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="ethernet_switch")
-              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="nat")
-              && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="cloud"))
-            { $a_node_is_started=1; break; }
+            for ($ni=0;$ni<sizeof($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES']);$ni++)
+            {
+              if  (($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['status']=="started")
+                && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="ethernet_switch")
+                && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="nat")
+                && ($data_vigrid['GNS3'][$host_ip]['PROJECT_NODES'][$data_vigrid['GNS3'][$host_ip]['PROJECTS'][$pi]['project_id']]['NODES'][$ni]['node_type']!="cloud"))
+              { $a_node_is_started=1; break; }
+            }
           }
           if ($a_node_is_started==1) { break; }
         }

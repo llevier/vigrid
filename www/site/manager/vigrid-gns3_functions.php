@@ -949,19 +949,25 @@
 		// print("<tt>getnodesJSON=$links_json</tt>");
 		$links=json_decode($links_json,true);
 		// print_r($links);
-		for ($i=0;$i<sizeof($links);$i++)
-		{
-			for ($j=0;$j<sizeof($links[$i]['nodes']);$j++)
-			{
-				if ($links[$i]['nodes'][$j]['node_id'] == $node_id) // nodes must match
-				{
-					// print("P=".$project_id.", N=".$node_id.", Port=".$port_number.", Link=".$links[$i]['nodes'][$j]['port_number']."\n");
-					// if ($links[$i]['nodes'][$j]['label']['text'] == $port_number)
-					if (($links[$i]['nodes'][$j]['port_number'] == $port_number) && ($node_info['status']=='started'))
-					{ return (1); }
-				}
-			}
-		}
+    if (isset($links))
+    {
+      for ($i=0;$i<sizeof($links);$i++)
+      {
+        if (isset($links[$i]['nodes']))
+        {
+          for ($j=0;$j<sizeof($links[$i]['nodes']);$j++)
+          {
+            if ($links[$i]['nodes'][$j]['node_id'] == $node_id) // nodes must match
+            {
+              // print("P=".$project_id.", N=".$node_id.", Port=".$port_number.", Link=".$links[$i]['nodes'][$j]['port_number']."\n");
+              // if ($links[$i]['nodes'][$j]['label']['text'] == $port_number)
+              if (($links[$i]['nodes'][$j]['port_number'] == $port_number) && ($node_info['status']=='started'))
+              { return (1); }
+            }
+          }
+        }
+      }
+    }
 		return(0); // unplugged or off
 	}
 

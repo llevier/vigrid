@@ -1,6 +1,6 @@
 # Vigrid
 
-<STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.2">v1.2, validated for Ubuntu 24LTS</A></STRONG>.
+Soon <STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.2">v1.2, validated for Ubuntu 24LTS</A></STRONG>.
 
 Vigrid is an extension to the GNS3 Hypervisor to turn it to a Cyber Range or a industrial training platform.
 

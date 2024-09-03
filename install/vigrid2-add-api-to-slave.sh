@@ -106,7 +106,7 @@ if [ "x$PROG_ARG" = "x" ]
 then
   Display ""
   Display -h -n "
-Vigrid update script: Add Vigrid-API to slaves.
+Vigrid update script: Add Vigrid-API on all slaves.
 
 This script requires to be launched via the vigrid-run command to all/targetted slaves, so Vigrid configuration must be accurate.
 
@@ -146,7 +146,13 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
   . /home/gns3/etc/vigrid.conf
   if [ $? -ne 0 ]
   then
-    Error 'Cant load /home/gns3/etc/vigrid.conf,'
+    Error 'Cant load /home/gns3/etc/vigrid.conf, exiting.'
+    exit 1
+  fi
+
+  if [ $VIGRID_TYPE -ne 3 ]
+  then
+    echo "I am sorry but this is not a Master Vigrid server, exiting"
     exit 1
   fi
   
@@ -157,61 +163,16 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
     HOST=`echo $VIGRID_NAS_SERVER | awk 'BEGIN { FS=":"; } { print $2; }'`
     
     Display -h "    Generating NGinx configuration for Vigrid-NAS ($HOST)"
-    echo "#
-# Vigrid HTTPS access for NAS
-#
-server {
-  listen 127.0.0.1:443 ssl;
-  server_name $NAME;
-
-  # Take fullchain here, not cert.pem
-  ssl_certificate      /etc/nginx/ssl/localhost.crt;
-  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
-
-  ssl_session_cache    builtin:1000 shared:SSL:1m;
-  ssl_session_timeout  5m;
-
-  ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_ciphers  HIGH:!aNULL:!MD5;
-  ssl_prefer_server_ciphers  on;
-
-  # hide version
-  server_tokens        off;
-
-  access_log /var/log/nginx/access.log;
-  error_log /var/log/nginx/error.log;
-
-  # Vigrid API
-  location /vigrid-api
-  {
-    proxy_pass https://$HOST;
-
-    proxy_pass_request_body on;
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection \"Upgrade\";
-  }
-
-  location = /auth
-  {
-    internal;
     
-    proxy_pass             http://localhost:8001;
-    proxy_pass_request_body off;
-    
-    proxy_set_header        Content-Length \"\";
-    proxy_set_header        X-Original-URI \$request_uri;
-    proxy_set_header        X-Original-Host \$host;
-    proxy_set_header        X-Real-IP \$remote_addr;
-    proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header        X-Forwarded-Host \$server_name;  
-  }
-}
-}" >/etc/nginx/conf.d/CyberRange-$NAME-443.conf
+    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_nas.conf /etc/nginx/sites/CyberRange-$NAME-443.conf
+    if [ $? -ne 0 ]
+    then
+      Error 'Cant create CyberRange-$NAME-443.conf from vigrid-www-https-for_nas.conf template, exiting'
+      exit 1
+    fi
+
+    sed -ie "s/%%NAS_HOST%%/$NAME/" /etc/nginx/sites/CyberRange-$NAME-443.conf
+    sed -ie "s/%%NAS_IP%%/$HOST/" /etc/nginx/sites/CyberRange-$NAME-443.conf
   fi  
   
   for i in $VIGRID_GNS_SLAVE_HOSTS
@@ -221,135 +182,21 @@ server {
     PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
 
     Display -h "    Generating NGinx configuration for $HOST"
-    echo "#
-# Vigrid HTTPS access for Extensions + GNS3 Heavy client
-#
-server {
-  listen 127.0.0.1:443 ssl;
-  server_name $NAME;
+    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_slave.conf /etc/nginx/sites/CyberRange-$NAME-443.conf
+    if [ $? -ne 0 ]
+    then
+      Error 'Cant create CyberRange-$NAME-443.conf from vigrid-www-https-for_slave.conf template, exiting'
+      exit 1
+    fi
 
-  # Take fullchain here, not cert.pem
-  ssl_certificate      /etc/nginx/ssl/localhost.crt;
-  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
-
-  ssl_session_cache    builtin:1000 shared:SSL:1m;
-  ssl_session_timeout  5m;
-
-  ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_ciphers  HIGH:!aNULL:!MD5;
-  ssl_prefer_server_ciphers  on;
-
-  # hide version
-  server_tokens        off;
-
-  access_log /var/log/nginx/access.log;
-  error_log /var/log/nginx/error.log;
-
-  # Vigrid API
-  location /vigrid-api
-  {
-    auth_request     /auth;
-
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    proxy_pass_request_body on;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection 'Upgrade';
-
-    proxy_pass https://$HOST;
-  }
-
-  # GNS Heavy client
-  location /v2
-  {
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
-
-    add_header 'Access-Control-Allow-Origin' '*';
-    add_header 'Access-Control-Allow-Credentials' 'true';
-    add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-    add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-
-    if (\$request_method = 'OPTIONS') {
-      add_header 'Access-Control-Allow-Origin' '*';
-      add_header 'Access-Control-Allow-Credentials' 'true';
-      add_header 'Access-Control-Allow-Headers' 'Authorization,Accept,Origin,DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Content-Range,Range';
-      add_header 'Access-Control-Allow-Methods' 'GET,POST,OPTIONS,PUT,DELETE,PATCH';
-
-      # add_header 'Access-Control-Max-Age' 86400;
-      # add_header 'Content-Type' 'text/plain charset=UTF-8';
-
-      add_header 'Content-Length' 0;
-      return 204;
-    }
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    # GNS3 maximum timeout = 1h
-    proxy_connect_timeout       3600;
-    proxy_send_timeout          3600;
-    proxy_read_timeout          3600;
-    send_timeout                3600;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection 'Upgrade';
-
-    proxy_pass https://$HOST:$PORT;
-  }
-
-  # GNS Heavy client
-  location /v3
-  {
-    auth_request     /auth;
-    auth_request_set \$auth_status \$upstream_status;
-    auth_request_set \$auth_header \$upstream_http_authorization;
-
-    proxy_set_header Host \$host;
-    proxy_set_header Authorization \$auth_header;
-
-    # GNS3 maximum timeout = 1h
-    proxy_connect_timeout       3600;
-    proxy_send_timeout          3600;
-    proxy_read_timeout          3600;
-    send_timeout                3600;
-
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection 'Upgrade';
-
-    proxy_pass https://$HOST:$PORT;
-  }
-
-  location = /auth
-  {
-    internal;
-    
-    proxy_pass             http://localhost:8001;
-    proxy_pass_request_body off;
-
-    proxy_set_header        Content-Length '';
-    proxy_set_header        X-Original-URI \$request_uri;
-    proxy_set_header        X-Original-Host \$host;
-    proxy_set_header        X-Real-IP \$remote_addr;
-    proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header        X-Forwarded-Host \$server_name;  
-  }
-}
-" >/etc/nginx/conf.d/CyberRange-$NAME-443.conf
+    sed -ie "s/%%SLAVE_HOST%%/$NAME/" /etc/nginx/sites/CyberRange-$NAME-443.conf
+    sed -ie "s/%%SLAVE_IP%%/$HOST/" /etc/nginx/sites/CyberRange-$NAME-443.conf
+    sed -ie "s/%%SLAVE_PORT%%/$PORT/" /etc/nginx/sites/CyberRange-$NAME-443.conf
   done
   
-  Display -h "    Restarting NGinx on Master"
-  service nginx stop
-  service nginx start
+  Display -h "    Restarting OpenResty on Master"
+  service openresty stop
+  service openresty start
 
   Display "Spreading Vigrid config to slaves..."
   /home/gns3/vigrid/bin/vigrid-spread -K /home/gns3/etc/id_GNS3 -U root -S /home/gns3/etc/vigrid.conf || Error 'Vigrid-spread error,'
@@ -491,163 +338,41 @@ service php$PHP_VER-fpm stop
 service php$PHP_VER-fpm start
 
 # NGinx for Vigrid extensions
-Display -h "Installing NGinx server..."
+Display -h "Installing OpenResty server..."
 Display -h "  Installing required packages..." && apt install -y curl bc gnupg2 ca-certificates lsb-release || Error 'Install failed,'
 
-Display -h "  Updating apt sources for NGinx..."
-echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list || Error 'Update failed,'
-
-Display -h "  Adding NGinx key..."
-curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+Display -h -n "Adding OpenResty for Vigrid-load API..."
+Display -h "  Adding OpenResty key..."
+curl https://openresty.org/package/pubkey.gpg | gpg --dearmor -o /usr/share/keyrings/openresty.gpg
 [ $? -ne 0 ] && Error 'Add failed,'
 
-Display -h "  Updating system..." && apt update -y  || Error 'Update failed,'
-Display -h "  Installing NGinx & extras..." && apt install -y nginx || Error 'Install failed,'
+Display -h "  Updating apt sources for OpenResty..."
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/openresty.list > /dev/null
+ [ $? -ne 0 ] && Error 'Update failed,'
 
-Display -h -n "  Checking NGinx version >=1.19..."
-VER=`nginx -V 2>&1|head -1|sed 's/^.*nginx\///'| awk 'BEGIN { FS="."; } { print $1"."$2; }'`
-if [ 1 -eq "$(echo "$VER >= 1.19" | bc)" ]
+Display -h "  Updating system..." && apt update -y  || Error 'Update failed,'
+Display -h "  Installing OpenResty..." && apt install -y openresty || Error 'Install failed,'
+
+Display -h "  Configuring OpenResty..."
+rm -rf /etc/nginx 2>/dev/null
+ln -s /usr/local/openresty/nginx/conf /etc/nginx
+mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
+
+cp /home/gns3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
+if [ $? -ne 0 ]
 then
-  Display -h "OK"
-else
-  Error "NGinx version ($VER) must be >=1.19."
+  Error 'Cant copy nginx.conf, exiting'
+  exit 1
 fi
 
-Display -h "  Configuring NGinx..."
-rm -f /etc/nginx/conf.d/*
+cp /home/gns3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
+if [ $? -ne 0 ]
+then
+  Error 'Cant create CyberRange-443-api.conf from template, exiting'
+  exit 1
+fi
 
-echo "
-#
-# Vigrid HTTPS access for Vigrid-API
-#
-server {
-  listen 443 ssl default;
-  server_name localhost;
-
-  # Take fullchain here, not cert.pem
-  ssl_certificate      /etc/nginx/ssl/localhost.crt;
-  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
-
-  ssl_session_cache    builtin:1000 shared:SSL:1m;
-  ssl_session_timeout  5m;
-
-  ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_prefer_server_ciphers  on;
-
-  # hide version
-  server_tokens        off;
-
-  access_log /var/log/nginx/access.log;
-  error_log /var/log/nginx/error.log;
-
-  root   /home/gns3/vigrid/www/site;
-
-  # Vigrid home page
-  location /
-  {
-    # sanity
-    location = /favicon.ico { access_log off; log_not_found off; }
-    location = /robots.txt  { log_not_found off; }
-
-    location ~ \.css  { add_header Content-Type text/css; }
-    location ~ \.js   { add_header Content-Type application/x-javascript; }
-    location ~ \.eot  { add_header Content-Type application/vnd.ms-fontobject; }
-    location ~ \.woff { add_header Content-Type font/woff; }
-
-    location ~* \.(htm|html|php)\$
-    {
-      try_files                     \$uri =404;
-      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
-      fastcgi_index                 index.html;
-      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-      # Minimum output buffering
-      fastcgi_buffers               2 4k;
-      fastcgi_busy_buffers_size     4k;
-      fastcgi_buffering             off;
-      # fastcgi_buffer_size           8k; 
-      include                       /etc/nginx/fastcgi_params;
-      fastcgi_read_timeout          300;
-      fastcgi_param PATH_INFO       \$fastcgi_path_info;
-      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-    }
-  }
-
-  location /manager
-  {
-    deny all;
-    return 404;
-  }
-
-  # Vigrid API, load only
-  location ~ ^/vigrid-api/.*\$
-  {
-    try_files \$uri /vigrid-api/vigrid-api.html?order=\$is_args\$args;
-    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
-    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-    # Minimum output buffering
-    fastcgi_buffers               2 4k;
-    fastcgi_busy_buffers_size     4k;
-    fastcgi_buffering             off;
-    # fastcgi_buffer_size           8k; 
-    include                       /etc/nginx/fastcgi_params;
-    fastcgi_read_timeout          300;
-    fastcgi_param PATH_INFO       \$fastcgi_path_info;
-    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
-    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
-  }
-
-  location ~ ^/(images|javascript|js|css|flash|media|static|font)/  {
-    expires 7d;
-  }
-
-  location ~ /\.ht {
-      deny  all;
-  }
-
-  try_files \$uri \$uri/ /index.html?\$args /index.htm?\$args /index.php?\$args;
-}
-" >>/etc/nginx/conf.d/CyberRange-443-api.conf
-
-echo "#
-# Vigrid NGinx configuration file
-#
-worker_processes auto;
-pid /run/nginx.pid;
-include /etc/nginx/modules-enabled/*.conf;
-
-user www-data;
-
-events {
-        worker_connections 2048;
-}
-
-http {
-
-        sendfile on;
-        tcp_nopush on;
-        tcp_nodelay on;
-        keepalive_timeout 65;
-        types_hash_max_size 2048;
-
-        server_tokens off;
-
-        include /etc/nginx/mime.types;
-        default_type application/octet-stream;
-  
-        # Logging Settings
-        access_log /var/log/nginx/access.log;
-        error_log /var/log/nginx/error.log;
-
-        # Gzip Settings
-        gzip on;
-
-        # Appliance or whatever upload, applies to all
-        client_max_body_size 8192M; # 8GB
-
-        # Virtual Host Configs
-        include /etc/nginx/conf.d/*.conf;
-}
-" >/etc/nginx/nginx.conf
+sed -ie "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
 
 Display -h "Adding www-data user to gns3 group..."
 usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'
@@ -657,9 +382,9 @@ mkdir -p /etc/nginx/ssl >/dev/null 2>/dev/null
 ( printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth") | openssl req -x509 -out /etc/nginx/ssl/localhost.crt -keyout /etc/nginx/ssl/localhost.key -newkey rsa:2048 -nodes -sha256 -subj '/CN=localhost' || Error 'Certificate generation failed,'
 
 Display -h "Enabling & starting NGinx..."
-systemctl enable nginx
-service nginx stop
-service nginx start
+systemctl enable openresty
+service openresty stop
+service openresty start
 
 ################################
 

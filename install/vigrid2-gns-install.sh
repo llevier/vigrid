@@ -969,21 +969,30 @@ fi
 
 CHK=`which git`
 [ "x$CHK" = "x" ] && apt install -y git
+
+VIGRID_HOME=""
 if [ -d /home/gns3/vigrid ]
 then
-  cd /home/gns3/vigrid && git config --global --add safe.directory /home/gns3/vigrid && git pull || echo Vigrid update failed
+  VIGRID_HOME="/home/gns3/vigrid"
 elif [ -d /Vstorage/home/gns3/vigrid ]
 then
-  cd /Vstorage/home/gns3/vigrid && git config --global --add safe.directory /Vstorage/home/gns3/vigrid && git pull || echo Vigrid update failed
+  VIGRID_HOME="/Vstorage/home/gns3/vigrid"
 elif [ -d /Vstorage/GNS3/vigrid ]
 then
-  cd /Vstorage/GNS3/vigrid && git config --global --add safe.directory /Vstorage/GNS3/vigrid && git pull || echo Vigrid update failed
-else
-  cd /home/gns3 && git clone https://github.com/llevier/vigrid.git || echo Vigrid update failed
+  VIGRID_HOME="/Vstorage/GNS3/vigrid"
 fi
 
-echo "Resetting /home/gns3/vigrid permissions (need root privilege)..."
-chown -R gns3:gns3 /home/gns3/vigrid  >/dev/null 2>/dev/null
+echo "Vigrid home is $VIGRID_HOME"
+
+if [ "x$VIGRID_HOME" != "x" ]
+then
+  cd $VIGRID_HOME && git config --global --add safe.directory $VIGRID_HOME && git pull || echo Vigrid update failed
+  echo "Resetting $VIGRID_HOME permissions (need root privilege)..."
+  chown -R gns3:gns3 $VIGRID_HOME >/dev/null 2>/dev/null
+else
+  cd /home/gns3 && git clone https://github.com/llevier/vigrid.git || echo Vigrid update failed
+  chown -R gns3:gns3 /home/gns3/vigrid >/dev/null 2>/dev/null
+fi
 
 VIGRID_CONFIG="/home/gns3/etc/vigrid.conf"
 [ -f $VIGRID_CONFIG ] && . $VIGRID_CONFIG
@@ -2251,7 +2260,7 @@ server {
   }
 
   # Vigrid API, load only
-  location ~ ^/vigrid-api/.*\$
+  location ^~ /vigrid-api/.*\$
   {
     auth_request     /auth;
     auth_request_set \$auth_status \$upstream_status;
@@ -2272,7 +2281,70 @@ server {
     fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-api.html?order=\$1;
   }
 
-  location /v2
+  location ^~ /v2
+  {
+    auth_request_set \$auth_status \$upstream_status;
+    auth_request_set \$auth_header \$upstream_http_authorization;
+
+    proxy_set_header Host \$host;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection 'Upgrade';
+
+    access_by_lua_block
+    {
+      if ngx.var.http_authorization ~= nil and ngx.var.http_authorization:sub(0, 6) == 'Basic ' then
+
+        -- Extract Basic auth
+        auth_creds=string.gsub(ngx.var.http_authorization,'^Basic ','',1)
+        local vigrid_creds = ngx.decode_base64(auth_creds)
+
+        -- Splitting credentials
+        local vigrid_user=string.gsub(vigrid_creds,':.*\$','',1)
+        local vigrid_pass=string.gsub(vigrid_creds,'^.*:','',1)
+        if vigrid_user == '' or vigrid_pass == '' then
+          ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
+          ngx.exit(401)
+          return
+        end
+
+        -- Check user is granted to pass
+        local grep_str=string.format(\"egrep '^%s:{PLAIN}%s\$' /home/gns3/etc/vigrid-passwd\",vigrid_user,vigrid_pass)
+        local p = io.popen(grep_str)
+        local vigrid_check = p:read('*l')
+        p:close()
+        
+        if vigrid_check == nil then
+          ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
+          ngx.exit(401)
+          return
+        end
+
+        -- Yes ? Extract user/pass from gns3_server.conf
+        local p = io.popen(\"egrep '^(user|password)\\\\\\s*=' /home/gns3/.config/GNS3/gns3_server.conf\")
+        local res_user = p:read('*l')
+        local res_pass = p:read('*l')
+        p:close()
+        gns_user=string.gsub(res_user,'^user[ ]+=[ ]+','',1)
+        gns_pass=string.gsub(res_pass,'^password[ ]+=[ ]+','',1)
+
+        -- Build base64 header
+        local basic = string.format('%s:%s',gns_user,gns_pass)
+        local basicb64 = ngx.encode_base64(basic,false)
+
+        -- Replace authorization
+        authorization = string.format('Basic %s',basicb64)
+        ngx.req.set_header('Authorization', authorization)
+
+        return
+      end
+    }
+
+    proxy_pass http://127.0.0.1:3080;
+  }
+
+  location ^~ /static
   {
     auth_request_set \$auth_status \$upstream_status;
     auth_request_set \$auth_header \$upstream_http_authorization;
@@ -3597,7 +3669,7 @@ Points you might wish to review/consider:
 - Add at login '/home/gns3/vigrid/bin:/home/gns3/bin' (**/home/gns3/vigrid/bin must be first**) to your PATH
 - Postfix or SMTP relay configuration to be able to send email to clone owners
 - PHP FPM pool 'request_terminate_timeout' on big infrastructures
-- NGinx configuration for location /v2 & /v3, timeouts again but for GNS3 this time:  proxy_connect_timeout, proxy_send_timeout, proxy_read_timeout & send_timeout for big appliance images upload
+- NGinx configuration for location /v2, timeouts again but for GNS3 this time:  proxy_connect_timeout, proxy_send_timeout, proxy_read_timeout & send_timeout for big appliance images upload
 
 - Network configuration (DHCP client vs static, conflicting DHCP servers, default route, DNS resolving etc)
 - NTP synchronization of server(s)"

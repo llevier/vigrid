@@ -940,104 +940,21 @@ rm -rf /etc/nginx 2>/dev/null
 ln -s /usr/local/openresty/nginx/conf /etc/nginx
 mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
 
-  echo "#
-# Vigrid Vigrid-load API
-#
-server {
-  listen 443 ssl default;
-  server_name localhost;
+cp /home/gns3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
+if [ $? -ne 0 ]
+then
+  Error 'Cant copy nginx.conf, exiting'
+  exit 1
+fi
 
-  # Take fullchain here, not cert.pem
-  ssl_certificate      /etc/nginx/ssl/localhost.crt;
-  ssl_certificate_key  /etc/nginx/ssl/localhost.key;
+cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
+if [ $? -ne 0 ]
+then
+  Error 'Cant create CyberRange-443-api.conf from template, exiting'
+  exit 1
+fi
 
-  ssl_session_cache    builtin:1000 shared:SSL:1m;
-  ssl_session_timeout  5m;
-
-  ssl_protocols   TLSv1.2 TLSv1.3;
-  ssl_prefer_server_ciphers  on;
-
-  # hide version
-  server_tokens        off;
-
-  access_log /var/log/nginx/access.log;
-  error_log /var/log/nginx/error.log;
-
-  root  /$FS_ROOT/GNS3/vigrid/www/site;
-
-  # Vigrid home page
-  location /
-  {
-    # sanity
-    location = /favicon.ico { access_log off; log_not_found off; }
-    location = /robots.txt  { log_not_found off; }
-
-    location ~* \.(htm|html|php)\$
-    {
-      try_files \$uri =404;
-      fastcgi_split_path_info       ^(.+\.html)(/.+)\$;
-      fastcgi_index                 index.html;
-      fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-      include                       /etc/nginx/fastcgi_params;
-      fastcgi_param PATH_INFO       \$fastcgi_path_info;
-      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-    }
-  }
-
-  # Vigrid API, load only
-  location ~ ^/vigrid-api/.*\$
-  {
-    fastcgi_split_path_info       ^/(.+\/vigrid-api)(/.+)\$;
-    fastcgi_pass                  unix:/run/php/php$PHP_VER-fpm.sock;
-    # Minimum output buffering
-    fastcgi_buffers               2 4k;
-    fastcgi_busy_buffers_size     4k;
-    fastcgi_buffering             off;
-    # fastcgi_buffer_size           8k; 
-    include                       /etc/nginx/fastcgi_params;
-    fastcgi_read_timeout          300;
-    fastcgi_param PATH_INFO       \$fastcgi_path_info;
-    fastcgi_param HTTP_AUTHORIZATION \$http_authorization;
-    fastcgi_param SCRIPT_FILENAME \$document_root/vigrid-api/vigrid-nas-api.html;
-  }
-}
-" >>/etc/nginx/sites/CyberRange-443.conf
-
-  echo "#
-# Vigrid OpenResty/NGinx configuration file
-#
-worker_processes auto;
-pid logs/nginx.pid;
-
-user www-data;
-
-events {
-  worker_connections 2048;
-}
-
-http {
-  sendfile on;
-  tcp_nopush on;
-  tcp_nodelay on;
-  keepalive_timeout 65;
-  types_hash_max_size 2048;
-
-  server_tokens off;
-
-  include /etc/nginx/mime.types;
-  default_type application/octet-stream;
-
-  # Logging Settings
-  access_log /var/log/nginx/access.log;
-  error_log /var/log/nginx/error.log;
-
-  # Gzip Settings
-  gzip on;
-
-  # Virtual Host Configs
-  include /etc/nginx/sites/*.conf;
-}
-" >/etc/nginx/nginx.conf
+sed -ie "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
 
 Display -h "Adding www-data user to gns3 group..."
 usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'

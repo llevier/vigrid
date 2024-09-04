@@ -940,19 +940,11 @@ rm -rf /etc/nginx 2>/dev/null
 ln -s /usr/local/openresty/nginx/conf /etc/nginx
 mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
 
-cp /home/gns3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
-if [ $? -ne 0 ]
-then
-  Error 'Cant copy nginx.conf, exiting'
-  exit 1
-fi
+cp /Vstorage/GNS3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
+[ $? -ne 0 ] && Error 'Cant copy nginx.conf, '
 
 cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
-if [ $? -ne 0 ]
-then
-  Error 'Cant create CyberRange-443-api.conf from template, exiting'
-  exit 1
-fi
+[ $? -ne 0 ] && Error 'Cant create CyberRange-443-api.conf from template, exiting'
 
 sed -ie "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
 

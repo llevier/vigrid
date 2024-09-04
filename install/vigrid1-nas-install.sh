@@ -947,6 +947,8 @@ cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/s
 [ $? -ne 0 ] && Error 'Cant create CyberRange-443-api.conf from template, exiting'
 
 sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
+sed -i "s/%%VIGRID_ROOT%%/\/Vstorage\/GNS3\/vigrid/" /etc/nginx/sites/CyberRange-443-api.conf
+sed -i "s/%%VIGRID_API%%/vigrid-nas-api" /etc/nginx/sites/CyberRange-443-api.conf
 
 Display -h "Adding www-data user to gns3 group..."
 usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'

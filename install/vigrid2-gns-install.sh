@@ -2148,6 +2148,8 @@ request_terminate_timeout = 300
     fi
 
     sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
+    sed -i "s/%%VIGRID_ROOT%%/\/home/gns3\/vigrid/" /etc/nginx/sites/CyberRange-443-api.conf
+    sed -i "s/%%VIGRID_API%%/vigrid-api" /etc/nginx/sites/CyberRange-443-api.conf
   fi
 
   cp /home/gns3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf

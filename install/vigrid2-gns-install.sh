@@ -2125,7 +2125,7 @@ request_terminate_timeout = 300
       exit 1
     fi
 
-    sed -ie "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/vigrid-www-auth.conf
+    sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/vigrid-www-auth.conf
   fi
   
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
@@ -2137,17 +2137,17 @@ request_terminate_timeout = 300
       exit 1
     fi
 
-    sed -ie "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443.conf
+    sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443.conf
   else
     # For Vigrid slave, Vigrid-API for loads
-    cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
+    cp /home/gns3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
     if [ $? -ne 0 ]
     then
       Error 'Cant create CyberRange-443-api.conf from template, exiting'
       exit 1
     fi
 
-    sed -ie "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
+    sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
   fi
 
   cp /home/gns3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
@@ -2183,7 +2183,7 @@ request_terminate_timeout = 300
     Display -h "Installing SSLh..." && apt install -y sslh || Error 'Install failed,'
     Display -h "  Updating SSLh starting script (bug in permission in /var/run/sslh) ..."
     systemctl disable --now sslh
-    sed -ie 's/^\[Service\].*$/&\nRuntimeDirectory=sslh/g' /usr/lib/systemd/system/sslh.service
+    sed -i 's/^\[Service\].*$/&\nRuntimeDirectory=sslh/g' /usr/lib/systemd/system/sslh.service
     systemctl enable --now sslh
   fi
 

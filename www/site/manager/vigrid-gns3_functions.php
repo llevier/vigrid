@@ -1661,4 +1661,36 @@
   
     return($url);
   }    
+
+  function VIGRIDget_translation_url($wanted_gnsip,$wanted_gnsport)
+  {
+    $translation_file="/home/gns3/etc/vigrid-translation-table.conf";
+    
+    if (($wanted_gnsip=="") || (($wanted_gnsport<1) || ($wanted_gnsport>65535))) { return(""); }
+    
+    $fd=fopen($translation_file,"r");
+    if (!$fd) { print("Cant open $translation_file !!\n"); return(""); }
+    while (($line = fgets($fd, 4096)) !== false)
+    {
+      // Lines are: GNS_IP:GNS_PORT=URL_WITH_FQDN
+      $line=trim($line);
+      
+      $f=explode(":",$line);
+      $var_gnsip=$f[0];
+
+      $t=explode("=",$f[1]);
+      $var_gnsport=$t[0];
+
+      $f=explode("=",$line);
+      $var_gnsurl=$f[1];
+
+      if (($var_gnsip==$wanted_gnsip) && ($var_gnsport==$wanted_gnsport)) // Matching GNS IP+port, extract URI
+      {
+        fclose($fd);
+        return($var_gnsurl);
+      }
+    }
+    fclose($fd);
+    return("");
+  }
 ?>

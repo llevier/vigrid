@@ -581,14 +581,20 @@
 
                 print("<A HREF=\"".$new_url."\">".$host_name."</A>");
 
-                if (gethostname()==$host_name)
+                // Display WebUI icon
+                $myself_host="";
+                if (gethostname()==$host_name) // Master
+                { $webui_url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST']; }
+                else // Slave
+                { $webui_url=VIGRIDget_translation_url($host_ip,$host_port); }
+
+                if ($webui_url!="")
                 {
-                  // Display WebUI icon for myself only
-                  $webui_url=(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http")."://".$_SERVER['HTTP_HOST'];
                   $webui_url=$webui_url."/static/web-ui/servers";
-                  print("&nbsp;<A HREF=\"".$webui_url."\" TARGET=_webui><IMG SRC=\"/images/webui.png\"  WIDTH=48 HEIGHT=32></A>");
-                  print("</B>");
+                  print("&nbsp;<A HREF=\"".$webui_url."\" TARGET=_webui><IMG SRC=\"/images/webui.png\"  WIDTH=40 HEIGHT=25></A>");
                 }
+
+                if (gethostname()==$host_name) { print("</B>"); }
 
                 print("</TD>");
 

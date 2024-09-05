@@ -27,6 +27,7 @@ Major topics of Vigrid 1.2:
 <li>SSLh arguments are modified to reflect SSLh changes + corrected systemd config.</li>
 <li>OpenResty replaces NGinx.</li>
 <li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li></ul>
+<li>It is now possible to access GNS3 WebUI with Vigrid authentication (master only at start, later will include all slaves).</li></ul>
 
 <BR><STRONG>IMPORTANT</STRONG>
 GNS3 v3.0.0rc1 now provides RBAC. It has been tested RBAC works fine. With this, Vigrid can now also be a training environnment.

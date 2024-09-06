@@ -115,7 +115,7 @@ Everything will be logged to $LOG_FILE.
 
 Upon any question with default answer, validate the choice.
 IMPORTANT: if this server is using DHCP, I'll set the IP address to the one obtained. This IP might change in the future,
-especially if you select CyberRange designs.
+especially if you selected CyberRange designs.
 
 #############################################################################################
 
@@ -146,7 +146,7 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
   . /home/gns3/etc/vigrid.conf
   if [ $? -ne 0 ]
   then
-    Error 'Cant load /home/gns3/etc/vigrid.conf, exiting.'
+    Error 'Cant load /home/gns3/etc/vigrid.conf, am I on a Vigrid Master server ? Exiting.'
     exit 1
   fi
 
@@ -164,15 +164,18 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
     
     Display -h "    Generating NGinx configuration for Vigrid-NAS ($HOST)"
     
-    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_nas.conf /etc/nginx/sites/CyberRange-$NAME-443.conf
-    if [ $? -ne 0 ]
+    if [ -f /etc/nginx/sites/CyberRange-443-$NAME.conf ]
     then
-      Error 'Cant create CyberRange-$NAME-443.conf from vigrid-www-https-for_nas.conf template, exiting'
-      exit 1
-    fi
+      cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_nas.conf /etc/nginx/sites/CyberRange-443-$NAME.conf
+      if [ $? -ne 0 ]
+      then
+        echo 'Cant create CyberRange-443-$NAME.conf from vigrid-www-https-for_nas.conf template, exiting'
+        exit 1
+      fi
 
-    sed -ie "s/%%NAS_HOST%%/$NAME/" /etc/nginx/sites/CyberRange-$NAME-443.conf
-    sed -ie "s/%%NAS_IP%%/$HOST/" /etc/nginx/sites/CyberRange-$NAME-443.conf
+      sed -ie "s/%%NAS_HOST%%/$NAME/" /etc/nginx/sites/CyberRange-443-$NAME.conf
+      sed -ie "s/%%NAS_IP%%/$HOST/" /etc/nginx/sites/CyberRange-443-$NAME.conf
+    fi
   fi  
   
   for i in $VIGRID_GNS_SLAVE_HOSTS
@@ -182,16 +185,16 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
     PORT=`echo $i | awk 'BEGIN { FS=":"; } { print $3; }'`
 
     Display -h "    Generating NGinx configuration for $HOST"
-    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_slave.conf /etc/nginx/sites/CyberRange-$NAME-443.conf
+    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_slave.conf /etc/nginx/sites/CyberRange-443-$NAME.conf
     if [ $? -ne 0 ]
     then
-      Error 'Cant create CyberRange-$NAME-443.conf from vigrid-www-https-for_slave.conf template, exiting'
+      Error 'Cant create CyberRange-443-$NAME.conf from vigrid-www-https-for_slave.conf template, exiting'
       exit 1
     fi
 
-    sed -ie "s/%%SLAVE_HOST%%/$NAME/" /etc/nginx/sites/CyberRange-$NAME-443.conf
-    sed -ie "s/%%SLAVE_IP%%/$HOST/" /etc/nginx/sites/CyberRange-$NAME-443.conf
-    sed -ie "s/%%SLAVE_PORT%%/$PORT/" /etc/nginx/sites/CyberRange-$NAME-443.conf
+    sed -ie "s/%%SLAVE_HOST%%/$NAME/" /etc/nginx/sites/CyberRange-443-$NAME.conf
+    sed -ie "s/%%SLAVE_IP%%/$HOST/" /etc/nginx/sites/CyberRange-443-$NAME.conf
+    sed -ie "s/%%SLAVE_PORT%%/$PORT/" /etc/nginx/sites/CyberRange-443-$NAME.conf
   done
   
   Display -h "    Restarting OpenResty on Master"
@@ -210,7 +213,10 @@ First, do you wish to change [BACKSPACE], sometimes there are some issues with t
   exit
 fi
 
-############## Part of script to run on Slave(s)
+############## Part of script to run on Slave(s) or NAS
+
+VIGRID_ROOT="/home/gns3/vigrid"
+# [ "x$PROG_ARG" = "xNAS" ] && VIGRID_ROOT="/Vstorage/GNS3/vigrid"
 
 HOST=`hostname`
 Display "Adding API to Slave $HOST..."
@@ -228,109 +234,8 @@ Display -h "    Removing default PHP pools..."
 rm /etc/php/$PHP_VER/fpm/pool.d/* || Error 'Cant remove pool,'
 
 Display -h "    Adding Vigrid standard pool..."
-echo "; Start a new pool named 'vigrid-www'.
-; the variable $pool can be used in any directive and will be replaced by the
-; pool name ('www' here)
-[gns3-www]
-
-; Unix user/group of processes
-; Note: The user is mandatory. If the group is not set, the default user's group
-;       will be used.
-user = www-data
-group = www-data
-
-; The address on which to accept FastCGI requests.
-; Valid syntaxes are:
-;   'ip.add.re.ss:port'    - to listen on a TCP socket to a specific IPv4 address on
-;                            a specific port;
-;   '[ip:6:addr:ess]:port' - to listen on a TCP socket to a specific IPv6 address on
-;                            a specific port;
-;   'port'                 - to listen on a TCP socket to all addresses
-;                            (IPv6 and IPv4-mapped) on a specific port;
-;   '/path/to/unix/socket' - to listen on a unix socket.
-; Note: This value is mandatory.
-listen = /run/php/php$PHP_VER-fpm.sock
-
-; Set permissions for unix socket, if one is used. In Linux, read/write
-; permissions must be set in order to allow connections from a web server. Many
-; BSD-derived systems allow connections regardless of permissions.
-; Default Values: user and group are set as the running user
-;                 mode is set to 0660
-listen.owner = www-data
-listen.group = www-data
-;listen.mode = 0660
-
-; Choose how the process manager will control the number of child processes.
-; Possible Values:
-;   static  - a fixed number (pm.max_children) of child processes;
-;   dynamic - the number of child processes are set dynamically based on the
-;             following directives. With this process management, there will be
-;             always at least 1 children.
-;             pm.max_children      - the maximum number of children that can
-;                                    be alive at the same time.
-;             pm.start_servers     - the number of children created on startup.
-;             pm.min_spare_servers - the minimum number of children in 'idle'
-;                                    state (waiting to process). If the number
-;                                    of 'idle' processes is less than this
-;                                    number then some children will be created.
-;             pm.max_spare_servers - the maximum number of children in 'idle'
-;                                    state (waiting to process). If the number
-;                                    of 'idle' processes is greater than this
-;                                    number then some children will be killed.
-;  ondemand - no children are created at startup. Children will be forked when
-;             new requests will connect. The following parameter are used:
-;             pm.max_children           - the maximum number of children that
-;                                         can be alive at the same time.
-;             pm.process_idle_timeout   - The number of seconds after which
-;                                         an idle process will be killed.
-; Note: This value is mandatory.
-pm = dynamic
-
-; The number of child processes to be created when pm is set to 'static' and the
-; maximum number of child processes when pm is set to 'dynamic' or 'ondemand'.
-; This value sets the limit on the number of simultaneous requests that will be
-; served. Equivalent to the ApacheMaxClients directive with mpm_prefork.
-; Equivalent to the PHP_FCGI_CHILDREN environment variable in the original PHP
-; CGI. The below defaults are based on a server without much resources. Don't
-; forget to tweak pm.* to fit your needs.
-; Note: Used when pm is set to 'static', 'dynamic' or 'ondemand'
-; Note: This value is mandatory.
-pm.max_children = 8
-
-; The number of child processes created on startup.
-; Note: Used only when pm is set to 'dynamic'
-; Default Value: min_spare_servers + (max_spare_servers - min_spare_servers) / 2
-pm.start_servers = 4
-
-; The desired minimum number of idle server processes.
-; Note: Used only when pm is set to 'dynamic'
-; Note: Mandatory when pm is set to 'dynamic'
-pm.min_spare_servers = 2
-
-; The desired maximum number of idle server processes.
-; Note: Used only when pm is set to 'dynamic'
-; Note: Mandatory when pm is set to 'dynamic'
-pm.max_spare_servers = 5
-
-; Limits the extensions of the main script FPM will allow to parse. This can
-; prevent configuration mistakes on the web server side. You should only limit
-; FPM to .php extensions to prevent malicious users to use other extensions to
-; execute php code.
-; Note: set an empty value to allow all extensions.
-; Default Value: .php
-;security.limit_extensions = .php .php3 .php4 .php5 .php7
-security.limit_extensions = .php .php3 .php4 .php5 .php7 .html .htm
-
-; Extending default PHP script timeout
-request_terminate_timeout = 300
-
-; Default Value: nothing is defined by default except the values in php.ini and
-;                specified at startup with the -d argument
-;php_admin_value[sendmail_path] = /usr/sbin/sendmail -t -i -f www@my.domain.com
-;php_flag[display_errors] = off
-;php_admin_value[error_log] = /var/log/fpm-php.www.log
-;php_admin_flag[log_errors] = on
-;php_admin_value[memory_limit] = 32M" >/etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
+cp $VIGRID_ROOT/confs/php/php-pfm-pool.d-vigrid-www.conf /etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
+sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
 
 Display -h "Enabling & starting PHP-FPM..."
 systemctl enable php$PHP_VER-fpm
@@ -358,14 +263,14 @@ rm -rf /etc/nginx 2>/dev/null
 ln -s /usr/local/openresty/nginx/conf /etc/nginx
 mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
 
-cp /home/gns3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
+cp /$VIGRID_ROOT/confs/nginx/nginx.conf /etc/nginx/nginx.conf
 if [ $? -ne 0 ]
 then
   Error 'Cant copy nginx.conf, exiting'
   exit 1
 fi
 
-cp /home/gns3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
+cp $VIGRID_ROOT/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
 if [ $? -ne 0 ]
 then
   Error 'Cant create CyberRange-443-api.conf from template, exiting'
@@ -390,7 +295,7 @@ service openresty start
 
 # Adding Vigrid monitoring
 Display "Installing & enabling Vigrid-load monitoring..."
-cp /home/gns3/vigrid/etc/init.d/vigrid-load /etc/init.d/
+cp $VIGRID_ROOT/etc/init.d/vigrid-load /etc/init.d/
 systemctl enable --now vigrid-load
 
 Display -h ""

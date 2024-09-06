@@ -22,7 +22,7 @@ do
         s)      SSHKEY="$OPTARG";;
         u)      USER="$OPTARG";;
         [?])
-          print $USAGE
+          echo $USAGE
           exit 1
     ;;
    esac

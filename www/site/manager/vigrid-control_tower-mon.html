@@ -215,19 +215,15 @@
       // Check SSH access for not Standalone servers
       if (VIGRIDconfig("VIGRID_TYPE")!=1)
       {
-        if (isset($data_vigrid_stats['STATS'][$host_ip]))
+        if ($host_name!=gethostname())
         {
-          if ($host_name!=gethostname())
-          {
-            if (VIGRIDssh_check($host_ip,VIGRIDconfig("VIGRID_SSHKEY_GNS"),"gns3")==0)
-            { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_on.png\" WIDTH=20 HEIGTH=20></TD>"); }
-            else
-            { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
-          }
+          if (VIGRIDssh_check($host_ip,VIGRIDconfig("VIGRID_SSHKEY_GNS"),"gns3")==0)
+          { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_on.png\" WIDTH=20 HEIGTH=20></TD>"); }
           else
-          { print("<TD ALIGN=CENTER>N/A</TD>"); }
+          { print("<TD ALIGN=CENTER><IMG SRC=\"/images/check_off.png\" WIDTH=20 HEIGTH=20></TD>"); }
         }
-        else { print("<TD></TD>"); }
+        else
+        { print("<TD ALIGN=CENTER>N/A</TD>"); }
       }
             
       print("<TD ALIGN=RIGHT>".    $host_ip."</TD>");

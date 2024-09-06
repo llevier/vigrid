@@ -176,7 +176,7 @@ else
   sed -i "s/%%SLAVE_FQDN%%/$SLAVE_FQDN/" $NGINX_SLAVE_CONFIG
 fi
 
-echo -n "  Restarting OpenResty..."
+echo "  Restarting OpenResty..."
 service openresty restart
 if [ $? -ne 0 ]
 then

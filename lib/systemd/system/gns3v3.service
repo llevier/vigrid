@@ -1,0 +1,29 @@
+[Unit]
+Description=GNS3v3 server
+Wants=network-online.target
+After=network.target network-online.target remote-fs.target
+
+[Service]
+Type=forking
+User=gns3
+Group=gns3
+PermissionsStartOnly=true
+#Environment=\"TMPDIR=/home/gns3/GNS3/tmp\"
+
+RuntimeDirectoryPreserve=yes
+PIDFile=/run/gns3/gns3v3.pid
+
+ExecStartPre=sudo /home/gns3/vigrid/etc/init.d/vigrid start
+ExecStart=/usr/local/bin/gns3server --config /home/gns3/.config/GNS3/3.0/gns3_server.conf --log /var/log/gns3/gns3v3.log --pid /run/gns3/gns3v3.pid --daemon
+Restart=on-abort
+
+ExecReload=/home/gns3/vigrid/etc/init.d/vigrid start
+ExecReload=/bin/kill -HUP $MAINPID
+
+ExecStop=/bin/kill -TERM $MAINPID
+TimeoutStopSec=300
+
+UMask=022
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@ Group=gns3
 PermissionsStartOnly=true
 #Environment=\"TMPDIR=/home/gns3/GNS3/tmp\"
 
+RuntimeDirectoryPreserve=yes
 PIDFile=/run/gns3/gns3.pid
 
 ExecStartPre=sudo /home/gns3/vigrid/etc/init.d/vigrid start

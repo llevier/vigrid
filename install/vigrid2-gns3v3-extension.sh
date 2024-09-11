@@ -78,8 +78,11 @@ echo "    RELEASE=$GNS_RELEASE"
 cd $GNS_ROOT/gns3$GNS_VERSION/gns3-server-$GNS_RELEASE
 [ $? -ne 0 ] && echo "I cant cd to $GNS_ROOT/gns3$GNS_VERSION/gns3-server-$GNS_RELEASE, exiting" && exit 1
 
-echo "### Resetting Python from 'externally-managed-environment'" 
-rm -f /usr/lib/python3.12/EXTERNALLY-MANAGED 2>/dev/null
+if [ -f /usr/lib/python3.12/EXTERNALLY-MANAGED ]
+then
+  echo "### Resetting Python from 'externally-managed-environment'" 
+  rm -f /usr/lib/python3.12/EXTERNALLY-MANAGED 2>/dev/null
+fi
 
 echo "### Running GNS3 Dockerfile..."
 while IFS= read LINE
@@ -177,12 +180,18 @@ else
       echo "Fully enabling GNS3v3 service..."
       systemctl enable --now gns3v3server
       GNSv3_UP="OK"
+    fi
   done
 fi
 
 if [ "x$GNSv3_UP" != "x" ]
 then
-  GNS_VERSION=`curl http://localhost:3080/v3/version 2>/dev/null | jq .version | sed 's/"//g'`
+  if [ "x$HOSTNAME_NEW" != "x" ] # Vigrid
+  then
+    GNS_VERSION=`curl http://localhost:3083/v3/version 2>/dev/null | jq .version | sed 's/"//g'`
+  else
+    GNS_VERSION=`curl http://localhost:3080/v3/version 2>/dev/null | jq .version | sed 's/"//g'`
+ fi
   CHK=`echo $GNS_VERSION|grep "^3"`
 
   if [ "x$CHK" = "x" ]
@@ -190,7 +199,7 @@ then
     echo "There might be a problem, I cant find GNS3v3 listening on localhost:3080. Please check"
     exit 1
   else
-    echo "### Great, I detect GNS3v$GNS_VERSION listening on localhost:3080. Job done"
+    echo "### Great, I detect GNS3v$GNS_VERSION listening on localhost:3080, GNS3v3 should now be available."
     echo "    PLEASE NOTICE:"
     echo "    - DEFAULT GNS3v3 CREDENTIALS are: user=admin, password=admin"
     echo "    - Direct Heavy client access is performed thru: http://$HOSTNAME_NEW:443"

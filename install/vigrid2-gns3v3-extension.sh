@@ -16,7 +16,7 @@ echo "Script to migration to GNS3 v3"
 echo
 
 echo "### Checking server..."
-if [ -x /home/gns3/vigrid/install/gns3v3-extension -o -f /home/gns3/vigrid/confs/nginx/vigrid-www-https-master-v3.conf ]
+if [ -x /home/gns3/vigrid/install/vigrid2-gns3v3-extension.sh -o -f /home/gns3/vigrid/confs/nginx/vigrid-www-https-master-v3.conf ]
 then
   GNS_ROOT="/home/gns3"
   echo "    It seems some Vigrid files, I will consider I am on a Vigrid server and add a OpenResty instance for GNS3v3 as well"

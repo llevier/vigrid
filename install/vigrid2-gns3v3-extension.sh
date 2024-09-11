@@ -132,7 +132,7 @@ if [ "x$HOSTNAME_NEW" != "x" ]
   cp /home/gns3/vigrid/lib/systemd/system/gns3v3.service /usr/lib/systemd/system/gns3v3.service
   if [ $? -ne 0 ]
   then
-    echo 'Cant GNS3v3 service from template, exiting'
+    echo 'Cant create GNS3v3 service from template, exiting'
     exit 1
   fi
   echo "### Enabling GNS3v3 service..."
@@ -142,6 +142,9 @@ if [ "x$HOSTNAME_NEW" != "x" ]
   mkdir -p /home/gns3/.config/GNS3/3.0 2>/dev/null
   chown gns3:gns3 /home/gns3/.config/GNS3/3.0 2>/dev/null
   cp /home/gns3/.config/GNS3/gns3_server.conf /home/gns3/.config/GNS3/3.0/gns3_server.conf
+  sed -i 's/^user/^compute_username/' /home/gns3/.config/GNS3/3.0/gns3_server.conf
+  sed -i 's/^password/^compute_password/' /home/gns3/.config/GNS3/3.0/gns3_server.conf
+  
   if [ $? -ne 0 ]
   then
     echo 'Cant create GNS3v3 configuration from GNS3v2 gns3_server.conf, exiting'
@@ -188,6 +191,10 @@ then
     exit 1
   else
     echo "### Great, I detect GNS3v$GNS_VERSION listening on localhost:3080. Job done"
+    echo "    PLEASE NOTICE:"
+    echo "    - DEFAULT GNS3v3 CREDENTIALS are: user=admin, password=admin"
+    echo "    - Direct Heavy client access is performed thru: http://$HOSTNAME_NEW:443"
+    echo "    - Direct WebUI access is performed thru:        http://$HOSTNAME_NEW:443/static/web-ui/controllers"
     exit 0
   fi
 fi

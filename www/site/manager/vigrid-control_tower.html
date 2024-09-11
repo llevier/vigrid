@@ -590,7 +590,9 @@
 
                 if ($webui_url!="")
                 {
-                  $webui_url=$webui_url."/static/web-ui/servers";
+                  if (VIGRIDconfig("VIGRID_GNS_VERSION")==2) { $webui_url=$webui_url."/static/web-ui/servers"; }
+                  if (VIGRIDconfig("VIGRID_GNS_VERSION")==3) { $webui_url=$webui_url."/static/web-ui/controller"; }
+                  
                   print("&nbsp;<div class=\"tooltip\"><A HREF=\"".$webui_url."\" TARGET=_webui-".$host_name."><IMG SRC=\"/images/webui.png\"  WIDTH=40 HEIGHT=25><span class=\"tooltiptext_above\">Direct WebUI<BR>(may require to 'Add server' with GNS3<=2.2.49)</span></A></div>");
                 }
 

@@ -1,5 +1,14 @@
 # Vigrid
 
+### Breaking new ###
+GNS3v3 (with Roles Based Access Control) can now be added to a Vigrid Master.<BR>
+An alternate hostname will be required so same Vigrid server can host the 2 GNS3 versions.<BR>
+Please notice comments at end of script to configure your clients.<BR>
+To proceed, just launch as root:
+<UL>
+  <code>/home/gns3/vigrid/install/vigrid2-gns3v3-extension.sh</code><BR>
+</UL>
+
 <STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.2">v1.2, validated for Ubuntu 24LTS</A></STRONG>.
 
 Vigrid is an extension to the GNS3 Hypervisor to turn it to a Cyber Range or a industrial training platform.

@@ -188,22 +188,27 @@ if [ "x$GNSv3_UP" != "x" ]
 then
   if [ "x$HOSTNAME_NEW" != "x" ] # Vigrid
   then
-    GNS_VERSION=`curl http://localhost:3083/v3/version 2>/dev/null | jq .version | sed 's/"//g'`
+    GNS_PORT="3083"
   else
-    GNS_VERSION=`curl http://localhost:3080/v3/version 2>/dev/null | jq .version | sed 's/"//g'`
- fi
+    GNS_PORT="3080"
+  fi
+  GNS_VERSION=`curl http://localhost:$GNS_PORT/v3/version 2>/dev/null | jq .version | sed 's/"//g'`
   CHK=`echo $GNS_VERSION|grep "^3"`
 
   if [ "x$CHK" = "x" ]
   then
-    echo "There might be a problem, I cant find GNS3v3 listening on localhost:3080. Please check"
+    echo "There might be a problem, I cant find GNS3v3 listening on localhost:$GNS_PORT. Please check"
     exit 1
   else
-    echo "### Great, I detect GNS3v$GNS_VERSION listening on localhost:3080, GNS3v3 should now be available."
+    echo "### Great, I detect GNS3v$GNS_VERSION listening on localhost:$GNS_PORT, GNS3v3 should now be available."
     echo "    PLEASE NOTICE:"
     echo "    - DEFAULT GNS3v3 CREDENTIALS are: user=admin, password=admin"
-    echo "    - Direct Heavy client access is performed thru: http://$HOSTNAME_NEW:443"
-    echo "    - Direct WebUI access is performed thru:        http://$HOSTNAME_NEW:443/static/web-ui/controllers"
+    
+    if [ "x$HOSTNAME_NEW" != "x" ] # Vigrid
+    then
+      echo "    - Direct Heavy client access is performed thru: http://$HOSTNAME_NEW:443"
+      echo "    - Direct WebUI access is performed thru:        http://$HOSTNAME_NEW:443/static/web-ui/controllers"
+    fi
     exit 0
   fi
 fi

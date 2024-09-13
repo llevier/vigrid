@@ -272,7 +272,7 @@
     $vigrid_type=VIGRIDconfig("VIGRID_TYPE");
     $hostname=gethostname();
     
-    // Not a NAS type
+    // Not a NAS type, take data locally
     if ($vigrid_type==1) { return(null); }
 
     // Sanity check
@@ -1166,7 +1166,23 @@
     // NAS ?
     $vigrid_type=VIGRIDconfig("VIGRID_TYPE");
 
-    if ($vigrid_type!=1) // Design with NAS
+    if ($vigrid_type==1) // Standalone -> local storage
+    {
+      include "/home/gns3/vigrid/www/site/manager/vigrid-host-api_functions.php";
+      $data_vigrid_stats['STATS'][$gns_controller['computes'][0]['host']]=get_sys_stats("");
+      
+      // Extract dir sizes directly
+      if (file_exists(VIGRIDconfig("VIGRID_STORAGE_ROOT")) && is_dir(VIGRIDconfig("VIGRID_STORAGE_ROOT")))
+      {
+        $disk_free =HumanSize(disk_free_space(VIGRIDconfig("VIGRID_STORAGE_ROOT")));
+        $disk_total=HumanSize(disk_total_space(VIGRIDconfig("VIGRID_STORAGE_ROOT")));
+        
+        $data_vigrid_stats['STATS'][$gns_controller['computes'][0]['host']]['dir'][VIGRIDconfig("VIGRID_STORAGE_ROOT")]['space']="$disk_free/$disk_total";
+
+      }
+      return($data_vigrid_stats);
+    }
+    else if ($vigrid_type!=1) // Design with NAS
     {
       $vigrid_nas=VIGRIDconfig("VIGRID_NAS_SERVER");
       $nas_list=preg_split("/[\s ]+/",$vigrid_nas);

@@ -1367,7 +1367,8 @@
                 // gns_project_command($gns_controller,$ip_address,$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id'],"open");
 
                 // Get nodes only if project is opened
-                if ($data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['status']=="opened")
+                if ((isset($data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['status']))
+                 && ($data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['status']=="opened"))
                 {
                   $data_vigrid['GNS3'][$ip_address]['PROJECT_NODES'][$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']]['NODES']
                     =gns_getnodes($gns_controller,$ip_address,$data_vigrid['GNS3'][$ip_address]['PROJECTS'][$j]['project_id']);

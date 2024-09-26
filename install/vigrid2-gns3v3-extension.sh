@@ -32,7 +32,8 @@ then
   echo "You are on a host already having GNS3 present. You must be aware GNS3v3 will update Projects versions to 10."
   echo "Once done, updated projects will no longer be visible for GNS3 v2 (until 2.2.49 at least)."
   echo "To solve this, best method is to duplicate your /home/gns3/GNS3/projects (v2) to an alternate project path."
-  echo "Please notice I will not do that replication, but I need the target directory to exist now."
+  echo "Same thing for GNS3 appliances, different between v2 & v3."
+  echo "Please notice I will not do that replications, but I need the target directories to exist now."
   
   until false
   do
@@ -42,6 +43,16 @@ then
     [ -d "$GNS3v3_PROJECTS" ] && break
     echo "I am sorry, I cant find that directory"
   done
+
+  until false
+  do
+    echo -n "Please provide me the existing appliances directory GNS3 *v3* will use: "
+    read GNS3v3_APPLIANCES
+    
+    [ -d "$GNS3v3_APPLIANCES" ] && break
+    echo "I am sorry, I cant find that directory"
+  done
+
 else
   GNS_ROOT="/tmp"
   echo "    Ok, it does not seem to be a Vigrid server. Will just ensure there already GNS3v2 installed..."
@@ -198,6 +209,7 @@ then
   sed -i 's/^user/compute_username/' /home/gns3v3/.config/GNS3/3.0/gns3_server.conf
   sed -i 's/^password/compute_password/' /home/gns3v3/.config/GNS3/3.0/gns3_server.conf
   sed -i "s;^projects_path.*$;projects_path = $GNS3v3_PROJECTS;" /home/gns3v3/.config/GNS3/3.0/gns3_server.conf
+  sed -i "s;^appliances_path.*$;appliances_path = $GNS3v3_APPLIANCES;" /home/gns3v3/.config/GNS3/3.0/gns3_server.conf
 
   echo "; Secrets directory" >>/home/gns3v3/.config/GNS3/3.0/gns3_server.conf
   echo "secrets_dir = /home/gns3v3/.config/GNS3/3.0/secrets" >>/home/gns3v3/.config/GNS3/3.0/gns3_server.conf

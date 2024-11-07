@@ -2014,6 +2014,7 @@ then
   rm -rf /etc/nginx 2>/dev/null
   ln -s /usr/local/openresty/nginx/conf /etc/nginx
   mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
+  echo -n >/var/www/html/index.html
 
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
   then

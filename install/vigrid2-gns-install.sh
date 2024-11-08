@@ -1979,8 +1979,6 @@ then
     apt install -y php-curl php-mail php-net-smtp || Error 'Install failed,'
   fi
 
-  Display "Removing Apache2 forced install..." && apt purge -y apache2* || Error 'Uninstall failed,'
-
   Display -h "  Configuring PHP pools..."
 
   PHP_VER=`php -v|head -1|awk '{print $2;}'| awk 'BEGIN { FS="."; } { print $1"."$2; }'`
@@ -2427,6 +2425,8 @@ push \"ifconfig-pool $NET_BASE $NET_BROADCAST $NET_MASK\"
 push \"setenv-safe VIGRID_DHCP_IP $VIGRID_DHCP_IP\"
 " >/etc/openvpn/VIGRIDteleport/$VIGRIDclient
     done
+
+    Display "Removing Apache2 forced install..." && apt purge -y apache2*
 
     LIST="/lib/systemd/system/openvpn@.service /lib/systemd/system/openvpn-server@.service /lib/systemd/system/openvpn.service"
     for i in $LIST

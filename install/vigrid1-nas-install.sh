@@ -781,7 +781,7 @@ echo
 echo All done
 ' >/Vstorage/GNS3/bin/vigrid-update
 
-chmod 755 /Vstorage/GNS3/bin/vigrid-update || Error 'Cant chmod /home/gns3/bin/vigrid-update,'
+chmod 755 /Vstorage/GNS3/bin/vigrid-update || Error 'Cant chmod /Vstorage/GNS3/bin/vigrid-update,'
 Display -h "  Launching vigrid-update..."
 /Vstorage/GNS3/bin/vigrid-update || Error 'vigrid-update failed,'  
 
@@ -814,7 +814,7 @@ Display -h "    Removing default PHP pools..."
 rm /etc/php/$PHP_VER/fpm/pool.d/* || Error 'Cant remove pool,'
 
 Display -h "    Adding Vigrid standard pool..."
-cp /home/gns3/vigrid/confs/php/php-pfm-pool.d-vigrid-www.conf /etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
+cp /Vstorage/GNS3/vigrid/confs/php/php-pfm-pool.d-vigrid-www.conf /etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
 sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/php/$PHP_VER/fpm/pool.d/vigrid-www.conf
 
 Display -h "Enabling & starting PHP-FPM..."

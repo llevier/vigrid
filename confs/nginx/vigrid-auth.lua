@@ -19,8 +19,20 @@ else -- Yes, let's check access...
 	local vigrid_user=string.gsub(vigrid_creds,':.*$','',1)
 	local vigrid_pass=string.gsub(vigrid_creds,'^.*:','',1)
 	if vigrid_user == '' or vigrid_pass == '' then
-		ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
-		ngx.exit(401)
+		ngx.log(ngx.ERR, 'No Vigrid credentials (', vigrid_creds, ') not granted to pass')
+		
+		ngx.status = ngx.HTTP_UNAUTHORIZED
+		ngx.header["Content-Type"] = "text/html"
+		ngx.say([[
+			<HTML><HEAD><TITLE>Access to Vigrid-master</TITLE></HEAD>
+			<BODY>
+				<TABLE><TR><TD ALIGN=CENTER><FONT SIZE=+2><FONT COLOR="#f75c05"><STRONG>Access to Vigrid</STRONG></FONT></FONT></TD></TR>
+				<TR><TD ALIGN=CENTER><IMG SRC="/images/Vigrid-badauth.png"></TD></TR>
+				<TR><TD ALIGN=CENTER><FONT SIZE=+1><STRONG>I am sorry but I dont know you.<BR>You shall not pass...</STRONG></FONT></TD></TR></TABLE>
+			</BODY></HTML>
+		]])
+		ngx.exit(ngx.HTTP_UNAUTHORIZED)
+		
 		return
 	end
 
@@ -32,7 +44,19 @@ else -- Yes, let's check access...
 	
 	if vigrid_check == nil then
 		ngx.log(ngx.ERR, 'Unknown Vigrid credentials (', vigrid_creds, ') not granted to pass')
-		ngx.exit(401)
+
+		ngx.status = ngx.HTTP_UNAUTHORIZED
+		ngx.header["Content-Type"] = "text/html"
+		ngx.say([[
+			<HTML><HEAD><TITLE>Access to Vigrid-master</TITLE></HEAD>
+			<BODY>
+				<TABLE><TR><TD ALIGN=CENTER><FONT SIZE=+2><FONT COLOR="#f75c05"><STRONG>Access to Vigrid</STRONG></FONT></FONT></TD></TR>
+				<TR><TD ALIGN=CENTER><IMG SRC="/images/Vigrid-badauth.png"></TD></TR>
+				<TR><TD ALIGN=CENTER><FONT SIZE=+1><STRONG>I am sorry but I dont know you.<BR>You shall not pass...</STRONG></FONT></TD></TR></TABLE>
+			</BODY></HTML>
+		]])
+		ngx.exit(ngx.HTTP_UNAUTHORIZED)
+		
 		return
 	end
 

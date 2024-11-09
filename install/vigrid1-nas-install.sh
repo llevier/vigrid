@@ -842,6 +842,9 @@ mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
 cp /Vstorage/GNS3/vigrid/confs/nginx/nginx.conf /etc/nginx/nginx.conf
 [ $? -ne 0 ] && Error 'Cant copy nginx.conf, '
 
+cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-auth.lua /etc/nginx/
+[ $? -ne 0 ] && Error 'Cant copy vigrid-auth.lua, exiting'
+
 cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
 [ $? -ne 0 ] && Error 'Cant create CyberRange-443-api.conf from template, exiting'
 

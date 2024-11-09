@@ -2014,9 +2014,15 @@ then
   mkdir -p /var/log/nginx /etc/nginx/sites /etc/nginx/ssl
   echo -n >/var/www/html/index.html
 
+  cp /home/gns3/vigrid/confs/nginx/vigrid-auth.lua /etc/nginx/
+  if [ $? -ne 0 ]
+  then
+    Error 'Cant copy vigrid-auth.lua, exiting'
+    exit 1
+  fi
+
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
   then
-
     cp /home/gns3/vigrid/confs/nginx/vigrid-www-auth.conf /etc/nginx/sites/vigrid-www-auth.conf
     if [ $? -ne 0 ]
     then

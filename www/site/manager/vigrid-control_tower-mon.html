@@ -63,7 +63,7 @@
   else { $text_links="on"; $new_url.=$split_char."gnsall=1"; }
   print("<div class=\"tooltip\"><A HREF=\"".$new_url."\"><IMG SRC=\"/images/gnshost_".$text_links.".png\"><span class=\"tooltiptext_above\">Switch: display only active GNS hosts</span></A></div>&nbsp;&nbsp;&nbsp;");
   ?>
-	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=4 pattern="[0-9]{4}">seconds<?php getselfurl_controltower_form("refresh"); ?></form>
+	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=4 pattern="[0-9]{1,4}">seconds<?php getselfurl_controltower_form("refresh"); ?></form>
   </TD></TR></TABLE><?php
   
   // If Vigrid design with NAS, show NAS stats

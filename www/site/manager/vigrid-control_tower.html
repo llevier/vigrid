@@ -134,7 +134,7 @@
     <div class="tooltip"><A HREF="/manager/vigrid-clone_short.html" TARGET="_vigrid-clone"><IMG SRC="/images/vigrid-clone.png" WIDTH=32 HEIGHT=32><span class="tooltiptext_above">Ondemand clone Manager</span></A></div>&nbsp;&nbsp;&nbsp;
     <div class="tooltip"><A HREF="/manager/vigrid-clones_industrial.html" TARGET="_vigrid-clones"><IMG SRC="/images/vigrid-clones.png" WIDTH=48 HEIGHT=32><span class="tooltiptext_above">Industrial clones Manager</span></A></div>&nbsp;&nbsp;&nbsp;
   
-	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=4 pattern="[0-9]{4}"> seconds<?php getselfurl_controltower_form("refresh"); ?></form>
+	<form>Refresh each <input type="text" name="refresh" value="<?php print $refresh; ?>" size=2 maxlength=4 pattern="[0-9]{1,4}"> seconds<?php getselfurl_controltower_form("refresh"); ?></form>
   </TD></TR></TABLE><?php
   
   // If Vigrid design with NAS, show NAS stats

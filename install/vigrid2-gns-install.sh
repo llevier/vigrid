@@ -2021,6 +2021,13 @@ then
     exit 1
   fi
 
+  cp /home/gns3/vigrid/confs/nginx/vigrid-cors.conf /etc/nginx/
+  if [ $? -ne 0 ]
+  then
+    Error 'Cant copy vigrid-cors.conf, exiting'
+    exit 1
+  fi
+
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
   then
     cp /home/gns3/vigrid/confs/nginx/vigrid-www-auth.conf /etc/nginx/sites/vigrid-www-auth.conf

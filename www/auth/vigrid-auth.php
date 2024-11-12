@@ -65,42 +65,6 @@ else { $to_validate_method=$_SERVER['REQUEST_METHOD']; }
 
 Debug($debug,"\n*** Called URL: $to_validate_method $to_validate_scheme://$to_validate_host$to_validate_url\n");
 
-if  (($to_validate_method=="OPTIONS")
- || (isset($headers['Access-Control-Request-Method']) && ($headers['Access-Control-Request-Method']=='GET') 
- && (isset($headers['Access-Control-Request-Headers']) && ($headers['Access-Control-Request-Headers']=='authorization')))
- || (isset($headers['Sec-Fetch-Mode']) && ($headers['Sec-Fetch-Mode']=='cors')))
-{
-  // CORS request
-  $http_origin=$headers['Origin'];
-  Debug($debug,"\n*** CORS request call from $http_origin !\n");
-
-  include "/home/gns3/vigrid/www/site/manager/vigrid-gns3_functions.php";
-
-  $cors_allow_origin=preg_split("/,/",trim(strtolower(VIGRIDconfig('VIGRID_CORS_ALLOW_ORIGIN'))));
-  Debug($debug,"    CORS allow origin=".implode("-",$cors_allow_origin)."\n");
-
-  $cors_allow="";
-  
-  if ($http_origin!="")
-  {
-    foreach ($cors_allow_origin as $host_pattern)
-    {
-      Debug($debug,"    CORS Origin=$http_origin, pattern=$host_pattern\n");
-      if (preg_match("/".$host_pattern."/",$http_origin) || ($host_pattern=='*'))
-      // { $cors_allow=$http_origin; Debug($debug,"    CORS match, allowing $cors_allow\n"); ; break; }
-      { $cors_allow="*"; Debug($debug,"    CORS match, allowing $cors_allow\n"); ; break; }
-    }
-  }
-
-  header('Access-Control-Allow-Origin: '.$cors_allow); // .$cors_allow);
-  header('Access-Control-Allow-Credentials: true');
-  header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
-  header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
-
-  if (($headers['Access-Control-Request-Method']=='GET') && (preg_match("/authorization/",$headers['Access-Control-Request-Headers'])))
-  { return 204; }
-}
-
 // Lets extract credentials now
 $http_user="";
 $http_pass="";

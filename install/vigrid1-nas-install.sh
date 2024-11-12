@@ -848,12 +848,11 @@ cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-auth.lua /etc/nginx/
 cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-cors.conf /etc/nginx/
 [ $? -ne 0 ] && Error 'Cant copy vigrid-cors.conf, exiting'
 
-cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf
-[ $? -ne 0 ] && Error 'Cant create CyberRange-443-api.conf from template, exiting'
+cp /Vstorage/GNS3/vigrid/confs/nginx/vigrid-CyberRange-443-nas-api.conf /etc/nginx/sites/CyberRange-443-nas-api.conf
+[ $? -ne 0 ] && Error 'Cant create CyberRange-443-nas-api.conf from template, exiting'
 
-sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-api.conf
-sed -i "s/%%VIGRID_ROOT%%/\/Vstorage\/GNS3\/vigrid/" /etc/nginx/sites/CyberRange-443-api.conf
-sed -i "s/%%VIGRID_API%%/vigrid-nas-api/" /etc/nginx/sites/CyberRange-443-api.conf
+sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443-nas-api.conf
+sed -i "s/%%VIGRID_ROOT%%/\/Vstorage\/GNS3\/vigrid/" /etc/nginx/sites/CyberRange-443-nas-api.conf
 
 Display -h "Adding www-data user to gns3 group..."
 usermod -a www-data -G gns3 >/dev/null 2>/dev/null || Error 'add failed,'

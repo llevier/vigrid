@@ -48,25 +48,6 @@
   }
   else { exit; }
 
-  // CORS
-  header("Access-Control-Allow-Origin: *");
-  header('Access-Control-Allow-Credentials: true');
-  header('Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS');
-  header('Access-Control-Allow-Headers: Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
-
-  if ($_SERVER['REQUEST_METHOD']=='OPTIONS') 
-  {
-    // Tell client that this pre-flight info is valid for 1 day
-    // header(''Access-Control-Max-Age' 86400;
-    header('Content-Length: 0');
-    return 204;
-  }
-  
-  // Ok, that is not a OPTIONS request, auth is required then
-  // $http_auth_user=$_SERVER['PHP_AUTH_USER'];
-  // $http_auth_pass=$_SERVER['PHP_AUTH_PW'];
-  // if (!VIGRIDauth($http_auth_user,$http_auth_pass)) { http_response_code(403); return 403; }
- 
   header('Content-Type: application/json');
 
   $json=file_get_contents('php://input');

@@ -66,14 +66,17 @@
     $vigrid_config_translation_table_file=preg_replace("/#.*$/","",file("/home/gns3/etc/vigrid-translation-table.conf"));
     
     array($vigrid_config_translation_table);
-    for ($l=0;$l<sizeof($vigrid_config_translation_table_file);$l++)
+    if ($vigrid_config_translation_table_file!=null)
     {
-      // remove comments & useless characters
-      $line=trim(preg_replace("/#.*$/","",$vigrid_config_translation_table_file[$l]));
-      if ($line!="")
+      for ($l=0;$l<sizeof($vigrid_config_translation_table_file);$l++)
       {
-        $f=preg_split("/=/",$line);
-        $vigrid_config_translation_table[$f[0]]=preg_replace('/"/','',preg_replace("/^$f[0]=/","",$line));
+        // remove comments & useless characters
+        $line=trim(preg_replace("/#.*$/","",$vigrid_config_translation_table_file[$l]));
+        if ($line!="")
+        {
+          $f=preg_split("/=/",$line);
+          $vigrid_config_translation_table[$f[0]]=preg_replace('/"/','',preg_replace("/^$f[0]=/","",$line));
+        }
       }
     }
 

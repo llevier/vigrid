@@ -2028,17 +2028,17 @@ then
     exit 1
   fi
 
-  if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
-  then
-    cp /home/gns3/vigrid/confs/nginx/vigrid-www-auth.conf /etc/nginx/sites/vigrid-www-auth.conf
-    if [ $? -ne 0 ]
-    then
-      Error 'Cant create vigrid-www-auth.conf from template, exiting'
-      exit 1
-    fi
+  # if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 4 ]
+  # then
+    # cp /home/gns3/vigrid/confs/nginx/vigrid-www-auth.conf /etc/nginx/sites/vigrid-www-auth.conf
+    # if [ $? -ne 0 ]
+    # then
+      # Error 'Cant create vigrid-www-auth.conf from template, exiting'
+      # exit 1
+    # fi
 
-    sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/vigrid-www-auth.conf
-  fi
+    # sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/vigrid-www-auth.conf
+  # fi
   
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
   then
@@ -2050,6 +2050,16 @@ then
     fi
 
     sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443.conf
+  
+    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-master.conf /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
+    if [ $? -ne 0 ]
+    then
+      Error 'Cant create CyberRange-443.conf from template, exiting'
+      exit 1
+    fi
+
+    sed -i "s/%%NAS_HOST%%/$VIGRID_NAS_SERVER_NAME/" /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
+    sed -i "s/%%NAS_IP%%/$VIGRID_NAS_SERVER_IP" /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
   else
     # For Vigrid slave, Vigrid-API for loads
     cp /home/gns3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf

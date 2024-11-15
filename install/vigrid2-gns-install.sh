@@ -2059,7 +2059,7 @@ then
     fi
 
     sed -i "s/%%NAS_HOST%%/$VIGRID_NAS_SERVER_NAME/" /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
-    sed -i "s/%%NAS_IP%%/$VIGRID_NAS_SERVER_IP" /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
+    sed -i "s/%%NAS_IP%%/$VIGRID_NAS_SERVER_IP/" /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
   else
     # For Vigrid slave, Vigrid-API for loads
     cp /home/gns3/vigrid/confs/nginx/vigrid-CyberRange-443-api.conf /etc/nginx/sites/CyberRange-443-api.conf

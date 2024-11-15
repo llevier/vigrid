@@ -2051,7 +2051,7 @@ then
 
     sed -i "s/%%PHP_VER%%/$PHP_VER/" /etc/nginx/sites/CyberRange-443.conf
   
-    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-master.conf /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
+    cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_nas.conf /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
     if [ $? -ne 0 ]
     then
       Error 'Cant create CyberRange-443.conf from template, exiting'

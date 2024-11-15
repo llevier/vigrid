@@ -300,7 +300,7 @@
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		curl_setopt($ch, CURLOPT_POST, true);
-		curl_setopt($ch, CURLOPT_URL, "https://$nas_host/vigrid-api/nas-load");
+		curl_setopt($ch, CURLOPT_URL, "https://$nas_host/vigrid-nas-api/nas-load");
     curl_setopt($ch, CURLOPT_POSTFIELDS,"{ \"dir\":\"$dirs\" }");
     $data=curl_exec($ch);
 		$stats_nas=json_decode($data,true);

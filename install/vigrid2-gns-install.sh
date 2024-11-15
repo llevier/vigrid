@@ -2054,7 +2054,7 @@ then
     cp /home/gns3/vigrid/confs/nginx/vigrid-www-https-for_nas.conf /etc/nginx/sites/CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf
     if [ $? -ne 0 ]
     then
-      Error 'Cant create CyberRange-443.conf from template, exiting'
+      Error 'Cant create CyberRange-443-$VIGRID_NAS_SERVER_NAME.conf from template, exiting'
       exit 1
     fi
 

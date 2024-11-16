@@ -9,7 +9,7 @@ To proceed, just launch as root:
   <code>/home/gns3/vigrid/install/vigrid2-gns3v3-extension.sh</code><BR>
 </UL>
 
-<STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.2">v1.2</A>, validated for Ubuntu 24LTS</STRONG>.
+<STRONG>Vigrid new release <A HREF="https://github.com/llevier/vigrid/tree/v1.2.1">v1.2.1</A>, validated for Ubuntu 24.04.01LTS with API support</STRONG>.
 
 Vigrid is an extension to the GNS3 Hypervisor to turn it to a Cyber Range or a industrial training platform.
 
@@ -30,13 +30,10 @@ You may also think it as 'V grid' (Virtualization Grid).
 Vigrid extension is copyrighted to Laurent LEVIER, licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 
 ### Last updates ###
-Major topics of Vigrid 1.2:
-<ul><li>Ubuntu 24 LTS ready</li>
-<li>Multiple bugs corrected, due from packages & GNS3 updates.</li>
-<li>SSLh arguments are modified to reflect SSLh changes + corrected systemd config.</li>
-<li>OpenResty replaces NGinx.</li>
-<li>Vigrid to GNS3 authentication now directly performed by a NGinx LUA module.</li></ul>
-<li>It is now possible to access GNS3 WebUI with Vigrid authentication (master only at start, later will include all slaves).</li></ul>
+Major topics of Vigrid 1.2.1:
+<ul><li>Ubuntu 24.04 LTS ready</li>
+<li>API ready in GNS Farm design (direct GNS3 access to each server via Web or GNS heavy client)</li>
+<li>API ready to get assets (NAS, Master, Slaves) loads</li>
 
 <BR><STRONG>IMPORTANT</STRONG>
 GNS3 v3.0.0rc1 now provides RBAC. It has been tested RBAC works fine. With this, Vigrid can now also be a training environnment.
@@ -48,7 +45,7 @@ Soon to come:
 ### QUICK INSTALL ###
 
 First, install the last Ubuntu server LTS version on your hosts(s).
-<BR><STRONG>Nota: install now validated for Ubuntu 24 LTS.</STRONG>
+<BR><STRONG>Nota: install now validated for Ubuntu 24.04 LTS.</STRONG>
 
 Recommendations:
 <ul><li>Ubuntu:</li>

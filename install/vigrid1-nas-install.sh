@@ -550,7 +550,7 @@ cp /etc/default/nfs-kernel-server /etc/default/nfs-kernel-server.org
 # cat /etc/default/nfs-kernel-server.org | sed 's/
 # RPCNFSDARGS
 
-Display "Creating /etc/exports file with Vigrid GNS3 farm & repo shared"
+Display "Creating /Vstorage/vigrid-exports file with Vigrid GNS3 farm & repo shared + /Vstorage/vigrid-exports.d/"
 echo "#
 # Vigrid NAS NFS exports file
 #
@@ -568,7 +568,14 @@ echo "#
 # /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3/projects  [per_host].GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
 # /$FS_ROOT/NFS/[per_host]/var-lib-docker           [per_host].GNS3(rw,nohide,no_root_squash,async,no_subtree_check)
 
-" >/etc/exports
+" >/Vstorage/vigrid-exports
+
+rm /etc/exports  || Error 'I cant delete /etc/exports, '
+ln -s /Vstorage/vigrid-exports /etc/exports || Error 'I cant symlink /Vstorage/vigrid-exports, '
+
+rm -rf /etc/exports.d 2>/dev/null
+mkdir -p /Vstorage/vigrid-exports.d || Error 'I cant create /Vstorage/vigrid-exports.d, '
+ln -s /Vstorage/vigrid-exports.d /etc/exports.d || Error 'I cant symlink /Vstorage/vigrid-exports.d, '
 
 until false
 do
@@ -654,14 +661,14 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
 /$FS_ROOT/NFS/$GNS_NAME/GNS3mount                $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)
 /$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)
 /$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3/projects  $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)
-/$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)" >>/etc/exports
+/$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           $i(rw,nohide,secure,no_root_squash,anonuid=777,anongid=777,async,no_subtree_check)" >>/Vstorage/vigrid-exports
     done
 
     Display "Ok, your /etc/hosts file is now:"
     cat /etc/hosts
 
-    Display -h "When your /etc/exports file contains:"
-    cat /etc/exports
+    Display -h "When your /Vstorage/vigrid-exports file contains:"
+    cat /Vstorage/vigrid-exports
     
     Display -h "Changing /Vstorage tree ownership to gns3"
     chown -R gns3:gns3 /Vstorage || Error 'chown gns3:gns3 /Vstorage failed,'
@@ -689,8 +696,8 @@ To share resources on a Vigrid NAS, as root:
 2- Then you must create the associated ZFS datasets for these hosts, launching as root per host:
 $FS_CREATE
 
-3- Finally, you must now edit /etc/exports to define NFS access rights to you shares, create those missings.
-   You can follow examples in /etc/exports file.
+3- Finally, you must now edit /Vstorage/vigrid-exports to define NFS access rights to you shares, create those missings.
+   You can follow examples in /Vstorage/vigrid-exports file.
    
    For a Farm with a MASTER server + 2 slaves and 2 GNS3 independant servers, the below would do:
    # GNS3 Farm

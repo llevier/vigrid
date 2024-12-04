@@ -16,8 +16,8 @@
 //
 // Since autofs must see (showmount) each share it will connect to
 // Since a ZFS dataset must be explicitely shared
-// Program is in charge of updating /etc/exports and respread it (exportfs -a) upon each new dataset.
-// Upon a dataset containing a 'TBD_projectuuid' file, dataset will *not* be put into /etc/exports for to come deletion.
+// Program is in charge of updating /Vstorage/vigrid-exports and respread it (exportfs -a) upon each new dataset.
+// Upon a dataset containing a 'TBD_projectuuid' file, dataset will *not* be put into /Vstorage/vigrid-exports for to come deletion.
 
 // Required vigrid_storage_root of course (else / will be used), then Vigrid standards will apply to generate directories list:
 // $vigrid_storage_root/GNS3/GNS3farm/GNS3/projects/*
@@ -88,8 +88,8 @@ while (1)
 
   $export_toremove=array();
 
-  // Loading /etc/exports file, the real exported ones
-  $exports=file('/etc/exports');
+  // Loading /Vstorage/vigrid-exports file, the real exported ones
+  $exports=file('/Vstorage/vigrid-exports');
   $exports=array_map('trim',$exports);
   
   // Generating local directories list exports from Vigrid design
@@ -158,7 +158,7 @@ while (1)
     {
       for ($m=0;$m<sizeof($matches);$m++)
       {
-        // This match should be after line 23 of current /etc/exports file
+        // This match should be after line 23 of current /Vstorage/vigrid-exports file
         $best_export=EXPORTSbestmatch($exports,$matches[$m]);
         
         if ($best_export==$l) // We are currently at this line, that is best line, adding it to new export
@@ -202,17 +202,17 @@ while (1)
   // Sanity checks first, array must not be empty, should have at least 7 lines for a single host (per Vigrid-NAS install)
   if (count($export_new)>0)
   {
-    unlink("/etc/exports.old");
-    rename("/etc/exports","/etc/exports.old");
+    unlink("/Vstorage/vigrid-exports.old");
+    rename("/Vstorage/vigrid-exports","/Vstorage/vigrid-exports.old");
 
-    $fd=fopen("/etc/exports","w");
-    if (!$fd) { report("###ERROR: Cant open /etc/exports for writing !\n"); }
+    $fd=fopen("/Vstorage/vigrid-exports","w");
+    if (!$fd) { report("###ERROR: Cant open /Vstorage/vigrid-exports for writing !\n"); }
     else
     {
       for ($e=0;$e<sizeof($export_new);$e++)
       {
          if (fwrite($fd,"$export_new[$e]\n")===false)
-         { report("###ERROR: Cant write into /etc/exports: '$export_new[$e]'\n"); }
+         { report("###ERROR: Cant write into /Vstorage/vigrid-exports: '$export_new[$e]'\n"); }
       }
     }
     fclose($fd);
@@ -232,7 +232,7 @@ while (1)
     unset ($export_new);
   }
   else
-  { report("###ERROR: New /etc/exports would be empty, no action\n"); }
+  { report("###ERROR: New /Vstorage/vigrid-exports would be empty, no action\n"); }
 
   sleep(5);
 }
@@ -250,7 +250,7 @@ function EXPORTSbestmatch($exports,$dir)
   $best_match=-1;
   $best_len=-1;
 
-  // Find uncommented /etc/exports line matching the best the detected directory to share
+  // Find uncommented /Vstorage/vigrid-exports line matching the best the detected directory to share
   for ($i=0;$i<sizeof($exports);$i++)
   {
     $export_line=preg_replace("/#.*$/","",trim($exports[$i]));

@@ -216,8 +216,8 @@ then
   ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP "btrfs sub create /$VIGRID_STORAGE_ROOT/NFS/$SLAVE_HOST/var-lib-docker"
 fi
 
-echo "  Adding Vigrid shares to /etc/exports..."
-CHK=`ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'cat /etc/exports'| grep "\/$SLAVE_HOST\/"`
+echo "  Adding Vigrid shares to /Vstorage/vigrid-exports..."
+CHK=`ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'cat /Vstorage/vigrid-exports'| grep "\/$SLAVE_HOST\/"`
 if [ "x$CHK" != "x" ]
 then
   echo "Exports already existing for $SLAVE_HOST, skipping"
@@ -227,7 +227,7 @@ else
   /Vstorage/NFS/$SLAVE_HOST/GNS3mount/GNS3           $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
   /Vstorage/NFS/$SLAVE_HOST/GNS3mount/GNS3/projects  $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
   /Vstorage/NFS/$SLAVE_HOST/var-lib-docker           $SLAVE_HOST.GNS3(rw,no_root_squash,no_subtree_check)
-  " | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'cat >>/etc/exports'
+  " | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_IP 'cat >>/Vstorage/vigrid-exports'
 
   echo "  Now reloading NFS exports.. Sometimes this operation might fail because of discrepencies between datasets & exports".
   echo "  Press [RETURN] when you are ready to launch the action"

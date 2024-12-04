@@ -445,7 +445,7 @@ Display -h "Creating gns3 user..." && pw user add -u 777 -c "GNS3" -g gns3 -d /V
 
 Display "Ok, Vigrid NAS is ready for storing, let's turn it to NFS server now"
 
-Display "Creating /etc/exports file with Vigrid GNS3 farm & repo shared"
+Display "Creating /Vstorage/vigrid-exports file with Vigrid GNS3 farm & repo shared"
 echo "#
 # Vigrid NAS NFS exports file, v4 format
 #
@@ -465,7 +465,10 @@ V4: /
 # /$FS_ROOT/NFS/[per_host]/GNS3mount/GNS3/projects  -mapall 777:777 -alldirs [per_host]
 # /$FS_ROOT/NFS/[per_host]/var-lib-docker           -mapall 777:777 -alldirs [per_host]
 
-" >/etc/exports
+" >/Vstorage/vigrid-exports
+
+rm /etc/exports
+ln -s /Vstorage/vigrid-exports /etc/exports
 
 NCPU=`sysctl hw.ncpu | awk '{print $NF;}'`
 NCPU=$((NCPU-2))
@@ -594,14 +597,14 @@ Ok to add $GNS_IP $GNS_NAME to /etc/hosts ? [Y/n] "
   /$FS_ROOT/NFS/$GNS_NAME/GNS3mount                -mapall 777:777 -alldirs $i
   /$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3           -mapall 777:777 -alldirs $i
   /$FS_ROOT/NFS/$GNS_NAME/GNS3mount/GNS3/projects  -mapall 777:777 -alldirs $i
-  /$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           -mapall 777:777 -alldirs $i" >>/etc/exports
+  /$FS_ROOT/NFS/$GNS_NAME/var-lib-docker           -mapall 777:777 -alldirs $i" >>/Vstorage/vigrid-exports
     done
 
     Display "Ok, your /etc/hosts file is now:"
     cat /etc/hosts
 
-    Display -h "When your /etc/exports file contains:"
-    cat /etc/exports
+    Display -h "When your /Vstorage/vigrid-exports file contains:"
+    cat /Vstorage/vigrid-exports
     
     Display -h "Changing /Vstorage tree ownership to gns3"
     chown -R gns3:gns3 /Vstorage || Error 'chown gns3:gns3 /Vstorage failed,'
@@ -622,8 +625,8 @@ To share resources on a Vigrid NAS, as root:
 2- Then you must create the associated ZFS datasets for these hosts, launching as root per host:
 $FS_CREATE
 
-3- Finally, you must now edit /etc/exports to define NFS access rights to you shares, create those missings.
-   You can follow examples in /etc/exports file.
+3- Finally, you must now edit /Vstorage/vigrid-exports to define NFS access rights to you shares, create those missings.
+   You can follow examples in /Vstorage/vigrid-exports file.
    
    For a Farm with a MASTER server + 2 slaves and 2 GNS3 independant servers, the below would do:
    # GNS3 Farm

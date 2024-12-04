@@ -355,13 +355,13 @@ then
       ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS $VIGRID_NAS_SERVER_IP "btrfs sub create $VIGRID_STORAGE_ROOT/NFS/$HOSTNAME/var-lib-docker"
     fi
 
-    Display -h "  Adding Vigrid shares to /etc/exports..."
+    Display -h "  Adding Vigrid shares to /Vstorage/vigrid-exports..."
     echo "
 /Vstorage/NFS/$HOSTNAME/GNS3mount                $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
 /Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3           $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
 /Vstorage/NFS/$HOSTNAME/GNS3mount/GNS3/projects  $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
 /Vstorage/NFS/$HOSTNAME/var-lib-docker           $HOSTNAME.GNS3(rw,async,no_root_squash,no_subtree_check)
-    " | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS $VIGRID_NAS_SERVER_IP 'cat >>/etc/exports'
+    " | ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS $VIGRID_NAS_SERVER_IP 'cat >>/Vstorage/vigrid-exports'
     
     Display -h  "Refreshing exports..."
     ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS $VIGRID_NAS_SERVER_IP 'exportfs -a'

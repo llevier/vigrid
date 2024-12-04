@@ -588,13 +588,19 @@ then
   	btrfs sub create $VIGRID_STORAGE_ROOT $DRDB_DISKS
 fi
 
-Display -h "Moving /etc/exports to $VIGRID_STORAGE_ROOT/nfs-exports..."
-scp -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP:/etc/exports /$VIGRID_STORAGE_ROOT/nfs-exports
-rm /etc/exports
-ln -s /$VIGRID_STORAGE_ROOT/nfs-exports /etc/exports
+Display -h "Moving /etc/exports to $VIGRID_STORAGE_ROOT/vigrid-exports + creating $VIGRID_STORAGE_ROOT/vigrid-exports.d/..."
+scp -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP:/etc/exports /$VIGRID_STORAGE_ROOT/vigrid-exports
+rm /etc/exports || Error 'I cant move /etc/exports to $VIGRID_STORAGE_ROOT/vigrid-exports, '
+ln -s /$VIGRID_STORAGE_ROOT/vigrid-exports /etc/exports || Error 'I cant symlink vigrid-exports, '
+rm -rf /etc/exports.d 2>/dev/null
+mkdir -p $VIGRID_STORAGE_ROOT/vigrid-exports.d || Error 'I cant create $VIGRID_STORAGE_ROOT/vigrid-exports.d, '
+ln -s /$VIGRID_STORAGE_ROOT/vigrid-exports.d /etc/vigrid-exports.d || Error 'I cant symlink vigrid-exports.d, '
 
-ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP rm /etc/exports
-ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP ln -s /$VIGRID_STORAGE_ROOT/nfs-exports /etc/exports
+ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP rm /etc/exports || Error 'I cant delete /etc/exports on $VIGRID_NAS_SERVER_NAME, '
+ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP ln -s /$VIGRID_STORAGE_ROOT/vigrid-exports /etc/exports || Error 'I cant symlink vigrid-exports on $VIGRID_NAS_SERVER_NAME, '
+ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP rm -rf /etc/vigrid-exports.d 2>/dev/null
+ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP mkdir -p $VIGRID_STORAGE_ROOT/vigrid-exports.d || Error 'I cant create $VIGRID_STORAGE_ROOT/vigrid-exports.d on $VIGRID_NAS_SERVER_NAME, '
+ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP ln -s /$VIGRID_STORAGE_ROOT/vigrid-exports.d /etc/vigrid-exports.d || Error 'I cant symlink vigrid-exports.d on $VIGRID_NAS_SERVER_NAME, '
 
 scp -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP:/etc/hosts /etc/hosts || Error "I cant copy host file from $VIGRID_NAS_SERVER_NAME, "
 
@@ -668,7 +674,17 @@ do
 	break
 done
 
-Display -h " Common issues and how to solve them:
+Display "Enabling (not starting) again Vigrid services on both NAS. 
+### These will work only when Vstorage data will be restored. ###"
+LIST="vigrid-load vigrid-ZFSexportUPD"
+for i in $LIST
+do
+	Display -h "Enabling $i service on cluster hosts..."
+	systemctl enable $i || Error "I cant enable $i service on $NASBIS_HOSTNAME,"
+	ssh -i $VIGRID_SSHKEY_NAS $VIGRID_SSHKEY_OPTIONS root@$VIGRID_NAS_SERVER_IP systemctl enable $i || Error "I cant enable $i service on $VIGRID_NAS_SERVER_NAME,"
+done
+
+Display "Common issues and how to solve them:
 
 - split-brain (DRBD is visible on both but NASes are not connected with DRBD):
 	Primary NAS: drbdadm connect Vstorage
@@ -678,10 +694,7 @@ Display -h " Common issues and how to solve them:
 	Primary NAS: drbdadm -- --overwrite-data-of-peer primary Vstorage
 	
 - Start/Stop a cluster node:
-  pcs cluster start/stop [nodename] ($HA_CLUSTER_NAME $NASBIS_HOSTNAME-halink or $VIGRID_NAS_SERVER_NAME-halink)
-	
-- Test cluster failure:
-  pcs cluster stop [master hostname] 
+  pcs cluster start/stop [nodename] ($HA_CLUSTER_NAME $NASBIS_HOSTNAME or $VIGRID_NAS_SERVER_NAME)
 "
 
 Display "Script finished, all output logged to $LOG_FILE."

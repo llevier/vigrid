@@ -1571,6 +1571,7 @@
     {
       // Lines are shell variables (var=value, var="value", var='value')
       $line=trim($line);
+      $line=preg_replace("/[#;].*$/","",$line);
       
       $f=explode("=",$line);
 

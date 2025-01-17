@@ -1976,7 +1976,7 @@ then
 
   if [ $VIGRID_TYPE -ge 1 -a $VIGRID_TYPE -le 3 ]
   then
-    apt install -y php-curl php-mail php-net-smtp || Error 'Install failed,'
+    apt install -y php-curl php-mail php-net-smtp php-sqlite3 || Error 'Install failed,'
   fi
 
   Display -h "  Configuring PHP pools..."

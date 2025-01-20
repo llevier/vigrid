@@ -212,25 +212,28 @@
     }
   
     $websockify=websockify_getdata();
-    for ($i=0;$i<sizeof($websockify);$i++)
+    if (isset($websockify))
     {
-      // VIGRIDlogging($websockify[$i]);      
-      
-			if (preg_match($pattern_vnc,$websockify[$i]))
-			{
-				$t=preg_split("/ /",$websockify[$i]);
-				// returns http console port
-				if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
-				{ return($t[(count($t)-2)]); }
-			}
-			else if (preg_match($pattern_telnet,$websockify[$i]))
-			{
-				$t=preg_split("/ /",$websockify[$i]);
-				// returns http console port
-				if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
-				{ return($t[(count($t)-2)]); }
-			}
-		}
+      for ($i=0;$i<sizeof($websockify);$i++)
+      {
+        // VIGRIDlogging($websockify[$i]);      
+        
+        if (preg_match($pattern_vnc,$websockify[$i]))
+        {
+          $t=preg_split("/ /",$websockify[$i]);
+          // returns http console port
+          if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
+          { return($t[(count($t)-2)]); }
+        }
+        else if (preg_match($pattern_telnet,$websockify[$i]))
+        {
+          $t=preg_split("/ /",$websockify[$i]);
+          // returns http console port
+          if (preg_match("/$console_host:$console_port/",$t[(count($t)-1)]))
+          { return($t[(count($t)-2)]); }
+        }
+      }
+    }
 	  return(0);
 	}
 	
@@ -279,10 +282,13 @@
     $vigrid_nas_server=VIGRIDconfig("VIGRID_NAS_SERVER");
     $f=preg_split("/[\s ]+/",$vigrid_nas_server);
     $bad=1;
-    for ($i=0;$i<sizeof($f);$i++)
+    if (isset($f))
     {
-      $g=explode(":",$f[$i]);
-      if (($nas_host=="$g[0]") || ($nas_host=="$g[1]")) { $bad=0; }
+      for ($i=0;$i<sizeof($f);$i++)
+      {
+        $g=explode(":",$f[$i]);
+        if (($nas_host=="$g[0]") || ($nas_host=="$g[1]")) { $bad=0; }
+      }
     }
     if ($bad==1) { return (null); }
     
@@ -404,12 +410,15 @@
   {
     $list=array();
 	
-    for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+    if (isset($gns_controller['computes']))
     {
-      for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+      for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
       {
-        if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_name']==$project_name)
-        { array_push($list,$gns_controller['computes'][$i]['name']);}
+        for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+        {
+          if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_name']==$project_name)
+          { array_push($list,$gns_controller['computes'][$i]['name']);}
+        }
       }
     }
 
@@ -417,16 +426,49 @@
     return($list);
   }
 
+  function gns_authenticate($gns_controller,$hostname)
+  {
+    if (session_status() === PHP_SESSION_NONE) { session_start(); }
+    if (isset($_SESSION['gns_token'])) { return($_SESSION['gns_token']); }
+
+    $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/access/users/authenticate");
+    if ($url=="") { return(null); }
+
+    $data = [
+        'username' => VIGRIDconfig("VIGRID_GNS_USER"),
+        'password' => VIGRIDconfig("VIGRID_GNS_PASS"),
+    ];
+
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [ 'Content-Type: application/json', ]);
+		curl_setopt($ch, CURLOPT_URL, $url);
+		$gns_token_json=curl_exec($ch);
+		curl_close($ch);
+	
+		$gns_token=json_decode($gns_token_json,true);
+    if (isset($gns_token['access_token']))
+    { $_SESSION['gns_token']=$gns_token['access_token']; return($gns_token['access_token']); }
+    return("");
+  }
+
   function gns_getservers_by_projectuuid($gns_controller,$data_vigrid,$project_uuid)
   {
     $list=array();
 	
-    for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+    if (isset($gns_controller['computes']))
     {
-      for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+      for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
       {
-        if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']==$project_uuid)
-        { array_push($list,$gns_controller['computes'][$i]['name']);}
+        for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+        {
+          if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']==$project_uuid)
+          { array_push($list,$gns_controller['computes'][$i]['name']);}
+        }
       }
     }
 
@@ -436,18 +478,30 @@
 
   function gns_getprojectname_by_macaddr($gns_controller,$data_vigrid,$macaddr)
   {
-    for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+    if (isset($gns_controller['computes']))
     {
-      for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+      for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
       {
-        for ($k=0;$k<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
+        if (isset($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']))
         {
-          for ($p=0;$p<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports']);$p++)
+          for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
           {
-            if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$p]['mac_address']!="")
+            if (isset($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES']))
             {
-              if (strcasecmp($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$p]['mac_address'],$macaddr)==0)
-              { return($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['name']); }
+              for ($k=0;$k<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES']);$k++)
+              {
+                if (isset($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports']))
+                {
+                  for ($p=0;$p<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports']);$p++)
+                  {
+                    if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$p]['mac_address']!="")
+                    {
+                      if (strcasecmp($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECT_NODES'][$data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']]['NODES'][$k]['ports'][$p]['mac_address'],$macaddr)==0)
+                      { return($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['name']); }
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -458,14 +512,17 @@
   
   function gns_getprojectname_by_projectuuid($gns_controller,$data_vigrid,$project_uuid)
   {
-    for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+    if (isset($gns_controller['computes']))
     {
-      if (isset($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']))
+      for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
       {
-        for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+        if (isset($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']))
         {
-          if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']==$project_uuid)
-          { return($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['name']); }
+          for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+          {
+            if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']==$project_uuid)
+            { return($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['name']); }
+          }
         }
       }
     }
@@ -473,22 +530,29 @@
 	
   function gns_gethost_by_projectuuid($gns_controller,$data_vigrid,$project_uuid)
   {
-    for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
+    if (isset($gns_controller['computes']))
     {
-      for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+      for ($i=0;$i<sizeof($gns_controller['computes']);$i++)
       {
-        if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']==$project_uuid)
-        { return($gns_controller['computes'][$i]['name']); }
+        for ($j=0;$j<sizeof($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS']);$j++)
+        {
+          if ($data_vigrid['GNS3'][$gns_controller['computes'][$i]['host']]['PROJECTS'][$j]['project_id']==$project_uuid)
+          { return($gns_controller['computes'][$i]['name']); }
+        }
       }
     }
   }
   
 	function gns_getserver_config()
 	{
-    $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
-		$config_file="$vigrid_storage_root/home/gns3/.config/GNS3/gns3_server.conf";
-
     $gns_server_conf=array();
+
+    $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    { $config_file="$vigrid_storage_root/home/gns3/.config/GNS3/gns3_server.conf"; }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    { $config_file="$vigrid_storage_root/home/gns3/.config/GNS3/3.0/gns3_server.conf"; }
+    else return($gns_server_conf);
 
     $fd=fopen($config_file,"r");
     if (!$fd) { print("Cant open $config_file !!, stopping\n"); exit; }
@@ -622,11 +686,26 @@
     $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/computes");
 
     // print("Connecting to url: $url\n<BR>");
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
     curl_setopt($ch, CURLOPT_URL, $url);
     $computes_json=curl_exec($ch);
     curl_close($ch);
@@ -674,12 +753,27 @@
     {
       $f=explode(":",$vigrid_slave_hosts[$s]);
       $url[$s]="http://".$f[1].":".$f[2]."/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/computes";
-      
+
       $ch[$s] = curl_init();
       curl_setopt($ch[$s], CURLOPT_SSL_VERIFYPEER, false);
       curl_setopt($ch[$s], CURLOPT_RETURNTRANSFER, true);
       curl_setopt($ch[$s], CURLOPT_CONNECTTIMEOUT, 3);
-      curl_setopt($ch[$s], CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+      if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+      {
+        curl_setopt($ch[$s], CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+      }
+      else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+      {
+        $gns_token=gns_authenticate($gns_controller,$hostname);
+        if ($gns_token=="") { curl_close($ch[$s]); return(null); }
+        
+        curl_setopt($ch[$s], CURLOPT_HTTPHEADER, [
+          'Authorization: Bearer ' . $gns_token,
+          'Content-Type: application/json',
+        ]);
+      }
+      
       curl_setopt($ch[$s], CURLOPT_URL, $url[$s]);
       
       curl_multi_add_handle($mh,$ch[$s]);
@@ -775,8 +869,22 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-		curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_URL, $url);
     
     if ($order_data)
@@ -804,9 +912,24 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		// curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
 		curl_setopt($ch, CURLOPT_URL, $url);
 		curl_setopt($ch, CURLOPT_POSTFIELDS, "{}");
 		$json=curl_exec($ch);
@@ -824,7 +947,22 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+    
 		curl_setopt($ch, CURLOPT_URL, $url);
 		$projects_json=curl_exec($ch);
 		curl_close($ch);
@@ -843,7 +981,22 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_URL, $url);
 		$projects_json=curl_exec($ch);
 		curl_close($ch);
@@ -858,12 +1011,26 @@
     $url=VIGRIDgetgnshosturl($gns_controller,$hostname,"/v".VIGRIDconfig("VIGRID_GNS_VERSION")."/projects/".$project_id."/nodes");
     if ($url=="") { return(null); }
 
-		// print("getnodesURL=$url\n");
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_URL, $url);
 		$nodes_json=curl_exec($ch);
 		curl_close($ch);
@@ -884,7 +1051,22 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_URL, $url);
 		$links_json=curl_exec($ch);
 		curl_close($ch);
@@ -905,9 +1087,24 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
 		curl_setopt($ch, CURLOPT_URL, $url);
 
     $data_json = json_encode($filter_array);
@@ -955,7 +1152,22 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_URL, $url);
 		$node_json=curl_exec($ch);
 		curl_close($ch);
@@ -976,7 +1188,22 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_URL, $url);
 		$links_json=curl_exec($ch);
 		curl_close($ch);
@@ -1018,8 +1245,23 @@
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
+    }
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $gns_token=gns_authenticate($gns_controller,$hostname);
+      if ($gns_token=="") { curl_close($ch); return(null); }
+      
+      curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $gns_token,
+        'Content-Type: application/json',
+      ]);
+    }
+
 		curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_USERPWD, VIGRIDconfig("VIGRID_GNS_USER").":".VIGRIDconfig("VIGRID_GNS_PASS"));
 		curl_setopt($ch, CURLOPT_URL, $url);
 		curl_setopt($ch, CURLOPT_POSTFIELDS, "{}");
 		$json=curl_exec($ch);

@@ -520,25 +520,61 @@
 	
 	function gns_getcontrollers()
 	{
-		// Opening GNS3 controller config file to get GNS3 servers list & details from JSON data
+    // Opening GNS3 controller config file to get GNS3 servers list & details from JSON data
     $vigrid_storage_root=VIGRIDconfig("VIGRID_STORAGE_ROOT");
-		$config_file="$vigrid_storage_root/home/gns3/.config/GNS3/gns3_controller.conf";
 
-		$gns_controller_json="";
-	
-		$fd=fopen($config_file,"r");
-		if (!$fd) { print("Cant open $config_file !!, stopping\n"); exit; }
-		while (($line = fgets($fd, 4096)) !== false)
-		{ $gns_controller_json="$gns_controller_json $line"; }
-		fclose($fd);
+    $gns_controller_json="";
 
-		// computes already present ?
-		$computes=1;
-		if (preg_match("/\"computes\": \[\]/",$gns_controller_json)) { $computes=0; }
+    if (VIGRIDconfig("VIGRID_GNS_VERSION")==2)
+    {
+      $config_file="$vigrid_storage_root/home/gns3/.config/GNS3/gns3_controller.conf";
+      
+      $fd=fopen($config_file,"r");
+      if (!$fd) { print("Cant open $config_file !!, stopping\n"); exit; }
+      while (($line = fgets($fd, 4096)) !== false)
+      { $gns_controller_json="$gns_controller_json $line"; }
+      fclose($fd);
+    }
+    // in GNS3v3, config is a SQlite DB
+    else if (VIGRIDconfig("VIGRID_GNS_VERSION")==3)
+    {
+      $config_file="$vigrid_storage_root/home/gns3/.config/GNS3/3.0/gns3_controller.db";
+      
+      $db = new SQLite3($config_file);
+      $query = "SELECT * FROM computes";
+      $result = $db->query($query);
 
-		// insert localserver as compute|0]
-		$_tmp_gns_server=gns_getserver_config();
-		
+      $data = array();
+      while ($row = $result->fetchArray(SQLITE3_ASSOC)) { $data[] = $row; }
+      $db->close();
+
+      if (isset($data))
+      {
+        $computes = array_map(function ($compute)
+        {
+          return [
+            'host' => $compute['host'],
+            'name' => $compute['name'],
+            'port' => $compute['port'],
+            'protocol' => $compute['protocol'],
+            'user' => empty($compute['user']) ? null : $compute['user'],
+            'password' => empty($compute['password']) ? null : $compute['password'],
+            'compute_id' => $compute['compute_id']
+          ];
+        }, $data);
+        $result = ['computes' => $computes];
+        $gns_controller_json=json_encode($result, JSON_PRETTY_PRINT);
+      }
+    }
+
+    // computes already present ?
+    $computes=1;
+    if (preg_match("/\"computes\": \[\]/",$gns_controller_json)) { $computes=0; }
+
+    // insert localserver as compute|0]
+    $_tmp_gns_server=gns_getserver_config();
+    if (!isset($_tmp_gns_server['host'])) { $_tmp_gns_server['host']="127.0.0.1"; }
+    
     $_tmp_localserver='"computes": [
          {
             "host": "'.$_tmp_gns_server['host'].'",
@@ -549,16 +585,14 @@
             "password": "'.$_tmp_gns_server['password'].'"
          }';
 
-		if ($computes==1)
-		{ $_tmp_localserver=$_tmp_localserver.","; }
+    if ($computes==1)
+    { $_tmp_localserver=$_tmp_localserver.","; }
 
-	  $_tmp_localserver=$_tmp_localserver."
-		";
-		$gns_controller_json=preg_replace("/\"computes\": \[/",$_tmp_localserver,$gns_controller_json);
-		
-		// print("JSON=".$gns_controller_json);
-
-		$gns_controller=json_decode($gns_controller_json,true);
+    $_tmp_localserver=$_tmp_localserver."
+    ";
+    $gns_controller_json=preg_replace("/\"computes\": \[/",$_tmp_localserver,$gns_controller_json);
+    
+    $gns_controller=json_decode($gns_controller_json,true);
 
 		return($gns_controller);
 	}

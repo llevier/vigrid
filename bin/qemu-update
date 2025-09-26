@@ -19,7 +19,7 @@ then
 fi
 
 echo "### Getting last stable Qemu version..."
-LIST=`curl -ko - https://download.qemu.org/ 2>/dev/null | sed 's/^.*href=\"//g' | sed 's/\".*$//g'|grep "^qemu-"|grep -v "qemu-.*-rc" | grep "\.xz$"|tail -1`
+LIST=`curl -s https://download.qemu.org/ | grep -o 'qemu-[0-9.]\+\.tar\.xz' | grep -v -- '-rc' | sort -V|tail -1`
 
 QEMU_VER=`echo $LIST | sed 's/qemu-//' | sed 's/\.tar.xz//'`
 echo "  Current Qemu stable version appears to be $QEMU_VER."

@@ -1,0 +1,25 @@
+[Unit]
+Description=Vigrid Shell API - Execute shell commands remotely
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=%%VSTORAGE_GNS3%%/bin/Vigrid-SHELL-API
+ExecStart=%%VSTORAGE_GNS3%%/bin/Vigrid-SHELL-API/venv/bin/python3 %%VSTORAGE_GNS3%%/bin/Vigrid-SHELL-API/vigrid-shell-api.py -c %%VSTORAGE_GNS3%%/etc/vigrid-shell-api.conf
+ExecStop=/bin/kill -TERM $MAINPID
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=1
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+PrivateTmp=yes
+NoNewPrivileges=no
+
+[Install]
+WantedBy=multi-user.target

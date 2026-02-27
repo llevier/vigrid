@@ -66,7 +66,7 @@ function clean_array($var)
   return ($var !== NULL && $var !== FALSE && $var !== "");
 }
 
-if (!function_exists(dirTOzdataset))
+if (!function_exists('dirTOzdataset'))
 {
   function dirTOzdataset($dir)
   {

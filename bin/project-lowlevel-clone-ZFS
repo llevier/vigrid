@@ -59,7 +59,7 @@ if (file_exists($vigrid_functions))
 else
 { $am_on_nas=1; }
 
-if (!function_exists(dirTOzdataset))
+if (!function_exists('dirTOzdataset'))
 {
   function dirTOzdataset($dir)
   {
@@ -87,7 +87,7 @@ if (!function_exists(dirTOzdataset))
   }
 }
 
-if (!function_exists(zdatasetTOdir))
+if (!function_exists('zdatasetTOdir'))
 {
   function zdatasetTOdir($zdataset)
   {
@@ -110,7 +110,7 @@ if (!function_exists(zdatasetTOdir))
   }
 }
 
-if (!function_exists(get_exec))
+if (!function_exists('get_exec'))
 {
   function get_exec($command,$prefix,$display)
   {
@@ -129,7 +129,7 @@ if (!function_exists(get_exec))
   }
 }
 
-if (!function_exists(gen_uuid))
+if (!function_exists('gen_uuid'))
 {
   function gen_uuid()
   {
@@ -151,7 +151,7 @@ if (!function_exists(gen_uuid))
   }
 }
 
-if (!function_exists(gen_mac))
+if (!function_exists('gen_mac'))
 {
   function gen_mac()
   {
@@ -172,7 +172,7 @@ if (!function_exists(gen_mac))
   }
 }
 
-if (!function_exists(clean_array))
+if (!function_exists('clean_array'))
 {
   function clean_array($var)
   {
@@ -180,7 +180,7 @@ if (!function_exists(clean_array))
   }
 }
 
-if (!function_exists(report))
+if (!function_exists('report'))
 {
   function report($level,$text)
   {
@@ -203,7 +203,7 @@ if (!function_exists(report))
   }
 }
 
-if (!function_exists(find_all_files))
+if (!function_exists('find_all_files'))
 {
   function find_all_files($mode,$dir, &$results = array())
   {

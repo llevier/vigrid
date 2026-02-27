@@ -1,0 +1,27 @@
+[Unit]
+Description=Vigrid Shell API - Secure shell command execution service
+Documentation=https://github.com/vigrid/vigrid-shell-api
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=__INSTALL_DIR__/venv/bin/python3 __INSTALL_DIR__/vigrid-shell-api.py -c __CONFIG_DIR__/vigrid-shell-api.conf --foreground
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vigrid-shell-api
+
+# Security hardening
+NoNewPrivileges=no
+ProtectSystem=false
+ProtectHome=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

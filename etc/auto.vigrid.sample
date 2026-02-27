@@ -2,6 +2,6 @@
 # Vigrid autoFS configuration
 #
 # NFSv3+nolock to solve forgotten locks in nfs-kernel-server
-* -vers=3,nolock,rw,hard,relatime,rsize=1048576,wsize=1048576,timeo=600,retrans=3,lookupcache=pos Vigrid-NAS:/Vstorage/GNS3/GNS3farm/&
+* -vers=3,nolock,rw,hard,intr,relatime,rsize=1048576,wsize=1048576,timeo=600,retrans=3,lookupcache=pos Vigrid-NAS:/Vstorage/GNS3/GNS3farm/&
 #                                                                                   Vigrid-NAS2:/Vstorage/GNS3/GNS3farm/&
 

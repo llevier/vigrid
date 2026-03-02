@@ -1,0 +1,40 @@
+#!/bin/bash
+# Extract NFS clients from /proc/fs/nfsd/clients/*/info
+
+CLIENTS_DIR="/proc/fs/nfsd/clients"
+
+if [ ! -d "$CLIENTS_DIR" ]; then
+  echo "Error, cant find $CLIENTS_DIR. Possibly no NFS server." >&2
+  exit 1
+fi
+
+# En-tête du tableau
+printf "%-20s %-17s %-7s %s\n" "NAME" "IP" "PORT" "CLIENT ID"
+printf "%-20s %-17s %-7s %s\n" "--------------------" "-----------------" "-------" "------------------"
+
+for info in "$CLIENTS_DIR"/*/info; do
+  [ -f "$info" ] || continue
+
+  clientid=""
+  ip=""
+  port=""
+  name=""
+
+  while IFS=': ' read -r key value; do
+    case "$key" in
+      clientid)
+        clientid="$value"
+        ;;
+      address)
+        addr="${value//\"/}"
+        ip="${addr%:*}"
+        port="${addr##*:}"
+        ;;
+      name)
+        name="${value//\"/}"
+        ;;
+    esac
+  done < "$info"
+
+  printf "%-20s %-17s %-7s %s\n" "$name" "$ip" "$port" "$clientid"
+done

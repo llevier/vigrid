@@ -8,9 +8,10 @@ if [ ! -d "$CLIENTS_DIR" ]; then
   exit 1
 fi
 
-# En-tête du tableau
-printf "%-20s %-17s %-7s %s\n" "NAME" "IP" "PORT" "CLIENT ID"
-printf "%-20s %-17s %-7s %s\n" "--------------------" "-----------------" "-------" "------------------"
+printf "NFS server supported versions: %s\n\n" "$(paste -sd' ' /proc/fs/nfsd/versions)"
+
+printf "%-32s %-17s %-7s %s\n" "NAME" "IP" "PORT" "CLIENT ID"
+printf "%-32s %-17s %-7s %s\n" "--------------------------------" "-----------------" "-------" "------------------"
 
 for info in "$CLIENTS_DIR"/*/info; do
   [ -f "$info" ] || continue
@@ -36,5 +37,5 @@ for info in "$CLIENTS_DIR"/*/info; do
     esac
   done < "$info"
 
-  printf "%-20s %-17s %-7s %s\n" "$name" "$ip" "$port" "$clientid"
+  printf "%-32s %-17s %-7s %s\n" "$name" "$ip" "$port" "$clientid"
 done

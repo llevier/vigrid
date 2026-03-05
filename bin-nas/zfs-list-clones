@@ -1,0 +1,47 @@
+#!/bin/sh
+
+set -e
+
+tmpfile=$(mktemp)
+trap 'rm -f "$tmpfile"' EXIT
+
+zfs list -H -o name,origin | while IFS="$(printf '\t')" read -r dataset origin; do
+    [ "$origin" = "-" ] && continue
+    parent="${origin%%@*}"
+    printf '%s\t%s\n' "$parent" "$dataset"
+done > "$tmpfile"
+
+if [ ! -s "$tmpfile" ]; then
+    echo "Aucun clone ZFS trouvé."
+    exit 0
+fi
+
+get_project_name() {
+    _mp=$(zfs get -H -o value mountpoint "$1" 2>/dev/null)
+    [ -z "$_mp" ] || [ "$_mp" = "none" ] || [ "$_mp" = "legacy" ] && return
+    [ -d "$_mp" ] || return
+    _gns3=$(find "$_mp" -maxdepth 1 -name '*.gns3' -print -quit 2>/dev/null)
+    [ -n "$_gns3" ] && basename "$_gns3" .gns3
+}
+
+parents=$(awk -F'\t' '!seen[$1]++ { print $1 }' "$tmpfile")
+
+for parent in $parents; do
+    project=$(get_project_name "$parent")
+    if [ -n "$project" ]; then
+        printf "Parent: %s  (projet: %s)\n" "$parent" "$project"
+    else
+        printf "Parent: %s\n" "$parent"
+    fi
+
+    grep "^${parent}    " "$tmpfile" | while IFS='      ' read -r _ clone; do
+        clone_project=$(get_project_name "$clone")
+        if [ -n "$clone_project" ]; then
+            printf "  Clone: %s  (projet: %s)\n" "$clone" "$clone_project"
+        else
+            printf "  Clone: %s\n" "$clone"
+        fi
+    done
+
+    echo ""
+done

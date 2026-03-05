@@ -1,10 +1,14 @@
 #!/bin/sh
+# List ZFS clones grouped by parent (origin),
+# and display the associated GNS3 project name if a .gns3 file exists
+# in the parent or clone mount directory.
 
 set -e
 
 tmpfile=$(mktemp)
 trap 'rm -f "$tmpfile"' EXIT
 
+# Collect all parent/clone pairs
 zfs list -H -o name,origin | while IFS="$(printf '\t')" read -r dataset origin; do
     [ "$origin" = "-" ] && continue
     parent="${origin%%@*}"
@@ -12,10 +16,12 @@ zfs list -H -o name,origin | while IFS="$(printf '\t')" read -r dataset origin; 
 done > "$tmpfile"
 
 if [ ! -s "$tmpfile" ]; then
-    echo "Aucun clone ZFS trouvé."
+    echo "No ZFS clones found."
     exit 0
 fi
 
+# Return the GNS3 project name (without suffix) found in the mountpoint
+# of the given dataset, or nothing.
 get_project_name() {
     _mp=$(zfs get -H -o value mountpoint "$1" 2>/dev/null)
     [ -z "$_mp" ] || [ "$_mp" = "none" ] || [ "$_mp" = "legacy" ] && return
@@ -24,12 +30,13 @@ get_project_name() {
     [ -n "$_gns3" ] && basename "$_gns3" .gns3
 }
 
+# Extract the list of unique parents (in order of first appearance)
 parents=$(awk -F'\t' '!seen[$1]++ { print $1 }' "$tmpfile")
 
 for parent in $parents; do
     project=$(get_project_name "$parent")
     if [ -n "$project" ]; then
-        printf "Parent: %s  (projet: %s)\n" "$parent" "$project"
+        printf "Parent: %s  (project: %s)\n" "$parent" "$project"
     else
         printf "Parent: %s\n" "$parent"
     fi
@@ -37,7 +44,7 @@ for parent in $parents; do
     grep "^${parent}    " "$tmpfile" | while IFS='      ' read -r _ clone; do
         clone_project=$(get_project_name "$clone")
         if [ -n "$clone_project" ]; then
-            printf "  Clone: %s  (projet: %s)\n" "$clone" "$clone_project"
+            printf "  Clone: %s  (project: %s)\n" "$clone" "$clone_project"
         else
             printf "  Clone: %s\n" "$clone"
         fi
@@ -45,3 +52,4 @@ for parent in $parents; do
 
     echo ""
 done
+

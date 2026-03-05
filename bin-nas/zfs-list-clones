@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # List ZFS clones grouped by parent (origin),
 # and display the associated GNS3 project name if a .gns3 file exists
 # in the parent or clone mount directory.
@@ -41,7 +41,7 @@ for parent in $parents; do
         printf "Parent: %s\n" "$parent"
     fi
 
-    grep "^${parent}    " "$tmpfile" | while IFS='      ' read -r _ clone; do
+    grep -P "^\Q${parent}\E\t" "$tmpfile" | while IFS=$'\t' read -r _ clone; do
         clone_project=$(get_project_name "$clone")
         if [ -n "$clone_project" ]; then
             printf "  Clone: %s  (project: %s)\n" "$clone" "$clone_project"

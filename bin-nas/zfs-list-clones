@@ -12,7 +12,8 @@ trap 'rm -f "$tmpfile"' EXIT
 zfs list -H -o name,origin | while IFS="$(printf '\t')" read -r dataset origin; do
     [ "$origin" = "-" ] && continue
     parent="${origin%%@*}"
-    printf '%s\t%s\n' "$parent" "$dataset"
+    snap="${origin#*@}"
+    printf '%s\t%s\t%s\n' "$parent" "$dataset" "$snap"
 done > "$tmpfile"
 
 if [ ! -s "$tmpfile" ]; then
@@ -34,14 +35,16 @@ get_project_name() {
 parents=$(awk -F'\t' '!seen[$1]++ { print $1 }' "$tmpfile")
 
 for parent in $parents; do
+    # Get the snapshot name from the first clone entry for this parent
+    snap=$(awk -F'\t' -v p="$parent" '$1 == p { print $3; exit }' "$tmpfile")
     project=$(get_project_name "$parent")
     if [ -n "$project" ]; then
-        printf "Parent: %s  (project: %s)\n" "$parent" "$project"
+        printf "Parent: %s@%s  (project: %s)\n" "$parent" "$snap" "$project"
     else
-        printf "Parent: %s\n" "$parent"
+        printf "Parent: %s@%s\n" "$parent" "$snap"
     fi
 
-    grep -P "^\Q${parent}\E\t" "$tmpfile" | while IFS=$'\t' read -r _ clone; do
+    awk -F'\t' -v p="$parent" '$1 == p { print $2 }' "$tmpfile" | while read -r clone; do
         clone_project=$(get_project_name "$clone")
         if [ -n "$clone_project" ]; then
             printf "  Clone: %s  (project: %s)\n" "$clone" "$clone_project"
